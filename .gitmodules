@@ -1,0 +1,3 @@
+[submodule "legacy"]
+	path = legacy
+	url = https://github.com/SuperDuu/agv_project.git
