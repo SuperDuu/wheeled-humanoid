@@ -1,0 +1,39 @@
+# IDEs & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Firmware Build Artifacts
+**/Debug/
+**/Release/
+*.elf
+*.hex
+*.bin
+*.map
+*.o
+*.d
+
+# ROS 2 Workspaces
+software/ros2_ws/build/
+software/ros2_ws/install/
+software/ros2_ws/log/
+
+# CAD & PCB temporary files
+~$*.SLDPRT
+~$*.SLDASM
+*.bak
+*-bak
+*.kicad_pcb-bak
+*.kicad_sch-bak
+*.lck
+
+# Python Virtual Environments & Cache
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Runtime logs & data
+*.log
+*.csv
