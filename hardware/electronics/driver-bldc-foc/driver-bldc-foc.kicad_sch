@@ -1152,6 +1152,254 @@
 			)
 			(embedded_fonts no)
 		)
+		(symbol "Interface_CAN_LIN:TJA1051T-3"
+			(pin_names
+				(offset 1.016)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "U"
+				(at -10.16 8.89 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Value" "TJA1051T-3"
+				(at 1.27 8.89 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Footprint" "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm"
+				(at 0 -12.7 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+						(italic yes)
+					)
+				)
+			)
+			(property "Datasheet" "http://www.nxp.com/docs/en/data-sheet/TJA1051.pdf"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "High-Speed CAN Transceiver, separate VIO, silent mode, SOIC-8"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "High-Speed CAN Transceiver"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_fp_filters" "SOIC*3.9x4.9mm*P1.27mm*"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "TJA1051T-3_0_1"
+				(rectangle
+					(start -10.16 7.62)
+					(end 10.16 -7.62)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+			)
+			(symbol "TJA1051T-3_1_1"
+				(pin input line
+					(at -12.7 5.08 0)
+					(length 2.54)
+					(name "TXD"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at 0 -10.16 90)
+					(length 2.54)
+					(name "GND"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at 0 10.16 270)
+					(length 2.54)
+					(name "VCC"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin output line
+					(at -12.7 2.54 0)
+					(length 2.54)
+					(name "RXD"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "4"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at -12.7 -2.54 0)
+					(length 2.54)
+					(name "VIO"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "5"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at 12.7 -2.54 180)
+					(length 2.54)
+					(name "CANL"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "6"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at 12.7 2.54 180)
+					(length 2.54)
+					(name "CANH"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "7"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin input line
+					(at -12.7 -5.08 0)
+					(length 2.54)
+					(name "S"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "8"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
 		(symbol "JLCPCB-Capacitors:0805,10uF"
 			(pin_numbers
 				(hide yes)
@@ -1812,6 +2060,386 @@
 			)
 			(embedded_fonts no)
 		)
+		(symbol "XT30PW-M:XT30PW-M"
+			(pin_names
+				(offset 1.016)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "J"
+				(at -7.62 3.302 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left bottom)
+				)
+			)
+			(property "Value" "XT30PW-M"
+				(at -7.62 -7.62 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left bottom)
+				)
+			)
+			(property "Footprint" "XT30PW-M:AMASS_XT30PW-M"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify bottom)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Socket; DC supply; XT30; male; PIN: 2; on PCBs; THT; Colour: yellow"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify bottom)
+				)
+			)
+			(property "MF" "AMASS"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify bottom)
+				)
+			)
+			(property "MAXIMUM_PACKAGE_HEIGHT" "5 mm"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify bottom)
+				)
+			)
+			(property "Package" "None"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify bottom)
+				)
+			)
+			(property "Price" "None"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify bottom)
+				)
+			)
+			(property "Check_prices" "https://www.snapeda.com/parts/XT30PW-M/AMASS/view-part/?ref=eda"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify bottom)
+				)
+			)
+			(property "STANDARD" "Manufacturer Recommendations"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify bottom)
+				)
+			)
+			(property "PARTREV" "1.2"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify bottom)
+				)
+			)
+			(property "SnapEDA_Link" "https://www.snapeda.com/parts/XT30PW-M/AMASS/view-part/?ref=snap"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify bottom)
+				)
+			)
+			(property "MP" "XT30PW-M"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify bottom)
+				)
+			)
+			(property "MANUFACTURER" "Amass"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify bottom)
+				)
+			)
+			(property "Availability" "Not in stock"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify bottom)
+				)
+			)
+			(property "SNAPEDA_PN" "XT30PW-M"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify bottom)
+				)
+			)
+			(symbol "XT30PW-M_0_0"
+				(polyline
+					(pts
+						(xy -7.62 2.54) (xy -1.27 2.54)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -7.62 -5.08) (xy -7.62 2.54)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(rectangle
+					(start -2.2225 -0.3175)
+					(end -0.635 0.3175)
+					(stroke
+						(width 0.1)
+						(type default)
+					)
+					(fill
+						(type outline)
+					)
+				)
+				(rectangle
+					(start -2.2225 -2.8575)
+					(end -0.635 -2.2225)
+					(stroke
+						(width 0.1)
+						(type default)
+					)
+					(fill
+						(type outline)
+					)
+				)
+				(polyline
+					(pts
+						(xy -1.27 -5.08) (xy -7.62 -5.08)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0 1.27) (xy -1.27 2.54)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0 1.27) (xy 0 0)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0 0) (xy -1.905 0)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0 0) (xy 0 -3.81)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0 -2.54) (xy -1.905 -2.54)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0 -3.81) (xy -1.27 -5.08)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(pin power_in line
+					(at 5.08 -2.54 180)
+					(length 5.08)
+					(name "N"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "N"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at 5.08 0 180)
+					(length 5.08)
+					(name "P"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "P"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
 		(symbol "power:+3.3V"
 			(power global)
 			(pin_numbers
@@ -2406,6 +3034,12 @@
 		(uuid "9550ee8a-fa1d-4d6d-9ce5-a6f5306343d8")
 	)
 	(junction
+		(at 77.47 41.91)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "95ed2ccb-0b8e-4b12-ade5-a4a649aec1f7")
+	)
+	(junction
 		(at 41.91 181.61)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -2416,6 +3050,12 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "9da73a50-45cd-4f29-85d5-786cc9888dfa")
+	)
+	(junction
+		(at 149.86 160.02)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "b2287028-112f-44a3-a5a1-25432c027a84")
 	)
 	(junction
 		(at 101.6 116.84)
@@ -2456,6 +3096,16 @@
 			(type default)
 		)
 		(uuid "02ee35a9-388d-4d2c-bc97-e552c9a83698")
+	)
+	(wire
+		(pts
+			(xy 26.67 35.56) (xy 34.29 35.56)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "039e645a-1436-4b9c-a42c-1ad3baa65eaa")
 	)
 	(wire
 		(pts
@@ -2649,6 +3299,16 @@
 	)
 	(wire
 		(pts
+			(xy 139.7 53.34) (xy 151.13 53.34)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "2b4d9cc4-0561-410f-b4cf-52782f3fc89b")
+	)
+	(wire
+		(pts
 			(xy 189.23 39.37) (xy 194.31 39.37)
 		)
 		(stroke
@@ -2659,6 +3319,16 @@
 	)
 	(wire
 		(pts
+			(xy 139.7 64.77) (xy 151.13 64.77)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "2bc44599-cad3-4f78-b0e3-e469c521d076")
+	)
+	(wire
+		(pts
 			(xy 30.48 171.45) (xy 41.91 171.45)
 		)
 		(stroke
@@ -2666,6 +3336,16 @@
 			(type default)
 		)
 		(uuid "2e28254c-4963-44bb-acca-744eaa9be926")
+	)
+	(wire
+		(pts
+			(xy 189.23 87.63) (xy 218.44 87.63)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "32427012-04c9-46f8-9878-db32564aa80e")
 	)
 	(wire
 		(pts
@@ -2699,6 +3379,16 @@
 	)
 	(wire
 		(pts
+			(xy 149.86 129.54) (xy 149.86 135.89)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3be72558-c83e-489d-af14-e6e32b2ee077")
+	)
+	(wire
+		(pts
 			(xy 189.23 72.39) (xy 218.44 72.39)
 		)
 		(stroke
@@ -2719,7 +3409,7 @@
 	)
 	(wire
 		(pts
-			(xy 19.05 36.83) (xy 19.05 41.91)
+			(xy 26.67 35.56) (xy 26.67 44.45)
 		)
 		(stroke
 			(width 0)
@@ -2746,6 +3436,26 @@
 			(type default)
 		)
 		(uuid "47b18655-8697-4fe5-be3d-ae0b0c3588b6")
+	)
+	(wire
+		(pts
+			(xy 137.16 151.13) (xy 132.08 151.13)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "47b9d20d-fc75-4475-854d-408a25f4a39a")
+	)
+	(wire
+		(pts
+			(xy 132.08 151.13) (xy 132.08 160.02)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4a68ac52-2aeb-4c32-9c11-7d36f3f7284e")
 	)
 	(wire
 		(pts
@@ -2840,6 +3550,16 @@
 	)
 	(wire
 		(pts
+			(xy 85.09 31.75) (xy 91.44 31.75)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "552ffd7d-b930-4bfb-8475-3b1e24317230")
+	)
+	(wire
+		(pts
 			(xy 73.66 64.77) (xy 73.66 71.12)
 		)
 		(stroke
@@ -2898,6 +3618,16 @@
 		)
 		(uuid "61352c65-4fcb-44c9-ba57-32bf1f64f34e")
 	)
+	(wire
+		(pts
+			(xy 77.47 41.91) (xy 77.47 45.72)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "66fb86da-d299-4108-a5fc-8eb54576501a")
+	)
 	(polyline
 		(pts
 			(xy 116.205 135.89) (xy 116.205 50.8)
@@ -2941,6 +3671,16 @@
 	)
 	(wire
 		(pts
+			(xy 26.67 24.13) (xy 26.67 33.02)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "6ee52db0-bb6b-4dde-b256-999e77da5f4c")
+	)
+	(wire
+		(pts
 			(xy 189.23 102.87) (xy 203.2 102.87)
 		)
 		(stroke
@@ -2958,6 +3698,16 @@
 			(type default)
 		)
 		(uuid "71c889b2-2d1d-44a4-b3b8-7de8485f5ce7")
+	)
+	(wire
+		(pts
+			(xy 85.09 26.67) (xy 91.44 26.67)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "73825595-c7d1-44db-a4d0-9a0695dd9b47")
 	)
 	(wire
 		(pts
@@ -3093,6 +3843,16 @@
 	)
 	(wire
 		(pts
+			(xy 139.7 55.88) (xy 151.13 55.88)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "892c2f66-f3fc-461b-b1ee-131fdd87c537")
+	)
+	(wire
+		(pts
 			(xy 41.91 171.45) (xy 41.91 173.99)
 		)
 		(stroke
@@ -3103,13 +3863,13 @@
 	)
 	(wire
 		(pts
-			(xy 189.23 87.63) (xy 218.44 87.63)
+			(xy 124.46 140.97) (xy 137.16 140.97)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "8b5f7a4e-f65e-4356-a0f3-1c1425d848aa")
+		(uuid "8cff6415-42fd-4d52-9ed1-da40a26e8abe")
 	)
 	(wire
 		(pts
@@ -3144,6 +3904,16 @@
 	)
 	(wire
 		(pts
+			(xy 149.86 160.02) (xy 149.86 156.21)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "90bf4985-97f5-4bd4-b54e-57fc864481ff")
+	)
+	(wire
+		(pts
 			(xy 67.31 107.95) (xy 73.66 107.95)
 		)
 		(stroke
@@ -3154,16 +3924,6 @@
 	)
 	(wire
 		(pts
-			(xy 19.05 26.67) (xy 20.32 26.67)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "97f5b0e6-82cd-4e98-b8da-cf199bd62821")
-	)
-	(wire
-		(pts
 			(xy 189.23 44.45) (xy 195.58 44.45)
 		)
 		(stroke
@@ -3171,6 +3931,16 @@
 			(type default)
 		)
 		(uuid "980869c0-baaf-41f1-91f2-de9912d89004")
+	)
+	(wire
+		(pts
+			(xy 139.7 67.31) (xy 151.13 67.31)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "9c80e55e-0ced-4e78-a74b-6511dc3edb08")
 	)
 	(wire
 		(pts
@@ -3222,6 +3992,16 @@
 			(type default)
 		)
 		(uuid "a7d8ef0c-caab-41a6-8210-7d12c374da53")
+	)
+	(wire
+		(pts
+			(xy 132.08 160.02) (xy 149.86 160.02)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "ad3a6d38-d40e-41ee-8c68-65703a6ed8e3")
 	)
 	(wire
 		(pts
@@ -3285,6 +4065,16 @@
 	)
 	(wire
 		(pts
+			(xy 149.86 160.02) (xy 149.86 162.56)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bdb5a6fb-3692-4900-b6a8-2c41855500dd")
+	)
+	(wire
+		(pts
 			(xy 33.02 115.57) (xy 34.29 115.57)
 		)
 		(stroke
@@ -3333,6 +4123,16 @@
 			(color 16 0 255 1)
 		)
 		(uuid "d00af644-2d10-407f-8eb5-4abfaf52cccb")
+	)
+	(wire
+		(pts
+			(xy 85.09 34.29) (xy 91.44 34.29)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d0a4751d-5683-4298-917c-99a2944c08b0")
 	)
 	(wire
 		(pts
@@ -3396,23 +4196,23 @@
 	)
 	(wire
 		(pts
-			(xy 20.32 36.83) (xy 19.05 36.83)
+			(xy 74.93 41.91) (xy 77.47 41.91)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "df87c459-ad07-4670-ae6d-2a0de5be1eb4")
+		(uuid "e12e38d2-a980-4781-8879-513962c46693")
 	)
 	(wire
 		(pts
-			(xy 19.05 21.59) (xy 19.05 26.67)
+			(xy 127 148.59) (xy 137.16 148.59)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "e1bd22bf-6c6f-4e8c-bec8-7f5e59f6abcf")
+		(uuid "e232f322-5487-4bbf-ac03-5af1b3dabb3a")
 	)
 	(wire
 		(pts
@@ -3426,6 +4226,16 @@
 	)
 	(wire
 		(pts
+			(xy 26.67 33.02) (xy 34.29 33.02)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "ee8fe19e-f4f6-44f4-85db-8f2a8f0635a9")
+	)
+	(wire
+		(pts
 			(xy 77.47 76.2) (xy 77.47 77.47)
 		)
 		(stroke
@@ -3433,6 +4243,16 @@
 			(type default)
 		)
 		(uuid "efbb6723-5792-424b-8af1-4c73dbf8adca")
+	)
+	(wire
+		(pts
+			(xy 124.46 143.51) (xy 137.16 143.51)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f22f2e8e-0702-43c3-9840-2457bfa3c368")
 	)
 	(wire
 		(pts
@@ -3504,6 +4324,16 @@
 		)
 		(uuid "ff0f9895-9ce1-4ddd-a658-4fa10e8f3e1b")
 	)
+	(label "CAN_TX"
+		(at 124.46 140.97 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "33abcdb1-b96a-497b-b6f1-cd76a4c0a15f")
+	)
 	(label "+12V"
 		(at 266.7 93.98 0)
 		(effects
@@ -3513,6 +4343,26 @@
 			(justify left bottom)
 		)
 		(uuid "463863dd-8f49-48b3-8e33-61d8ea4c2168")
+	)
+	(label "CAN_TX"
+		(at 139.7 67.31 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "4ac705ab-4f6e-4898-8eb6-10e63f04da96")
+	)
+	(label "USB_D+"
+		(at 91.44 31.75 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "5b528f1d-1498-4b08-88ba-8ef99e969f8e")
 	)
 	(label "+12V"
 		(at 29.21 67.31 0)
@@ -3544,6 +4394,16 @@
 		)
 		(uuid "7fbf0f63-fb1a-4c80-8af8-e87d941eae4d")
 	)
+	(label "CAN_RX"
+		(at 124.46 143.51 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "85e4b0b0-5f21-48b4-9b6a-74be00601900")
+	)
 	(label "VbusSense"
 		(at 30.48 171.45 0)
 		(effects
@@ -3564,6 +4424,46 @@
 		)
 		(uuid "944eef97-09d8-4700-886b-17b8bc0e07ca")
 	)
+	(label "USB_D-"
+		(at 91.44 34.29 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "9a58682c-6083-4cac-82a4-1a9416d43a1c")
+	)
+	(label "USB_D-"
+		(at 139.7 55.88 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "a2c84fd3-0f4a-474c-8ae7-83632f16fabf")
+	)
+	(label "CAN_RX"
+		(at 139.7 64.77 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "c990c05d-3aa0-4d9a-9395-7fbea40c80e1")
+	)
+	(label "USB_VBUS"
+		(at 91.44 26.67 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "cc2521c5-a8ee-4406-b60c-3480c13fa7b5")
+	)
 	(label "5V_BUCK"
 		(at 16.51 115.57 0)
 		(effects
@@ -3573,6 +4473,16 @@
 			(justify left bottom)
 		)
 		(uuid "d64552fd-73ec-4186-8f84-49a59fd1ae05")
+	)
+	(label "USB_D+"
+		(at 139.7 53.34 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "f339f7a2-ba8d-446f-8057-07e6a3705965")
 	)
 	(label "USB_VBUS"
 		(at 46.99 115.57 0)
@@ -3586,7 +4496,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 19.05 41.91 0)
+		(at 26.67 44.45 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -3597,7 +4507,7 @@
 		(fields_autoplaced yes)
 		(uuid "00b48ad9-a767-43f8-bc6c-492c766d6028")
 		(property "Reference" "#PWR02"
-			(at 19.05 48.26 0)
+			(at 26.67 50.8 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -3608,7 +4518,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 19.05 46.99 0)
+			(at 26.67 49.53 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -3618,7 +4528,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 19.05 41.91 0)
+			(at 26.67 44.45 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -3629,7 +4539,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 19.05 41.91 0)
+			(at 26.67 44.45 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -3640,7 +4550,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-			(at 19.05 41.91 0)
+			(at 26.67 44.45 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -3735,6 +4645,234 @@
 			(project "driver-bldc-foc"
 				(path "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9"
 					(reference "#PWR03")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "XT30PW-M:XT30PW-M")
+		(at 39.37 35.56 180)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "05ca82ad-f521-4098-b41b-fd7bc9acdbee")
+		(property "Reference" "J8"
+			(at 48.26 33.0199 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "XT30PW-M"
+			(at 48.26 35.5599 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "XT30PW-M:AMASS_XT30PW-M"
+			(at 39.37 35.56 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify bottom)
+			)
+		)
+		(property "Datasheet" ""
+			(at 39.37 35.56 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Socket; DC supply; XT30; male; PIN: 2; on PCBs; THT; Colour: yellow"
+			(at 39.37 35.56 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify bottom)
+			)
+		)
+		(property "MF" "AMASS"
+			(at 39.37 35.56 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify bottom)
+			)
+		)
+		(property "MAXIMUM_PACKAGE_HEIGHT" "5 mm"
+			(at 39.37 35.56 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify bottom)
+			)
+		)
+		(property "Package" "None"
+			(at 39.37 35.56 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify bottom)
+			)
+		)
+		(property "Price" "None"
+			(at 39.37 35.56 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify bottom)
+			)
+		)
+		(property "Check_prices" "https://www.snapeda.com/parts/XT30PW-M/AMASS/view-part/?ref=eda"
+			(at 39.37 35.56 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify bottom)
+			)
+		)
+		(property "STANDARD" "Manufacturer Recommendations"
+			(at 39.37 35.56 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify bottom)
+			)
+		)
+		(property "PARTREV" "1.2"
+			(at 39.37 35.56 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify bottom)
+			)
+		)
+		(property "SnapEDA_Link" "https://www.snapeda.com/parts/XT30PW-M/AMASS/view-part/?ref=snap"
+			(at 39.37 35.56 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify bottom)
+			)
+		)
+		(property "MP" "XT30PW-M"
+			(at 39.37 35.56 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify bottom)
+			)
+		)
+		(property "MANUFACTURER" "Amass"
+			(at 39.37 35.56 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify bottom)
+			)
+		)
+		(property "Availability" "Not in stock"
+			(at 39.37 35.56 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify bottom)
+			)
+		)
+		(property "SNAPEDA_PN" "XT30PW-M"
+			(at 39.37 35.56 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify bottom)
+			)
+		)
+		(pin "N"
+			(uuid "b553d4cd-ff1b-4ec3-b14b-336a888694a9")
+		)
+		(pin "P"
+			(uuid "ce1c6006-30fa-460e-b795-70232ff79cfe")
+		)
+		(instances
+			(project "driver-bldc-foc"
+				(path "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9"
+					(reference "J8")
 					(unit 1)
 				)
 			)
@@ -4202,6 +5340,85 @@
 			(project "driver-bldc-foc"
 				(path "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9"
 					(reference "D2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:+3.3V")
+		(at 127 148.59 90)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "26a68348-98b4-4082-a064-6b5d1da06aec")
+		(property "Reference" "#PWR013"
+			(at 130.81 148.59 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "+3.3V"
+			(at 123.19 148.5899 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" ""
+			(at 127 148.59 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 127 148.59 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"+3.3V\""
+			(at 127 148.59 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "c1366253-4dbc-4330-ad61-0a510f724438")
+		)
+		(instances
+			(project "driver-bldc-foc"
+				(path "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9"
+					(reference "#PWR013")
 					(unit 1)
 				)
 			)
@@ -4917,7 +6134,7 @@
 	)
 	(symbol
 		(lib_id "power:VBUS")
-		(at 19.05 21.59 0)
+		(at 26.67 24.13 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -4928,7 +6145,7 @@
 		(fields_autoplaced yes)
 		(uuid "4ed9d537-11f2-4bcb-8097-1e28b6564b06")
 		(property "Reference" "#PWR01"
-			(at 19.05 25.4 0)
+			(at 26.67 27.94 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -4939,7 +6156,7 @@
 			)
 		)
 		(property "Value" "VBUS"
-			(at 19.05 16.51 0)
+			(at 26.67 19.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -4949,7 +6166,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 19.05 21.59 0)
+			(at 26.67 24.13 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -4960,7 +6177,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 19.05 21.59 0)
+			(at 26.67 24.13 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -4971,7 +6188,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"VBUS\""
-			(at 19.05 21.59 0)
+			(at 26.67 24.13 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5154,7 +6371,7 @@
 	)
 	(symbol
 		(lib_id "Connector:USB_A")
-		(at 86.36 34.29 0)
+		(at 77.47 31.75 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -5165,7 +6382,7 @@
 		(fields_autoplaced yes)
 		(uuid "667a2256-91bc-41f1-9c0d-a2399cd34a65")
 		(property "Reference" "J3"
-			(at 86.36 21.59 0)
+			(at 77.47 19.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -5175,7 +6392,7 @@
 			)
 		)
 		(property "Value" "USB_A"
-			(at 86.36 24.13 0)
+			(at 77.47 21.59 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -5185,7 +6402,7 @@
 			)
 		)
 		(property "Footprint" "Connector_USB:USB_B_OST_USB-B1HSxx_Horizontal"
-			(at 90.17 35.56 0)
+			(at 81.28 33.02 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5196,7 +6413,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 90.17 35.56 0)
+			(at 81.28 33.02 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5207,7 +6424,7 @@
 			)
 		)
 		(property "Description" "USB Type A connector"
-			(at 86.36 34.29 0)
+			(at 77.47 31.75 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5707,85 +6924,6 @@
 			(project "driver-bldc-foc"
 				(path "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9"
 					(reference "C5")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Connector_Generic:Conn_01x01")
-		(at 25.4 26.67 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "75417afa-25c5-4e0f-8de2-21c54c8527ed")
-		(property "Reference" "J1"
-			(at 27.94 25.3999 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "VBUS"
-			(at 27.94 27.9399 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Footprint" "Connector_Wire:SolderWirePad_1x01_SMD_5x10mm"
-			(at 25.4 26.67 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 25.4 26.67 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Generic connector, single row, 01x01, script generated (kicad-library-utils/schlib/autogen/connector/)"
-			(at 25.4 26.67 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "806e26fc-e08a-4ef5-bb55-c1770f9f859d")
-		)
-		(instances
-			(project "driver-bldc-foc"
-				(path "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9"
-					(reference "J1")
 					(unit 1)
 				)
 			)
@@ -6517,85 +7655,6 @@
 		)
 	)
 	(symbol
-		(lib_id "Connector_Generic:Conn_01x01")
-		(at 25.4 36.83 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "a5b8f39b-1c76-447e-8479-d44a7c275d04")
-		(property "Reference" "J2"
-			(at 27.94 35.5599 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "GND"
-			(at 27.94 38.0999 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Footprint" "Connector_Wire:SolderWirePad_1x01_SMD_5x10mm"
-			(at 25.4 36.83 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 25.4 36.83 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Generic connector, single row, 01x01, script generated (kicad-library-utils/schlib/autogen/connector/)"
-			(at 25.4 36.83 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "b4bd3d21-52ff-44e6-b848-99cf8b161b85")
-		)
-		(instances
-			(project "driver-bldc-foc"
-				(path "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9"
-					(reference "J2")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
 		(lib_id "Device:L_Ferrite_Small")
 		(at 81.28 71.12 90)
 		(unit 1)
@@ -6828,6 +7887,162 @@
 			(project "driver-bldc-foc"
 				(path "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9"
 					(reference "#PWR04")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 149.86 162.56 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "ce08846c-ac2c-4a21-b1c4-d7f69e958beb")
+		(property "Reference" "#PWR014"
+			(at 149.86 168.91 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 149.86 167.64 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 149.86 162.56 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 149.86 162.56 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+			(at 149.86 162.56 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "55bbce20-acdd-4646-993c-cd294ebdac52")
+		)
+		(instances
+			(project "driver-bldc-foc"
+				(path "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9"
+					(reference "#PWR014")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 77.47 45.72 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "d613d6fb-028e-4245-bbcc-678c780ef208")
+		(property "Reference" "#PWR016"
+			(at 77.47 52.07 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 77.47 50.8 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 77.47 45.72 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 77.47 45.72 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+			(at 77.47 45.72 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "32b54cf9-a97f-4481-8922-7a748acefb1f")
+		)
+		(instances
+			(project "driver-bldc-foc"
+				(path "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9"
+					(reference "#PWR016")
 					(unit 1)
 				)
 			)
@@ -7148,6 +8363,107 @@
 		)
 	)
 	(symbol
+		(lib_id "Interface_CAN_LIN:TJA1051T-3")
+		(at 149.86 146.05 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "dcabddf4-3efa-4d5e-9c7f-91d5dc30d4c0")
+		(property "Reference" "U5"
+			(at 152.0033 133.35 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "TJA1051T-3"
+			(at 152.0033 135.89 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm"
+			(at 149.86 158.75 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+					(italic yes)
+				)
+			)
+		)
+		(property "Datasheet" "http://www.nxp.com/docs/en/data-sheet/TJA1051.pdf"
+			(at 149.86 146.05 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "High-Speed CAN Transceiver, separate VIO, silent mode, SOIC-8"
+			(at 149.86 146.05 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "8"
+			(uuid "c75ce906-f0d2-4455-a39c-3de9191af61d")
+		)
+		(pin "4"
+			(uuid "6a31cf31-fcb4-406e-af7f-b521cfb59b7e")
+		)
+		(pin "7"
+			(uuid "bf3eed2b-9f6c-4541-93ce-9883660a9465")
+		)
+		(pin "2"
+			(uuid "95b02cc7-928b-4466-b023-8743e89c3367")
+		)
+		(pin "5"
+			(uuid "491a612c-f7a5-47fb-ae2e-5358da9b216d")
+		)
+		(pin "1"
+			(uuid "746c342c-0b8d-4b5e-a823-f4d434a31ca9")
+		)
+		(pin "6"
+			(uuid "4998edde-262c-44c4-9e4e-a7faa2b278f2")
+		)
+		(pin "3"
+			(uuid "c41e3cfc-f7c7-4ec2-bb21-2ef5e17bac70")
+		)
+		(instances
+			(project "driver-bldc-foc"
+				(path "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9"
+					(reference "U5")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "power:+5V")
 		(at 73.66 104.14 0)
 		(unit 1)
@@ -7220,6 +8536,84 @@
 			(project "driver-bldc-foc"
 				(path "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9"
 					(reference "#PWR07")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:+5V")
+		(at 149.86 129.54 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "f45ae13e-02d5-4f5c-9659-9eec0a85cda0")
+		(property "Reference" "#PWR015"
+			(at 149.86 133.35 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "+5V"
+			(at 149.86 124.46 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 149.86 129.54 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 149.86 129.54 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"+5V\""
+			(at 149.86 129.54 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "76bed622-95e1-44f9-90cd-de6469a9610e")
+		)
+		(instances
+			(project "driver-bldc-foc"
+				(path "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9"
+					(reference "#PWR015")
 					(unit 1)
 				)
 			)
@@ -7864,16 +9258,6 @@
 				(justify right)
 			)
 		)
-		(pin "DVR_CS" input
-			(at 189.23 87.63 0)
-			(uuid "8f00c6ef-1136-4bde-b4c1-4f608bda716d")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
 		(pin "DRV_MOSI" input
 			(at 189.23 90.17 0)
 			(uuid "25eb5e4c-8ff9-49f4-9dbb-81dc975be2c8")
@@ -7897,6 +9281,86 @@
 		(pin "CAN_TX" input
 			(at 151.13 67.31 180)
 			(uuid "aeaf0b0c-f756-48de-bf63-9d1a6cd774a3")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "DRV_CS" input
+			(at 189.23 87.63 0)
+			(uuid "3631da00-b182-4565-9381-b6255646559c")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "ENC_CS" input
+			(at 151.13 76.2 180)
+			(uuid "844db1ab-0610-44e9-8545-7a79234f2261")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "ENC_EN" input
+			(at 151.13 78.74 180)
+			(uuid "72474de8-089e-40ff-8147-f07a18dfe1ee")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "ENC_MISO" input
+			(at 151.13 81.28 180)
+			(uuid "4a1718b0-1ceb-4b30-bea3-10a422f53397")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "ENC_MOSI" input
+			(at 151.13 83.82 180)
+			(uuid "08d96639-3998-44c0-8300-c5331521a761")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "ENC_SCK" input
+			(at 151.13 86.36 180)
+			(uuid "8a3f1754-1abf-4ec4-905f-180ba8adace9")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "ENC_SCL" input
+			(at 151.13 88.9 180)
+			(uuid "55e04f81-a9c2-4be1-a62c-53a4ce76a28a")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "ENC_SDA" input
+			(at 151.13 91.44 180)
+			(uuid "ba6c48d9-c451-47ad-9aa2-62500de73bda")
 			(effects
 				(font
 					(size 1.27 1.27)
