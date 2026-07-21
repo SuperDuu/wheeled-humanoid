@@ -107,7 +107,7 @@
   (fp_line (start -4.115 -4.115) (end 4.115 -4.115) (layer F.CrtYd) (width 0.05))
   (fp_line (start -4.115 4.115) (end -4.115 -4.115) (layer F.CrtYd) (width 0.05))
   (fp_line (start 4.115 4.115) (end 4.115 -4.115) (layer F.CrtYd) (width 0.05))
-  (model "${KIPRJMOD}/../user_lib/DRV8353RSRGZT/DRV8353RSRGZT.step"
+  (model "/home/du/Desktop/wheeled-humanoid/hardware/electronics/user_lib/DRV8353RSRGZT/DRV8353RSRGZT.step"
     (offset (xyz 0 0 0))
     (scale (xyz 1 1 1))
     (rotate (xyz 0 0 0))
