@@ -49,6 +49,8 @@ extern "C" {
 
 /* USER CODE END EM */
 
+void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
+
 /* Exported functions prototypes ---------------------------------------------*/
 void Error_Handler(void);
 
@@ -57,6 +59,50 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define LED_1_Pin GPIO_PIN_14
+#define LED_1_GPIO_Port GPIOC
+#define LED_2_Pin GPIO_PIN_15
+#define LED_2_GPIO_Port GPIOC
+#define VSENSE_C_Pin GPIO_PIN_0
+#define VSENSE_C_GPIO_Port GPIOC
+#define VBUS_SENSE_Pin GPIO_PIN_2
+#define VBUS_SENSE_GPIO_Port GPIOC
+#define FET_TEMP_Pin GPIO_PIN_0
+#define FET_TEMP_GPIO_Port GPIOA
+#define VSENSE_A_Pin GPIO_PIN_3
+#define VSENSE_A_GPIO_Port GPIOA
+#define DRV_SCK_Pin GPIO_PIN_5
+#define DRV_SCK_GPIO_Port GPIOA
+#define DRV_MISO_Pin GPIO_PIN_6
+#define DRV_MISO_GPIO_Port GPIOA
+#define DRV_BKIN_Pin GPIO_PIN_10
+#define DRV_BKIN_GPIO_Port GPIOB
+#define CAN_RX_Pin GPIO_PIN_12
+#define CAN_RX_GPIO_Port GPIOB
+#define CAN_TX_Pin GPIO_PIN_13
+#define CAN_TX_GPIO_Port GPIOB
+#define VSENSE_B_Pin GPIO_PIN_14
+#define VSENSE_B_GPIO_Port GPIOB
+#define DRV_CS_Pin GPIO_PIN_6
+#define DRV_CS_GPIO_Port GPIOC
+#define DRV_EN_Pin GPIO_PIN_7
+#define DRV_EN_GPIO_Port GPIOC
+#define ENC_SCL_Pin GPIO_PIN_8
+#define ENC_SCL_GPIO_Port GPIOC
+#define ENC_SDA_Pin GPIO_PIN_9
+#define ENC_SDA_GPIO_Port GPIOC
+#define ENC_SCK_Pin GPIO_PIN_10
+#define ENC_SCK_GPIO_Port GPIOC
+#define ENC_MISO_Pin GPIO_PIN_11
+#define ENC_MISO_GPIO_Port GPIOC
+#define ENC_MOSI_Pin GPIO_PIN_12
+#define ENC_MOSI_GPIO_Port GPIOC
+#define DRV_MOSI_Pin GPIO_PIN_5
+#define DRV_MOSI_GPIO_Port GPIOB
+#define ENC_EN_Pin GPIO_PIN_6
+#define ENC_EN_GPIO_Port GPIOB
+#define ENC_CS_Pin GPIO_PIN_7
+#define ENC_CS_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 
