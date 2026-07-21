@@ -2358,6 +2358,12 @@
 		(uuid "41addf36-7a88-41d8-94b1-6ad42b1687d5")
 	)
 	(junction
+		(at 205.74 125.73)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "460979b4-cccf-4d3b-b286-6715fd382b75")
+	)
+	(junction
 		(at 86.36 106.68)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -2443,6 +2449,16 @@
 	)
 	(wire
 		(pts
+			(xy 212.09 67.31) (xy 220.98 67.31)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "02ee35a9-388d-4d2c-bc97-e552c9a83698")
+	)
+	(wire
+		(pts
 			(xy 90.17 63.5) (xy 86.36 63.5)
 		)
 		(stroke
@@ -2470,6 +2486,16 @@
 			(type default)
 		)
 		(uuid "0f13b939-04d9-4823-a913-56ff24001419")
+	)
+	(wire
+		(pts
+			(xy 191.77 105.41) (xy 220.98 105.41)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "129753f8-19e3-4b13-9b64-83f389c3a44e")
 	)
 	(wire
 		(pts
@@ -2503,6 +2529,16 @@
 	)
 	(wire
 		(pts
+			(xy 191.77 80.01) (xy 220.98 80.01)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "1611ed64-d77c-473f-9059-4c2f28a901b8")
+	)
+	(wire
+		(pts
 			(xy 100.33 74.93) (xy 105.41 74.93)
 		)
 		(stroke
@@ -2520,6 +2556,56 @@
 			(type default)
 		)
 		(uuid "1b52ee04-0646-4278-91c2-4fbe99b2f560")
+	)
+	(wire
+		(pts
+			(xy 191.77 115.57) (xy 220.98 115.57)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "1dc9c6f2-c9ce-4490-b9aa-61782c20d2e5")
+	)
+	(wire
+		(pts
+			(xy 191.77 72.39) (xy 220.98 72.39)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "1f9e4308-693d-4c9a-86f2-62ece42f3025")
+	)
+	(wire
+		(pts
+			(xy 191.77 85.09) (xy 220.98 85.09)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "1fc352f9-62d9-4fa0-85a1-1c12fcc9ffb7")
+	)
+	(wire
+		(pts
+			(xy 260.35 88.9) (xy 262.89 88.9)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "20508eff-f412-48b8-9679-a7cc5c7a3a3b")
+	)
+	(wire
+		(pts
+			(xy 191.77 92.71) (xy 220.98 92.71)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "23a08581-a41b-4544-b6ec-6b551fb73e8e")
 	)
 	(wire
 		(pts
@@ -2563,6 +2649,16 @@
 	)
 	(wire
 		(pts
+			(xy 191.77 62.23) (xy 196.85 62.23)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "2b9d0577-5823-407b-90d1-ce94d0512a6a")
+	)
+	(wire
+		(pts
 			(xy 148.59 34.29) (xy 160.02 34.29)
 		)
 		(stroke
@@ -2603,6 +2699,26 @@
 	)
 	(wire
 		(pts
+			(xy 191.77 95.25) (xy 220.98 95.25)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3e8fd58b-1e10-4dd9-bff3-9f977ac5c293")
+	)
+	(wire
+		(pts
+			(xy 191.77 82.55) (xy 220.98 82.55)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3ed3131a-0c16-483c-88f3-0ba0e2d4f843")
+	)
+	(wire
+		(pts
 			(xy 19.05 36.83) (xy 19.05 41.91)
 		)
 		(stroke
@@ -2610,6 +2726,16 @@
 			(type default)
 		)
 		(uuid "4175bd22-e187-421b-8533-bee1931e01b8")
+	)
+	(wire
+		(pts
+			(xy 191.77 100.33) (xy 220.98 100.33)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "445ce0e8-4559-40c5-947c-c2b547555e31")
 	)
 	(wire
 		(pts
@@ -2643,6 +2769,16 @@
 	)
 	(wire
 		(pts
+			(xy 191.77 77.47) (xy 220.98 77.47)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4c04e108-bb67-4315-9cd7-8fd90e3eeb08")
+	)
+	(wire
+		(pts
 			(xy 46.99 109.22) (xy 46.99 114.3)
 		)
 		(stroke
@@ -2671,6 +2807,16 @@
 			(type default)
 		)
 		(uuid "505e2266-39d8-43b5-922d-6d682267f30d")
+	)
+	(wire
+		(pts
+			(xy 191.77 120.65) (xy 220.98 120.65)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "512c8b1c-d214-4ace-9a6c-4113b7eb1e0a")
 	)
 	(wire
 		(pts
@@ -2775,6 +2921,36 @@
 	)
 	(wire
 		(pts
+			(xy 260.35 99.06) (xy 262.89 99.06)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "6d9e9472-eadb-47cf-a37b-216aebb09d71")
+	)
+	(wire
+		(pts
+			(xy 215.9 62.23) (xy 215.9 58.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "6ec644a5-f8c4-4dab-af57-f2dfcb437089")
+	)
+	(wire
+		(pts
+			(xy 191.77 125.73) (xy 205.74 125.73)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "719e2013-22c7-433f-be76-cd730f811e02")
+	)
+	(wire
+		(pts
 			(xy 45.72 69.85) (xy 52.07 69.85)
 		)
 		(stroke
@@ -2782,6 +2958,16 @@
 			(type default)
 		)
 		(uuid "71c889b2-2d1d-44a4-b3b8-7de8485f5ce7")
+	)
+	(wire
+		(pts
+			(xy 191.77 113.03) (xy 220.98 113.03)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "754df5ac-98c2-4571-846f-31683528db37")
 	)
 	(wire
 		(pts
@@ -2812,6 +2998,16 @@
 			(type default)
 		)
 		(uuid "76ad0b22-504e-4c38-8517-e7f3dbe0c03e")
+	)
+	(wire
+		(pts
+			(xy 205.74 125.73) (xy 220.98 125.73)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "79a9e389-5368-41f1-aa9e-c8e9f818241d")
 	)
 	(polyline
 		(pts
@@ -2857,6 +3053,16 @@
 	)
 	(wire
 		(pts
+			(xy 191.77 97.79) (xy 220.98 97.79)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7d5d087f-85c8-4770-bece-bfa7528a03bb")
+	)
+	(wire
+		(pts
 			(xy 160.02 21.59) (xy 160.02 25.4)
 		)
 		(stroke
@@ -2884,6 +3090,16 @@
 			(type default)
 		)
 		(uuid "89475fe4-ed31-4f5f-a192-e01244f5a043")
+	)
+	(wire
+		(pts
+			(xy 191.77 110.49) (xy 220.98 110.49)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "8b5f7a4e-f65e-4356-a0f3-1c1425d848aa")
 	)
 	(wire
 		(pts
@@ -2938,6 +3154,16 @@
 	)
 	(wire
 		(pts
+			(xy 191.77 67.31) (xy 198.12 67.31)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "980869c0-baaf-41f1-91f2-de9912d89004")
+	)
+	(wire
+		(pts
 			(xy 86.36 106.68) (xy 91.44 106.68)
 		)
 		(stroke
@@ -2979,6 +3205,26 @@
 	)
 	(wire
 		(pts
+			(xy 191.77 102.87) (xy 220.98 102.87)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a7d8ef0c-caab-41a6-8210-7d12c374da53")
+	)
+	(wire
+		(pts
+			(xy 191.77 74.93) (xy 220.98 74.93)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "ad9b759f-9521-4206-a188-be4fdc29addb")
+	)
+	(wire
+		(pts
 			(xy 49.53 85.09) (xy 49.53 81.28)
 		)
 		(stroke
@@ -3006,6 +3252,16 @@
 			(type default)
 		)
 		(uuid "b68d78ff-b4d9-4718-ab1d-5e9c17b115e3")
+	)
+	(wire
+		(pts
+			(xy 220.98 62.23) (xy 215.9 62.23)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b8ed92c1-c8f0-4a79-bd2f-d518cc95cfc7")
 	)
 	(wire
 		(pts
@@ -3080,6 +3336,16 @@
 	)
 	(wire
 		(pts
+			(xy 191.77 118.11) (xy 220.98 118.11)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d4455eaf-251f-4efd-b068-e0937b0cb048")
+	)
+	(wire
+		(pts
 			(xy 90.17 74.93) (xy 95.25 74.93)
 		)
 		(stroke
@@ -3140,6 +3406,16 @@
 	)
 	(wire
 		(pts
+			(xy 196.85 62.23) (xy 196.85 58.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "e33da70b-8db3-48a4-90a1-18ebd6e5efff")
+	)
+	(wire
+		(pts
 			(xy 90.17 74.93) (xy 90.17 76.2)
 		)
 		(stroke
@@ -3160,6 +3436,16 @@
 	)
 	(wire
 		(pts
+			(xy 260.35 93.98) (xy 262.89 93.98)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f8c1ad07-4b61-465c-9a0f-519b32ef8d35")
+	)
+	(wire
+		(pts
 			(xy 90.17 81.28) (xy 90.17 85.09)
 		)
 		(stroke
@@ -3167,6 +3453,16 @@
 			(type default)
 		)
 		(uuid "facbf0c0-26ce-4411-b6d5-1a278bbbefb1")
+	)
+	(wire
+		(pts
+			(xy 191.77 87.63) (xy 220.98 87.63)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "fb539024-2df9-414d-9d71-2a684e4930a9")
 	)
 	(wire
 		(pts
@@ -3188,6 +3484,16 @@
 		)
 		(uuid "fdca3de5-1e2a-4d81-b0a9-f8a1d91c96bc")
 	)
+	(wire
+		(pts
+			(xy 205.74 125.73) (xy 205.74 130.81)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "ff0f9895-9ce1-4ddd-a658-4fa10e8f3e1b")
+	)
 	(label "+12V"
 		(at 41.91 66.04 0)
 		(effects
@@ -3197,6 +3503,16 @@
 			(justify left bottom)
 		)
 		(uuid "70c243cd-616b-44d1-86a0-4519fef094e9")
+	)
+	(label "VbusSense"
+		(at 198.12 67.31 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "7e6c0007-f4df-450f-a8fd-0a8c2ca9792c")
 	)
 	(label "5V_BUCK"
 		(at 116.84 69.85 180)
@@ -3217,6 +3533,16 @@
 			(justify left bottom)
 		)
 		(uuid "86d718c9-59c5-48f0-9cb8-119aaffb69cc")
+	)
+	(label "VBUS"
+		(at 212.09 67.31 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "944eef97-09d8-4700-886b-17b8bc0e07ca")
 	)
 	(label "5V_BUCK"
 		(at 29.21 114.3 0)
@@ -3389,6 +3715,393 @@
 			(project "driver-bldc-foc"
 				(path "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9"
 					(reference "#PWR03")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Connector_Generic:Conn_01x01")
+		(at 267.97 88.9 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "0a6ce009-29b5-4c46-be0d-d844a0edc374")
+		(property "Reference" "J4"
+			(at 270.002 87.8332 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "Motor_Phase_A"
+			(at 270.002 90.1446 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Connector_Wire:SolderWirePad_1x01_SMD_5x10mm"
+			(at 267.97 88.9 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 267.97 88.9 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 267.97 88.9 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "617e1b1b-3a7d-4868-922c-8ed8b83de084")
+		)
+		(instances
+			(project "driver-bldc-foc"
+				(path "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9"
+					(reference "J4")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:+3.3V")
+		(at 215.9 58.42 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "14657aae-98fa-46b7-b1dd-484bf0396401")
+		(property "Reference" "#PWR012"
+			(at 215.9 62.23 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "+3.3V"
+			(at 215.9 53.34 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 215.9 58.42 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 215.9 58.42 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"+3.3V\""
+			(at 215.9 58.42 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "a0febe3f-39c4-44f7-8e83-386884adfe2e")
+		)
+		(instances
+			(project "driver-bldc-foc"
+				(path "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9"
+					(reference "#PWR012")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:+3.3V")
+		(at 196.85 58.42 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "189c7cac-cd82-41b0-82e9-cc38038563b6")
+		(property "Reference" "#PWR010"
+			(at 196.85 62.23 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "+3.3V"
+			(at 196.85 53.34 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 196.85 58.42 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 196.85 58.42 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"+3.3V\""
+			(at 196.85 58.42 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "686383ee-e57a-4a37-8d0c-7166f82f67ce")
+		)
+		(instances
+			(project "driver-bldc-foc"
+				(path "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9"
+					(reference "#PWR010")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Connector_Generic:Conn_01x01")
+		(at 267.97 99.06 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "1e03b6ba-f943-451d-be1d-7ab73ceaa227")
+		(property "Reference" "J6"
+			(at 270.002 97.9932 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "Motor_Phase_C"
+			(at 270.002 100.3046 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Connector_Wire:SolderWirePad_1x01_SMD_5x10mm"
+			(at 267.97 99.06 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 267.97 99.06 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 267.97 99.06 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "accb5988-ecdc-41d4-bd95-f5a788041fda")
+		)
+		(instances
+			(project "driver-bldc-foc"
+				(path "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9"
+					(reference "J6")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 205.74 130.81 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "20f465c4-c4d4-48ca-8346-41dd72790061")
+		(property "Reference" "#PWR06"
+			(at 205.74 137.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 205.74 135.89 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 205.74 130.81 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 205.74 130.81 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+			(at 205.74 130.81 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "cc461f72-5c6b-405a-ac08-67219609c182")
+		)
+		(instances
+			(project "driver-bldc-foc"
+				(path "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9"
+					(reference "#PWR06")
 					(unit 1)
 				)
 			)
@@ -4282,7 +4995,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "3k"
+		(property "Value" "100k"
 			(at 161.798 30.226 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -4503,83 +5216,6 @@
 			(project "driver-bldc-foc"
 				(path "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9"
 					(reference "J3")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Connector_Generic:Conn_01x01")
-		(at 76.2 39.37 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "6d0dcc5b-3527-4d20-8481-fc656349418a")
-		(property "Reference" "J6"
-			(at 78.232 38.3032 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "Motor_Phase_C"
-			(at 78.232 40.6146 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Footprint" "Connector_Wire:SolderWirePad_1x01_SMD_5x10mm"
-			(at 76.2 39.37 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 76.2 39.37 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" ""
-			(at 76.2 39.37 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "a8ec61eb-7036-4f2d-93c5-bdcf6c92dfbe")
-		)
-		(instances
-			(project "driver-bldc-foc"
-				(path "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9"
-					(reference "J6")
 					(unit 1)
 				)
 			)
@@ -5058,83 +5694,6 @@
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x01")
-		(at 76.2 29.21 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "728bb601-68f4-40f7-9e76-8959ed8c4eaf")
-		(property "Reference" "J4"
-			(at 78.232 28.1432 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "Motor_Phase_A"
-			(at 78.232 30.4546 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Footprint" "Connector_Wire:SolderWirePad_1x01_SMD_5x10mm"
-			(at 76.2 29.21 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 76.2 29.21 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" ""
-			(at 76.2 29.21 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "6d534323-f27e-4692-aff4-6078e7e129bc")
-		)
-		(instances
-			(project "driver-bldc-foc"
-				(path "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9"
-					(reference "J4")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Connector_Generic:Conn_01x01")
 		(at 25.4 26.67 0)
 		(unit 1)
 		(body_style 1)
@@ -5542,83 +6101,6 @@
 		)
 	)
 	(symbol
-		(lib_id "Connector_Generic:Conn_01x01")
-		(at 76.2 34.29 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "89156c0d-44a6-4719-a3ab-dc84e5829170")
-		(property "Reference" "J5"
-			(at 78.232 33.2232 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "Motor_Phase_B"
-			(at 78.232 35.5346 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Footprint" "Connector_Wire:SolderWirePad_1x01_SMD_5x10mm"
-			(at 76.2 34.29 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 76.2 34.29 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" ""
-			(at 76.2 34.29 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "912bd7a2-820c-478c-a951-bbd8f2ba6329")
-		)
-		(instances
-			(project "driver-bldc-foc"
-				(path "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9"
-					(reference "J5")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
 		(lib_id "Regulator_Linear:AP1117-33")
 		(at 99.06 106.68 0)
 		(unit 1)
@@ -5723,7 +6205,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "10uF"
+		(property "Value" "1nF"
 			(at 173.736 38.1 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6194,7 +6676,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "3k"
+		(property "Value" "3.9k"
 			(at 161.798 41.656 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -7037,9 +7519,86 @@
 			)
 		)
 	)
+	(symbol
+		(lib_id "Connector_Generic:Conn_01x01")
+		(at 267.97 93.98 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "ff9feb5e-e2be-443c-9863-43c47e3043b9")
+		(property "Reference" "J5"
+			(at 270.002 92.9132 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "Motor_Phase_B"
+			(at 270.002 95.2246 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Connector_Wire:SolderWirePad_1x01_SMD_5x10mm"
+			(at 267.97 93.98 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 267.97 93.98 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 267.97 93.98 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "d084b55b-0883-48d8-ac55-980189f5e19e")
+		)
+		(instances
+			(project "driver-bldc-foc"
+				(path "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9"
+					(reference "J5")
+					(unit 1)
+				)
+			)
+		)
+	)
 	(sheet
 		(at 153.67 59.69)
-		(size 38.1 48.26)
+		(size 38.1 68.58)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
@@ -7065,7 +7624,7 @@
 			)
 		)
 		(property "Sheetfile" "mcu.kicad_sch"
-			(at 153.67 108.5346 0)
+			(at 153.67 128.8546 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -7073,6 +7632,236 @@
 					(size 1.27 1.27)
 				)
 				(justify left top)
+			)
+		)
+		(pin "3V3_IN" input
+			(at 191.77 62.23 0)
+			(uuid "7bf24ee3-2c07-49ac-a5c7-b499324d5c17")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "GND_IN" input
+			(at 191.77 125.73 0)
+			(uuid "ea8ad3f4-35d1-4239-afdb-02b920ed3a2b")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "VBUS_SENSE" input
+			(at 191.77 67.31 0)
+			(uuid "9e7f1558-6e78-427b-adf4-c10700be357a")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "IB" input
+			(at 191.77 74.93 0)
+			(uuid "c13c0775-64b4-4c61-9657-f2791f66d34c")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "VC" input
+			(at 191.77 87.63 0)
+			(uuid "56c0c3f4-f1a7-4128-b423-95e3f997e696")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "IA" input
+			(at 191.77 72.39 0)
+			(uuid "da68f5b3-8d2e-48a8-84ee-73f906c0031c")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "IC" input
+			(at 191.77 77.47 0)
+			(uuid "db14d992-4f4b-420b-90ba-3309af17f87e")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "OC" input
+			(at 191.77 80.01 0)
+			(uuid "dc9a0c12-1a7e-43ee-8bba-9e520c30d089")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "PWM_A+" input
+			(at 191.77 92.71 0)
+			(uuid "55d1954a-41ea-4f3d-88e2-9ed913b50d52")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "PWM_A-" input
+			(at 191.77 100.33 0)
+			(uuid "72ae983f-ecae-4cfe-8b6a-16005d48037f")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "VA" input
+			(at 191.77 82.55 0)
+			(uuid "2d60ae28-245e-424c-bf57-91d94b335abe")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "PWM_B+" input
+			(at 191.77 95.25 0)
+			(uuid "21ca819f-510a-4710-8841-693dabe6a17d")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "DRV_SCK" input
+			(at 191.77 118.11 0)
+			(uuid "b30251f1-4fce-42f7-beab-b5cf29f626b6")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "DRV_EN" input
+			(at 191.77 120.65 0)
+			(uuid "b21e28c5-c263-4eb0-b0b8-4c030df5552e")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "USB_D+" input
+			(at 153.67 76.2 180)
+			(uuid "e908d941-0ce3-4a52-a5b6-f6b86874e74a")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "USB_D-" input
+			(at 153.67 78.74 180)
+			(uuid "08811466-4032-4d38-84f6-cea1998a98c4")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "VB" input
+			(at 191.77 85.09 0)
+			(uuid "9be1ef4b-23cb-4a44-a569-fd3d99e0acaa")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "DRV_MISO" input
+			(at 191.77 115.57 0)
+			(uuid "87a9ea5f-1b32-4eff-910b-47e89083be3f")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "PWM_C+" input
+			(at 191.77 97.79 0)
+			(uuid "bbd0ab8d-e80a-4894-aabd-3abcfbaab048")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "PWM_B-" input
+			(at 191.77 102.87 0)
+			(uuid "6cb1f3d1-617a-45bc-8114-53f80c7fed6e")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "PWM_C-" input
+			(at 191.77 105.41 0)
+			(uuid "1ee7156d-77c3-46a2-a6d6-33013cc5fa5f")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "DVR_CS" input
+			(at 191.77 110.49 0)
+			(uuid "8f00c6ef-1136-4bde-b4c1-4f608bda716d")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "DRV_MOSI" input
+			(at 191.77 113.03 0)
+			(uuid "25eb5e4c-8ff9-49f4-9dbb-81dc975be2c8")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
 			)
 		)
 		(instances
@@ -7084,8 +7873,8 @@
 		)
 	)
 	(sheet
-		(at 222.25 59.69)
-		(size 38.1 46.99)
+		(at 220.98 59.69)
+		(size 39.37 68.58)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
@@ -7100,7 +7889,7 @@
 		)
 		(uuid "be7198b5-813b-4ab8-b125-bdbfdab5672a")
 		(property "Sheetname" "ThreePhaseBridge and Power"
-			(at 222.25 58.9784 0)
+			(at 220.98 58.9784 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -7111,7 +7900,7 @@
 			)
 		)
 		(property "Sheetfile" "ThreePhaseBridgeandPower.kicad_sch"
-			(at 222.25 107.2646 0)
+			(at 220.98 128.8546 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -7119,6 +7908,246 @@
 					(size 1.27 1.27)
 				)
 				(justify left top)
+			)
+		)
+		(pin "3V3_IN" input
+			(at 220.98 62.23 180)
+			(uuid "03a1124c-adbc-4410-94ca-c33276be49eb")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "VBUS" input
+			(at 220.98 67.31 180)
+			(uuid "1a262504-d0ff-4230-8cf9-f26b83eff4fc")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "CUR_A" input
+			(at 220.98 72.39 180)
+			(uuid "c3451238-bcd9-4c7b-8f05-428be2d7dcba")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "CUR_B" input
+			(at 220.98 74.93 180)
+			(uuid "2c38c341-2974-448d-9031-6f1381261afb")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "INLA" input
+			(at 220.98 100.33 180)
+			(uuid "f12710c1-abed-44d3-a7a9-a3a67bda8049")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "INLB" input
+			(at 220.98 102.87 180)
+			(uuid "6efec0d9-55f8-4b98-a819-8d555f83b477")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "INLC" input
+			(at 220.98 105.41 180)
+			(uuid "a54fa2c4-c1f3-4bf4-a183-b7e0cec33de2")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "GND" input
+			(at 220.98 125.73 180)
+			(uuid "8b9e5ecc-7c16-4c6e-91b9-872a8c514300")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "VSENS_B" input
+			(at 220.98 85.09 180)
+			(uuid "ce9263a6-0e88-44c3-bfec-7a38cf784f33")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "VSENS_C" input
+			(at 220.98 87.63 180)
+			(uuid "848321b9-ccb5-4fdc-8819-8371cab2be3a")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "INHA" input
+			(at 220.98 92.71 180)
+			(uuid "03e4a8ce-c4f2-486f-844c-80a3cb355bfc")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "INHB" input
+			(at 220.98 95.25 180)
+			(uuid "0b2e4754-2209-4a04-8f88-a8ca94a022b7")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "INHC" input
+			(at 220.98 97.79 180)
+			(uuid "770527dd-27b0-4492-8909-e97acca01328")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "PHASE_A" input
+			(at 260.35 88.9 0)
+			(uuid "490b4cba-8d4c-4e82-a4a0-5ab2bed03816")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "PHASE_B" input
+			(at 260.35 93.98 0)
+			(uuid "2d714a27-c847-43e2-ba28-77e777e5a00c")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "PHASE_C" input
+			(at 260.35 99.06 0)
+			(uuid "24b9682f-525b-4466-8c7c-9fee9c5ac616")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "CUR_C" input
+			(at 220.98 77.47 180)
+			(uuid "b85ca760-1ef8-453c-9def-9d0c674da611")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "FAULT" input
+			(at 220.98 80.01 180)
+			(uuid "6eb66472-28e7-46cd-8bb9-eb352ef3760e")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "VSENS_A" input
+			(at 220.98 82.55 180)
+			(uuid "c61db30e-402a-4ad7-9574-48c93ba3eb96")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "SPI_CS" input
+			(at 220.98 110.49 180)
+			(uuid "02ee6839-f476-468f-ac0c-3e0f6b4fa79c")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "SPI_MOSI" input
+			(at 220.98 113.03 180)
+			(uuid "d5d756d8-7994-4e87-adee-605ae48287c1")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "SPI_MISO" input
+			(at 220.98 115.57 180)
+			(uuid "2258874e-5977-4f82-b65a-2c9f2695f359")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "SPI_CLK" input
+			(at 220.98 118.11 180)
+			(uuid "9e08d7f3-e341-4a63-830f-23afb9de7e81")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "EN" input
+			(at 220.98 120.65 180)
+			(uuid "25a93d7c-d87a-4d73-a319-a0b4648adb9c")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
 			)
 		)
 		(instances
