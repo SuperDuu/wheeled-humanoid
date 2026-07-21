@@ -110,6 +110,6 @@
   (model "/home/du/Desktop/wheeled-humanoid/hardware/electronics/user_lib/DRV8353RSRGZT/DRV8353RSRGZT.step"
     (offset (xyz 0 0 0))
     (scale (xyz 1 1 1))
-    (rotate (xyz 0 0 0))
+    (rotate (xyz 0 90 0))
   )
 )
