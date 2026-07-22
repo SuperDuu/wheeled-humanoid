@@ -4107,6 +4107,16 @@
 	)
 	(wire
 		(pts
+			(xy 228.6 82.55) (xy 241.3 82.55)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4b14dc71-d977-450a-9b1e-4ae8768c0767")
+	)
+	(wire
+		(pts
 			(xy 83.82 81.28) (xy 83.82 83.82)
 		)
 		(stroke
@@ -4707,7 +4717,7 @@
 	)
 	(wire
 		(pts
-			(xy 180.34 44.45) (xy 193.04 44.45)
+			(xy 177.8 44.45) (xy 193.04 44.45)
 		)
 		(stroke
 			(width 0)
@@ -5006,7 +5016,7 @@
 		(uuid "20b4f53f-144e-4281-9fec-773e535747b1")
 	)
 	(label "3V3_MCU_A"
-		(at 180.34 44.45 0)
+		(at 177.8 44.45 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -5024,6 +5034,16 @@
 			(justify left bottom)
 		)
 		(uuid "28bef2ca-b736-4aad-b2c3-8f4735e41ad3")
+	)
+	(label "TIM2_CH1"
+		(at 241.3 82.55 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "2a222b8a-3b8d-4565-9baa-72a4af0c46d8")
 	)
 	(label "3V3_MCU"
 		(at 260.35 101.6 0)
