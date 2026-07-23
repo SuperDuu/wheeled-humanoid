@@ -1,0 +1,1284 @@
+{
+    "$schema": "https://schemas.kicad.org/erc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-07-23T09:38:24",
+    "ignored_checks": [
+        {
+            "description": "Global label only appears once in the schematic",
+            "key": "single_global_label"
+        },
+        {
+            "description": "Four connection points are joined together",
+            "key": "four_way_junction"
+        },
+        {
+            "description": "SPICE model issue",
+            "key": "simulation_model_issue"
+        },
+        {
+            "description": "Assigned footprint doesn't match footprint filters",
+            "key": "footprint_filter"
+        }
+    ],
+    "included_severities": [
+        "error",
+        "warning"
+    ],
+    "kicad_version": "10.0.4",
+    "sheets": [
+        {
+            "path": "/",
+            "uuid_path": "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9",
+            "violations": [
+                {
+                    "description": "Input Power pin not driven by any Output Power pins",
+                    "items": [
+                        {
+                            "description": "Symbol #PWR03 Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 0.381,
+                                "y": 1.1938
+                            },
+                            "uuid": "4157974f-8485-4049-97ce-8518d8bc3444"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "power_pin_not_driven"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol J3 Pin A8 [SBU1, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.4572,
+                                "y": 0.4064
+                            },
+                            "uuid": "39a7e9f4-1fb6-4d9c-a3cf-2196bc4a5374"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Input Power pin not driven by any Output Power pins",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 3 [VIN, Power input, Line]",
+                            "pos": {
+                                "x": 0.5207,
+                                "y": 0.7493
+                            },
+                            "uuid": "6f3ae53c-913c-4369-8680-b7bb9a92876c"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "power_pin_not_driven"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol J3 Pin B8 [SBU2, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.8128,
+                                "y": 0.3302
+                            },
+                            "uuid": "59c370c6-46c5-417a-bb6c-1dbbeee86de3"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Input Power pin not driven by any Output Power pins",
+                    "items": [
+                        {
+                            "description": "Symbol #PWR01 Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.7526,
+                                "y": 0.381
+                            },
+                            "uuid": "77aa0ac9-5607-44be-a0d7-2912f3672ce2"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "power_pin_not_driven"
+                },
+                {
+                    "description": "Input Power pin not driven by any Output Power pins",
+                    "items": [
+                        {
+                            "description": "Symbol #PWR02 Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 2.2225,
+                                "y": 0.381
+                            },
+                            "uuid": "26b00e81-53f6-414e-8974-ff67b1ebc0e2"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "power_pin_not_driven"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C9 [0805,10uF]",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 0.7874
+                            },
+                            "uuid": "3678339f-7021-45a1-9bea-8b8322fb88d6"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C10 [0805,10uF]",
+                            "pos": {
+                                "x": 0.4191,
+                                "y": 0.7874
+                            },
+                            "uuid": "fb734881-4724-42e8-9247-a6265437151b"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C12 [0805,10uF]",
+                            "pos": {
+                                "x": 0.4572,
+                                "y": 1.7399
+                            },
+                            "uuid": "8eddafd6-14db-4554-bb77-b1976f056886"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C5 [0805,10uF]",
+                            "pos": {
+                                "x": 0.7112,
+                                "y": 1.2192
+                            },
+                            "uuid": "725c7cdc-fe55-492e-80e2-5aa063e8a73a"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C6 [0805,10uF]",
+                            "pos": {
+                                "x": 0.7747,
+                                "y": 1.2192
+                            },
+                            "uuid": "353cc043-5b32-4262-b8c1-c8a6ffb8fab2"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C11 [0805,10uF]",
+                            "pos": {
+                                "x": 0.8382,
+                                "y": 0.6858
+                            },
+                            "uuid": "d92465cf-47af-4b98-8d6d-931babe5d7bd"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Both VBUS and USB_VBUS are attached to the same items; VBUS will be used in the netlist",
+                    "items": [
+                        {
+                            "description": "Symbol #PWR01 Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.7526,
+                                "y": 0.381
+                            },
+                            "uuid": "77aa0ac9-5607-44be-a0d7-2912f3672ce2"
+                        },
+                        {
+                            "description": "Label 'USB_VBUS'",
+                            "pos": {
+                                "x": 0.889,
+                                "y": 0.2794
+                            },
+                            "uuid": "c37575cf-21b3-4986-909f-b0c0402f8643"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "multiple_net_names"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C7 [0805,10uF]",
+                            "pos": {
+                                "x": 1.0287,
+                                "y": 1.2192
+                            },
+                            "uuid": "85e2c5fc-445c-42c9-952c-c22e7b2ba000"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C8 [0805,10uF]",
+                            "pos": {
+                                "x": 1.0922,
+                                "y": 1.2192
+                            },
+                            "uuid": "713d34b6-9e32-42c2-aada-5e0f6f1e5b9b"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Pins of type Unspecified and Power input are connected",
+                    "items": [
+                        {
+                            "description": "Symbol U6 Pin 2 [2, Unspecified, Line]",
+                            "pos": {
+                                "x": 1.778,
+                                "y": 0.381
+                            },
+                            "uuid": "a02293bd-04d8-475a-a489-5f0e13b14873"
+                        },
+                        {
+                            "description": "Symbol #PWR01 Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.7526,
+                                "y": 0.381
+                            },
+                            "uuid": "77aa0ac9-5607-44be-a0d7-2912f3672ce2"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "pin_to_pin"
+                },
+                {
+                    "description": "The current configuration does not include the footprint library ''",
+                    "items": [
+                        {
+                            "description": "Symbol U6 [XT30PW-M]",
+                            "pos": {
+                                "x": 2.1844,
+                                "y": 0.381
+                            },
+                            "uuid": "3cde2a89-c2c2-4976-8f3e-908c24b675ce"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "footprint_link_issues"
+                },
+                {
+                    "description": "Pins of type Unspecified and Power input are connected",
+                    "items": [
+                        {
+                            "description": "Symbol U6 Pin 1 [1, Unspecified, Line]",
+                            "pos": {
+                                "x": 2.1844,
+                                "y": 0.381
+                            },
+                            "uuid": "3c9441f7-b1e5-4272-923f-33be4b71cef7"
+                        },
+                        {
+                            "description": "Symbol #PWR02 Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 2.2225,
+                                "y": 0.381
+                            },
+                            "uuid": "26b00e81-53f6-414e-8974-ff67b1ebc0e2"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "pin_to_pin"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C13 [0805,10uF]",
+                            "pos": {
+                                "x": 0.5588,
+                                "y": 0.3937
+                            },
+                            "uuid": "82825fdb-b327-471d-80e0-03b03684f2be"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C14 [0805,10uF]",
+                            "pos": {
+                                "x": 0.6223,
+                                "y": 0.3937
+                            },
+                            "uuid": "8d970249-bff0-4723-a0e4-aa2225ea70eb"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C15 [0805,10uF]",
+                            "pos": {
+                                "x": 0.8128,
+                                "y": 0.3937
+                            },
+                            "uuid": "36d62af5-0add-44fe-952f-9e80d9530b29"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C19 [0805,10uF]",
+                            "pos": {
+                                "x": 0.8382,
+                                "y": 0.7747
+                            },
+                            "uuid": "86282c75-17f0-4ba4-8df0-b14c31e37a19"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C16 [0805,10uF]",
+                            "pos": {
+                                "x": 0.8763,
+                                "y": 0.3937
+                            },
+                            "uuid": "daf34708-a344-40c2-9043-c3456f5bf946"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C20 [0805,10uF]",
+                            "pos": {
+                                "x": 0.9017,
+                                "y": 0.7747
+                            },
+                            "uuid": "c363b06e-d943-45ac-a368-46e3990430ef"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C17 [0805,10uF]",
+                            "pos": {
+                                "x": 0.9525,
+                                "y": 0.3937
+                            },
+                            "uuid": "6dc77f89-6ce0-40df-89dc-b0f04ddb7419"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C18 [0805,10uF]",
+                            "pos": {
+                                "x": 1.016,
+                                "y": 0.3937
+                            },
+                            "uuid": "83158176-7727-4724-90e6-a082b55123ce"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C21 [0805,10uF]",
+                            "pos": {
+                                "x": 1.0795,
+                                "y": 1.2827
+                            },
+                            "uuid": "4882066f-a88a-4efc-bf34-f70d6e3ec8fd"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Label connected to only one pin",
+                    "items": [
+                        {
+                            "description": "Label 'U1_TX'",
+                            "pos": {
+                                "x": 1.7399,
+                                "y": 0.7747
+                            },
+                            "uuid": "5032d2c1-3593-4cb8-8b36-4b2de8936c5c"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "isolated_pin_label"
+                },
+                {
+                    "description": "Label connected to only one pin",
+                    "items": [
+                        {
+                            "description": "Label 'U1_RX'",
+                            "pos": {
+                                "x": 1.7399,
+                                "y": 0.8001
+                            },
+                            "uuid": "13abd074-1b70-4c92-94d0-7624b57e8524"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "isolated_pin_label"
+                },
+                {
+                    "description": "Label connected to only one pin",
+                    "items": [
+                        {
+                            "description": "Label 'TIM2_CH1'",
+                            "pos": {
+                                "x": 2.413,
+                                "y": 0.8255
+                            },
+                            "uuid": "2a222b8a-3b8d-4565-9baa-72a4af0c46d8"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "isolated_pin_label"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C22 [0805,10uF]",
+                            "pos": {
+                                "x": 0.3048,
+                                "y": 0.3048
+                            },
+                            "uuid": "1ff7d49a-39b4-4163-be66-e54835bfc114"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C23 [0805,10uF]",
+                            "pos": {
+                                "x": 0.3683,
+                                "y": 0.3048
+                            },
+                            "uuid": "4d9e8c77-3aea-4a15-88a7-f854a8a0e1ab"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C24 [0805,10uF]",
+                            "pos": {
+                                "x": 0.4445,
+                                "y": 0.3048
+                            },
+                            "uuid": "90c6eedb-9653-46e7-b527-21317cc2cf4d"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C25 [0805,10uF]",
+                            "pos": {
+                                "x": 0.508,
+                                "y": 0.3048
+                            },
+                            "uuid": "d928c48b-9fe9-40d2-be5c-3b00e61b8184"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C31 [0805,10uF]",
+                            "pos": {
+                                "x": 0.5334,
+                                "y": 1.016
+                            },
+                            "uuid": "a5050d61-1314-4363-8f24-af3181fd8edd"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C39 [0805,10uF]",
+                            "pos": {
+                                "x": 0.5715,
+                                "y": 1.6129
+                            },
+                            "uuid": "e22c2c43-899a-461e-a10c-300445b7c141"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C26 [0805,10uF]",
+                            "pos": {
+                                "x": 0.7239,
+                                "y": 0.9525
+                            },
+                            "uuid": "4d7ba068-bf58-41f9-98e1-de62d2fd7013"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C37 [0805,10uF]",
+                            "pos": {
+                                "x": 0.8636,
+                                "y": 1.6129
+                            },
+                            "uuid": "88788a2c-037b-418f-a810-c7b3955c0321"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C38 [0805,10uF]",
+                            "pos": {
+                                "x": 1.1557,
+                                "y": 1.6129
+                            },
+                            "uuid": "75ed4b68-b1cc-4a63-84ba-85c9fd52a6d8"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C30 [0805,10uF]",
+                            "pos": {
+                                "x": 1.3208,
+                                "y": 0.3302
+                            },
+                            "uuid": "6a0af9c1-8a0b-431a-9a57-398de6d5bcc9"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C29 [0805,10uF]",
+                            "pos": {
+                                "x": 1.3208,
+                                "y": 0.381
+                            },
+                            "uuid": "6d2b255d-064c-4778-836b-65bcdde2a8f8"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C27 [0805,10uF]",
+                            "pos": {
+                                "x": 1.3462,
+                                "y": 0.2794
+                            },
+                            "uuid": "53c7cbd8-b819-469b-9035-4dc3af759492"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C28 [0805,10uF]",
+                            "pos": {
+                                "x": 1.3462,
+                                "y": 0.3556
+                            },
+                            "uuid": "ad9ebf3f-d459-4c87-9700-1e5e116a254b"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C32 [0805,10uF]",
+                            "pos": {
+                                "x": 1.3462,
+                                "y": 0.4318
+                            },
+                            "uuid": "00a91519-1b64-4485-868f-2622be5655e3"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C40 [0805,10uF]",
+                            "pos": {
+                                "x": 1.5367,
+                                "y": 1.4351
+                            },
+                            "uuid": "d82904a5-0502-4ed6-80a1-00caa8cde443"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C34 [0805,10uF]",
+                            "pos": {
+                                "x": 1.6891,
+                                "y": 0.5588
+                            },
+                            "uuid": "7438d779-1473-4c42-a1fc-01aac7cf3be6"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C41 [0805,10uF]",
+                            "pos": {
+                                "x": 1.7272,
+                                "y": 0.9017
+                            },
+                            "uuid": "cf57af5f-852c-487a-bf43-8d509ca930fe"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C33 [0805,10uF]",
+                            "pos": {
+                                "x": 1.7399,
+                                "y": 0.508
+                            },
+                            "uuid": "cbf3e77a-ff7a-47df-9973-b68e870c634f"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C35 [0805,10uF]",
+                            "pos": {
+                                "x": 1.8415,
+                                "y": 0.5588
+                            },
+                            "uuid": "a9e91739-e35c-48df-b1a2-ca242f53068e"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C36 [0805,10uF]",
+                            "pos": {
+                                "x": 1.8923,
+                                "y": 0.5588
+                            },
+                            "uuid": "5e480728-bcf8-4d79-954e-5d777d7d208e"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C42 [0805,10uF]",
+                            "pos": {
+                                "x": 1.9939,
+                                "y": 1.4351
+                            },
+                            "uuid": "ee0c030a-5086-44fc-ab63-16b1bbf01ebf"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C43 [0805,10uF]",
+                            "pos": {
+                                "x": 2.1844,
+                                "y": 0.9017
+                            },
+                            "uuid": "2d4d9373-9bb8-4e10-8b24-08904ae8f462"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C44 [0805,10uF]",
+                            "pos": {
+                                "x": 2.4511,
+                                "y": 1.4351
+                            },
+                            "uuid": "c5ff9fac-2185-4e45-9c0b-e0f8d5019c0b"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'JLCPCB-Capacitors'",
+                    "items": [
+                        {
+                            "description": "Symbol C45 [0805,10uF]",
+                            "pos": {
+                                "x": 2.6416,
+                                "y": 0.9017
+                            },
+                            "uuid": "d1104b38-b68b-4399-b174-511712ca0439"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                }
+            ]
+        },
+        {
+            "path": "/MCU/",
+            "uuid_path": "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9/04dee9f0-20a5-49ba-b8bd-bc32cb077817",
+            "violations": [
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U2 Pin 7 [PG10, Bidirectional, Line]",
+                            "pos": {
+                                "x": 1.9304,
+                                "y": 0.4953
+                            },
+                            "uuid": "ad2653c1-0100-4fbf-85ea-2d866e9eb72a"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U2 Pin 5 [PF0, Bidirectional, Line]",
+                            "pos": {
+                                "x": 1.9304,
+                                "y": 0.5461
+                            },
+                            "uuid": "10373418-af40-4879-9905-1d937d1b5236"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U2 Pin 6 [PF1, Bidirectional, Line]",
+                            "pos": {
+                                "x": 1.9304,
+                                "y": 0.5715
+                            },
+                            "uuid": "f19909b8-a420-49c9-83f3-a868fb7e39f1"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U2 Pin 55 [PD2, Bidirectional, Line]",
+                            "pos": {
+                                "x": 1.9304,
+                                "y": 0.6223
+                            },
+                            "uuid": "9836407e-7643-4b7e-837c-58a492ade01e"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U2 Pin 11 [PC3, Bidirectional, Line]",
+                            "pos": {
+                                "x": 1.9304,
+                                "y": 0.7493
+                            },
+                            "uuid": "0e284596-8aec-47be-b648-40d6affe4cb3"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Input Power pin not driven by any Output Power pins",
+                    "items": [
+                        {
+                            "description": "Symbol U2 Pin 1 [VBAT, Power input, Line]",
+                            "pos": {
+                                "x": 2.0574,
+                                "y": 0.3683
+                            },
+                            "uuid": "51aef398-d8e1-44f3-a99b-76122c501d48"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "power_pin_not_driven"
+                },
+                {
+                    "description": "Input Power pin not driven by any Output Power pins",
+                    "items": [
+                        {
+                            "description": "Symbol U2 Pin 29 [VDDA, Power input, Line]",
+                            "pos": {
+                                "x": 2.1844,
+                                "y": 0.3683
+                            },
+                            "uuid": "4a0c15d1-fa35-4cc2-9a65-2c2e33f5f516"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "power_pin_not_driven"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U2 Pin 13 [PA1, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.286,
+                                "y": 0.4699
+                            },
+                            "uuid": "e82f94e6-5aee-4ce0-9807-d3eef4f514f5"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U2 Pin 14 [PA2, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.286,
+                                "y": 0.4953
+                            },
+                            "uuid": "59a6fae4-11d3-468e-9807-8b53fe3cde51"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U2 Pin 18 [PA4, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.286,
+                                "y": 0.5461
+                            },
+                            "uuid": "d76c8dc9-d37d-4452-bd9a-1ebebd95c989"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U2 Pin 26 [PB2, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.286,
+                                "y": 0.9271
+                            },
+                            "uuid": "b1a72657-120e-4150-a77b-971c8055723c"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U2 Pin 56 [PB3, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.286,
+                                "y": 0.9525
+                            },
+                            "uuid": "b1da5f64-c03e-49ab-a566-7ac469d49f7f"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U2 Pin 57 [PB4, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.286,
+                                "y": 0.9779
+                            },
+                            "uuid": "f866c819-3a24-4f69-a38d-6144aab08bd0"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U2 Pin 62 [PB9, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.286,
+                                "y": 1.1049
+                            },
+                            "uuid": "ae65e659-8ff5-4ebb-b2c9-4eb550b82e09"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U2 Pin 33 [PB11, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.286,
+                                "y": 1.1557
+                            },
+                            "uuid": "0c7989ae-b4e9-4c33-9382-e0c3f7016ff2"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Both GND_MCU and GND_IN are attached to the same items; GND_MCU will be used in the netlist",
+                    "items": [
+                        {
+                            "description": "Label 'GND_MCU'",
+                            "pos": {
+                                "x": 0.7747,
+                                "y": 1.7526
+                            },
+                            "uuid": "9695b8ac-d12d-4c7f-a400-bca2f62b00c1"
+                        },
+                        {
+                            "description": "Hierarchical Label 'GND_IN'",
+                            "pos": {
+                                "x": 0.5207,
+                                "y": 0.4826
+                            },
+                            "uuid": "0aee1365-d37e-451a-aba5-682f5810e57f"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "multiple_net_names"
+                }
+            ]
+        },
+        {
+            "path": "/ThreePhaseBridge and Power/",
+            "uuid_path": "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9/be7198b5-813b-4ab8-b125-bdbfdab5672a",
+            "violations": [
+                {
+                    "description": "Input Power pin not driven by any Output Power pins",
+                    "items": [
+                        {
+                            "description": "Symbol U4 Pin 40 [DVDD, Power input, Line]",
+                            "pos": {
+                                "x": 1.2319,
+                                "y": 0.2794
+                            },
+                            "uuid": "5268e96b-25e5-48ce-a448-7b1b888b80db"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "power_pin_not_driven"
+                },
+                {
+                    "description": "Both PWR_VBUS and VBUS are attached to the same items; PWR_VBUS will be used in the netlist",
+                    "items": [
+                        {
+                            "description": "Label 'PWR_VBUS'",
+                            "pos": {
+                                "x": 1.4097,
+                                "y": 0.3556
+                            },
+                            "uuid": "44bb7305-22e3-47ac-bf9f-92fceff0a69d"
+                        },
+                        {
+                            "description": "Hierarchical Label 'VBUS'",
+                            "pos": {
+                                "x": 0.2159,
+                                "y": 0.2159
+                            },
+                            "uuid": "e3c721e1-628c-4f41-8a41-2c34245349e0"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "multiple_net_names"
+                },
+                {
+                    "description": "Both SHA and PHASE_A are attached to the same items; SHA will be used in the netlist",
+                    "items": [
+                        {
+                            "description": "Label 'SHA'",
+                            "pos": {
+                                "x": 1.4732,
+                                "y": 1.1684
+                            },
+                            "uuid": "ab57a745-b51c-4cdc-8636-75dd149f4db1"
+                        },
+                        {
+                            "description": "Hierarchical Label 'PHASE_A'",
+                            "pos": {
+                                "x": 1.7018,
+                                "y": 1.1684
+                            },
+                            "uuid": "da18670f-f658-4f02-a635-06ae0f4ad2f1"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "multiple_net_names"
+                },
+                {
+                    "description": "Both PWR_GND and SNB are attached to the same items; PWR_GND will be used in the netlist",
+                    "items": [
+                        {
+                            "description": "Label 'PWR_GND'",
+                            "pos": {
+                                "x": 0.6096,
+                                "y": 0.7366
+                            },
+                            "uuid": "0438e502-5570-45c2-a55a-243f7ae39584"
+                        },
+                        {
+                            "description": "Label 'SNB'",
+                            "pos": {
+                                "x": 1.9304,
+                                "y": 1.5113
+                            },
+                            "uuid": "28c9592e-f412-42ff-9848-f0fa08b838c3"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "multiple_net_names"
+                },
+                {
+                    "description": "Both VBUCK and 12V are attached to the same items; VBUCK will be used in the netlist",
+                    "items": [
+                        {
+                            "description": "Label 'VBUCK'",
+                            "pos": {
+                                "x": 1.8923,
+                                "y": 0.3048
+                            },
+                            "uuid": "43857ea4-4e7c-4ae5-b4b7-3c8800da64a0"
+                        },
+                        {
+                            "description": "Hierarchical Label '12V'",
+                            "pos": {
+                                "x": 2.0066,
+                                "y": 0.4826
+                            },
+                            "uuid": "7fe1a00d-bfbe-4b9b-a0a7-d16e6b4a8ddd"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "multiple_net_names"
+                },
+                {
+                    "description": "Both SHB and PHASE_B are attached to the same items; SHB will be used in the netlist",
+                    "items": [
+                        {
+                            "description": "Label 'SHB'",
+                            "pos": {
+                                "x": 1.3335,
+                                "y": 0.8636
+                            },
+                            "uuid": "9be791a5-055a-4d89-a561-d006ac38a13a"
+                        },
+                        {
+                            "description": "Hierarchical Label 'PHASE_B'",
+                            "pos": {
+                                "x": 2.159,
+                                "y": 1.1684
+                            },
+                            "uuid": "4e0c2d64-ad06-4d89-a432-b46dab7fd82e"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "multiple_net_names"
+                },
+                {
+                    "description": "Both SHC and PHASE_C are attached to the same items; SHC will be used in the netlist",
+                    "items": [
+                        {
+                            "description": "Label 'SHC'",
+                            "pos": {
+                                "x": 1.3335,
+                                "y": 1.016
+                            },
+                            "uuid": "30dc7fc4-93a1-4cc7-ba89-ce1e94729196"
+                        },
+                        {
+                            "description": "Hierarchical Label 'PHASE_C'",
+                            "pos": {
+                                "x": 2.6162,
+                                "y": 1.1684
+                            },
+                            "uuid": "d076fa36-ada4-4a52-84ca-6b1641fe98fd"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "multiple_net_names"
+                }
+            ]
+        }
+    ],
+    "source": "driver-bldc-foc.kicad_sch"
+}

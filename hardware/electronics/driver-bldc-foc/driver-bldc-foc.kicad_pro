@@ -60,7 +60,7 @@
           "hatch_smoothing_level": 0,
           "hatch_smoothing_value": 0.1,
           "hatch_thickness": 1.0,
-          "min_clearance": 0.5,
+          "min_clearance": 0.25,
           "min_island_area": 10.0,
           "min_thickness": 0.25,
           "pad_connection": 2,
@@ -148,7 +148,7 @@
         "max_error": 0.005,
         "min_clearance": 0.15,
         "min_connection": 0.0,
-        "min_copper_edge_clearance": 0.5,
+        "min_copper_edge_clearance": 0.3,
         "min_groove_width": 0.0,
         "min_hole_clearance": 0.25,
         "min_hole_to_hole": 0.25,
@@ -159,10 +159,10 @@
         "min_text_height": 0.8,
         "min_text_thickness": 0.08,
         "min_through_hole_diameter": 0.3,
-        "min_track_width": 0.2,
+        "min_track_width": 0.19,
         "min_via_annular_width": 0.1,
         "min_via_diameter": 0.5,
-        "solder_mask_to_copper_clearance": 0.0,
+        "solder_mask_to_copper_clearance": -0.03,
         "use_height_for_length_calcs": true
       },
       "teardrop_options": [
@@ -678,7 +678,7 @@
         "uuid": "90e88ac4-5a7b-4c35-8236-7462b7e2d3a9"
       }
     ],
-    "used_designators": "TH1,JP1,R1-29,L1-3,D1-7,C1-45,FB1-2,#PWR1-21,J1-22,P1,Q1-6,U1-6",
+    "used_designators": "#FLG1-8,TH1,JP1,R1-29,L1-3,D1-7,C1-45,FB1-2,#PWR1-21,J1-22,P1,Q1-6,U1-6",
     "variants": []
   },
   "sheets": [
