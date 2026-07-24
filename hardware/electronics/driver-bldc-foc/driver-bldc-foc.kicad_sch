@@ -3337,6 +3337,12 @@
 		(uuid "b528491d-c1a8-46c7-8811-ca514999c953")
 	)
 	(junction
+		(at 83.82 27.94)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "bbf9e58b-6cb6-4ec9-a55e-18def44d84c2")
+	)
+	(junction
 		(at 35.56 74.93)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -3604,7 +3610,7 @@
 	)
 	(wire
 		(pts
-			(xy 81.28 27.94) (xy 87.63 27.94)
+			(xy 81.28 27.94) (xy 83.82 27.94)
 		)
 		(stroke
 			(width 0)
@@ -3651,6 +3657,16 @@
 			(type default)
 		)
 		(uuid "27f11008-90e9-409d-8f8d-75c26e6f0097")
+	)
+	(wire
+		(pts
+			(xy 83.82 25.4) (xy 83.82 27.94)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "28a11e22-ecc6-448a-baec-c4c4823bbcfc")
 	)
 	(wire
 		(pts
@@ -4171,6 +4187,16 @@
 			(type default)
 		)
 		(uuid "72ff58f7-1967-43f9-9803-c12099d447d4")
+	)
+	(wire
+		(pts
+			(xy 83.82 27.94) (xy 87.63 27.94)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "74520488-55ce-44f5-a992-0e9f8ec86110")
 	)
 	(wire
 		(pts
@@ -8513,6 +8539,84 @@
 			(project "driver-bldc-foc"
 				(path "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9"
 					(reference "R28")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:PWR_FLAG")
+		(at 83.82 25.4 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "7d09d700-3812-4065-bc2d-ee2d15b7c768")
+		(property "Reference" "#FLG07"
+			(at 83.82 23.495 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "PWR_FLAG"
+			(at 83.82 20.32 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 83.82 25.4 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 83.82 25.4 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Special symbol for telling ERC where power comes from"
+			(at 83.82 25.4 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "4f6af393-a3f3-4405-adac-c5b4ee7e0435")
+		)
+		(instances
+			(project "driver-bldc-foc"
+				(path "/90e88ac4-5a7b-4c35-8236-7462b7e2d3a9"
+					(reference "#FLG07")
 					(unit 1)
 				)
 			)
