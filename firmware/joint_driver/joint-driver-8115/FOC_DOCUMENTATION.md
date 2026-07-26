@@ -1,4 +1,4 @@
-# BÁO CÁO KỸ THUẬT CHUYÊN SÂU: MỔ XẺ THUẬT TOÁN VÀ HỆ THỐNG ĐIỀU KHIỂN FOC CHUẨN VESC CHO HỘP SỐ CYCLOID (JOINT DRIVER 8115)
+# TÀI LIỆU KỸ THUẬT VÀ TOÁN HỌC CHUYÊN SÂU: MỔ XẺ TOÀN DIỆN THUẬT TOÁN VESC FOC CHO HỘP SỐ CYCLOID (JOINT DRIVER 8115)
 
 **Dự án:** Wheeled Humanoid Robot Joint Actuator Driver  
 **Tác giả hệ thống:** STM32G473RET6 Firmware Architecture Team  
@@ -7,9 +7,9 @@
 
 ---
 
-## CHƯƠNG 1: TỔNG QUAN HỆ THỐNG VÀ KIẾN TRÚC PHẦN CỨNG (SYSTEM OVERVIEW & HARDWARE ARCHITECTURE)
+## CHƯƠNG 1: KIẾN TRÚC PHẦN CỨNG TOÀN DIỆN & THÔNG SỐ ĐỘNG HỌC (SYSTEM & HARDWARE ARCHITECTURE)
 
-### 1.1 Tổng quan về Driver BLDC FOC cho Khớp Robot Humanoid (Joint Driver 8115)
+### 1.1 Tổng quan về Joint Driver 8115 cho Wheeled Humanoid Robot
 Trong các hệ thống Robot dáng người (Humanoid Robot) và Robot bánh xe kết hợp chân (Wheeled Humanoid), các khớp quay (Joint Actuators) là thành phần chịu ứng suất cơ học và tải trọng động lớn nhất. Khác với các ứng dụng điều khiển động cơ điện thông thường (như xe điện ESC hay quạt công nghiệp), driver khớp robot đòi hỏi:
 1. **Momen xoắn tức thời cực cao ở tốc độ bằng 0 (Zero-speed high torque density):** Để duy trì tư thế đứng cân bằng tĩnh hoặc phản hống lực tác động từ môi trường.
 2. **Độ mịn màng và độ chính xác góc quay tuyệt đối (Sub-milliradian position accuracy):** Không được có gợn momen (Torque ripple) gây ra bởi sai số biến đổi FOC hay sai số lấy mẫu dòng điện.
@@ -19,7 +19,7 @@ Bo mạch **Joint Driver 8115** được thiết kế nguyên khối xung quanh 
 
 ---
 
-### 1.2 Vi điều khiển STM32G473RET6 (LQFP64 - ARM Cortex-M4F @ 170MHz) & Cấu hình Peripherals
+### 1.2 Chi tiết Vi điều khiển STM32G473RET6 (LQFP64 - ARM Cortex-M4F @ 170MHz) & Cấu hình Peripherals
 STM32G473RET6 là dòng vi điều khiển thế hệ mới chuyên dụng cho điều khiển động cơ điện cao cấp (Math Accelerators & High-Resolution PWM):
 * **Lõi xử lý:** ARM Cortex-M4F trang bị đơn vị tính toán số thực FPU (Single-precision Floating Point Unit) chạy ở tần số tối đa 170 MHz (đạt 213 DMIPS).
 * **Bộ tăng tốc toán học phần cứng (CORDIC Accelerator):** Hỗ trợ tính toán các hàm lượng giác $\sin, \cos, \arctan$ bằng phần cứng trong 4 chu kỳ xung clock, giảm tải xử lý CPU cho các phép biến đổi Park/Clarke.
@@ -39,7 +39,7 @@ graph TD
 
 ---
 
-### 1.3 IC Lái Cổng MOSFET TI DRV8353RS (SPI, 100V, Smart Gate Drive)
+### 1.3 Mổ xẻ IC Gate Driver TI DRV8353RS (SPI, 100V, Smart Gate Drive)
 DRV8353RS là IC điều khiển cầu H 3 pha tích hợp 3 bộ khuếch đại dòng shunt (Current Sense Amplifiers - CSA):
 * **Điện áp hoạt động:** $6\text{V} \rightarrow 100\text{V}$, tương thích hoàn toàn với hệ thống nguồn $24\text{V} - 48\text{V}$ VBUS của Robot.
 * **Cấu hình Smart Gate Drive (IDRIVE):** Cho phép lập trình dòng nạp/xả cổng MOSFET thông qua SPI mà không cần điện trở cổng ngoại vi, giúp tối ưu thời gian đóng mở $t_{on}, t_{off}$ và giảm nhiễu EMI.
@@ -49,7 +49,7 @@ DRV8353RS là IC điều khiển cầu H 3 pha tích hợp 3 bộ khuếch đạ
 
 ---
 
-### 1.4 Động Cơ Khớp GB8115-4 & Đặc tính Điện học
+### 1.4 Đặc tính điện động học Động cơ GB8115-4
 Động cơ GB8115-4 là dòng BLDC dạng đĩa (Outrunner Gimbal/Actuator Motor) có mật độ momen xoắn lớn:
 * **Số cặp cực (Pole Pairs - $P_{pairs}$):** **21 cặp cực** (42 cực từ nam vĩnh cửu Neodymium).
 * **Điện trở pha ($R_s$):** $\approx 0.090\,\Omega$ ($90\,\text{m}\Omega$).
@@ -63,7 +63,7 @@ $$\theta_e = 21 \times \theta_m - \theta_{offset}$$
 
 ---
 
-### 1.5 Hộp Số Cycloid Tỉ Số Truyền 1:17 (Cycloidal Gearbox Kinematics)
+### 1.5 Cơ học & Động học Hộp số Cycloid 1:17 (Cycloidal Gearbox Kinematics)
 Hộp số Cycloid (Cycloidal Drive) hoạt động dựa trên nguyên lý đĩa răng xích vi sai hành tinh lệch tâm:
 * **Tỉ số truyền ($i$):** **17:1** (`gear_ratio = 17.0f`).
 * **Đặc tính cơ học:** Độ rơ góc (Backlash) cực nhỏ ($< 1\text{ arcmin}$), khả năng chịu tải va đập gấp 500% momen xoắn định mức mà không gãy răng.
@@ -74,7 +74,7 @@ Hộp số Cycloid (Cycloidal Drive) hoạt động dựa trên nguyên lý đĩ
 
 ---
 
-### 1.6 Cảm Biến Từ AS5048A (14-bit Magnetic SPI Encoder)
+### 1.6 Cảm biến vị trí từ AS5048A (14-bit Magnetic SPI Encoder)
 Cảm biến vị trí từ AS5048A đo góc quay trục động cơ thông qua từ trường của viên nam châm diametral gắn trên trục:
 * **Độ phân giải:** 14-bit ($16,384$ vị trí trên 1 vòng $360^\circ$), tương đương $0.0219^\circ / \text{LSB}$.
 * **Giao tiếp SPI3:** Cấu hình **SPI Mode 1** ($\text{CPOL}=0, \text{CPHA}=1$), độ rộng khung truyền 16-bit, tần số xung clock $5.31\,\text{MHz}$.
@@ -82,9 +82,9 @@ Cảm biến vị trí từ AS5048A đo góc quay trục động cơ thông qua 
 
 ---
 
-## CHƯƠNG 2: LÝ THUYẾT TOÁN HỌC VÀ THUẬT TOÁN LÕI FOC VESC (VESC FOC MATHEMATICAL DERIVATION & CORE ALGORITHMS)
+## CHƯƠNG 2: THUẬT TOÁN FOC VESC & CHỨNG MINH TOÁN HỌC CHI TIẾT (VESC FOC MATHEMATICAL DERIVATION)
 
-### 2.1 Mạch Vòng Điều Khiển FOC (Field Oriented Control Architecture)
+### 2.1 Mạch vòng điều khiển FOC tầng (Cascaded Control Loops)
 Mục tiêu cốt lõi của FOC là biến đổi hệ tọa độ dòng điện 3 pha xoay chiều ($I_a, I_b, I_c$) biến thiên theo thời gian thành hệ tọa độ 2 trục vuông góc quay đồng bộ theo từ trường rotor ($I_d, I_q$), trong đó:
 * **$I_d$ (Direct Axis Current):** Dòng điện dọc trục từ trường, tạo ra lực hút/đẩy cực từ (tương đương dòng kích từ trong động cơ DC). Trong vận hành bình thường, $I_d^* = 0$ để đạt hiệu suất Momen tối đa trên mỗi Ampere (MTPA - Maximum Torque Per Ampere).
 * **$I_q$ (Quadrature Axis Current):** Dòng điện vuông góc trục từ trường, trực tiếp sinh ra Momen quay ($T_e \propto I_q$).
@@ -222,12 +222,46 @@ $$I_d^{FW} = f(\text{DutyCycle} - \text{Duty}_{start})$$
 
 ---
 
-## CHƯƠNG 3: MỔ XẺ CHI TIẾT SOURCE CODE CƯỜNG ĐỘ CAO (HIGH-RESOLUTION SOURCE CODE DISSECTION)
+## CHƯƠNG 3: MỔ XẺ TOÀN BỘ CODE C TRONG DỰ ÁN (LINE-BY-LINE SOURCE CODE DISSECTION)
 
-### 3.1 Mổ xẻ `vesc_datatypes.h` & `vesc_conf.h`
-Cấu trúc `motor_state_t` trong [vesc_datatypes.h](file:///home/du/Desktop/wheeled-humanoid/firmware/joint_driver/joint-driver-8115/Core/Inc/vesc_datatypes.h#L77-L115) chứa 66 thuộc tính điện áp, dòng điện, hệ số biến đổi FOC:
+### 3.1 Mổ xẻ toàn bộ `vesc_datatypes.h` & `vesc_conf.h`
+File [vesc_datatypes.h](file:///home/du/Desktop/wheeled-humanoid/firmware/joint_driver/joint-driver-8115/Core/Inc/vesc_datatypes.h) định nghĩa toàn bộ cấu trúc trạng thái động cơ `motor_state_t` và các kiểu liệt kê chế độ vận hành:
 
 ```c
+/* Motor & Driver Operating State */
+typedef enum {
+	MC_STATE_OFF = 0,
+	MC_STATE_DETECTING,
+	MC_STATE_RUNNING,
+	MC_STATE_FULL_BRAKE
+} mc_state;
+
+/* Motor Control Mode */
+typedef enum {
+	CONTROL_MODE_DUTY = 0,
+	CONTROL_MODE_POWER,
+	CONTROL_MODE_CURRENT,
+	CONTROL_MODE_CURRENT_BRAKE,
+	CONTROL_MODE_SPEED,
+	CONTROL_MODE_POS,
+	CONTROL_MODE_HANDBRAKE,
+	CONTROL_MODE_OPENLOOP
+} mc_control_mode;
+
+/* Safety Fault Code Bitmask */
+typedef enum {
+	MC_FAULT_NONE           = 0x00,
+	MC_FAULT_OVER_CURRENT   = 0x01,
+	MC_FAULT_OVER_VOLTAGE   = 0x02,
+	MC_FAULT_UNDER_VOLTAGE  = 0x04,
+	MC_FAULT_OVER_TEMP_MOS  = 0x08,
+	MC_FAULT_OVER_TEMP_MOT  = 0x10,
+	MC_FAULT_UNBALANCED     = 0x20,
+	MC_FAULT_ENCODER        = 0x40,
+	MC_FAULT_POS_LIMIT      = 0x80
+} mc_fault_code;
+
+/* VESC Motor State Structure (Core FOC Math State) */
 typedef struct {
 	float va, vb, vc;           // Điện áp pha tương đương
 	float mod_alpha_raw;        // Modulation Alpha chưa lọc
@@ -249,87 +283,223 @@ typedef struct {
 } motor_state_t;
 ```
 
-Trong [vesc_conf.c](file:///home/du/Desktop/wheeled-humanoid/firmware/joint_driver/joint-driver-8115/Core/Src/vesc_conf.c#L15-L95), hàm `vesc_conf_set_defaults()` thiết lập toàn bộ tham số công nghiệp:
-- `foc_f_zv = 20000.0f;` (Tần số PWM 20kHz)
-- `foc_motor_pole_pairs = 21;` (21 cặp cực GB8115-4)
-- `gear_ratio = 17.0f;` (Tỉ số truyền Hộp số Cycloid 1:17)
-- `joint_pos_min = -3.14159265f; joint_pos_max = 3.14159265f;` (Giới hạn góc khớp $\pm 180^\circ$)
-- `l_current_max = 25.0f;` (Dòng điện giới hạn 25A)
-- `l_voltage_max = 50.0f; l_voltage_min = 12.0f;` (Bảo vệ quá áp 50V, ngắt áp thấp 12V)
+File [vesc_conf.c](file:///home/du/Desktop/wheeled-humanoid/firmware/joint_driver/joint-driver-8115/Core/Src/vesc_conf.c) chứa hàm nạp thông số phần cứng công nghiệp:
+
+```c
+void vesc_conf_set_defaults(mc_configuration *conf)
+{
+    if (conf == NULL) return;
+
+    // Switching Frequency & Limits
+    conf->foc_f_zv = 20000.0f;           // 20 kHz PWM Frequency
+    conf->l_max_duty = 0.95f;            // 95% max duty cycle
+    conf->l_min_duty = 0.005f;           // 0.5% min duty cycle
+
+    // Motor Parameters (GB8115-4 Gimbal/Actuator Motor)
+    conf->foc_motor_pole_pairs = 21;     // 21 Pole Pairs
+    conf->foc_motor_r = 0.090f;          // ~90 mOhm phase resistance
+    conf->foc_motor_l = 0.000120f;       // ~120 uH phase inductance
+    conf->foc_motor_flux_linkage = 0.0045f; // ~4.5 mWb flux linkage
+    conf->foc_motor_ld_lq_diff = 0.0f;   // Non-salient PMSM motor
+
+    // Cycloidal Gearbox & Joint Safety Limits
+    conf->gear_ratio = 17.0f;            // 1:17 Cycloidal reduction ratio
+    conf->encoder_direction = 1;         // Normal encoder direction
+    conf->joint_pos_min = -3.14159265f;  // -180 degrees (-PI rad)
+    conf->joint_pos_max =  3.14159265f;  // +180 degrees (+PI rad)
+
+    // Current Controller (PI D/Q)
+    conf->foc_current_kp = 0.25f;
+    conf->foc_current_ki = 150.0f;
+    conf->foc_current_filter_const = 0.1f;
+    conf->foc_cc_decoupling = FOC_CC_DECOUPLING_CROSS_BEMF;
+
+    // Position Controller (PID + Process D)
+    conf->p_pid_kp = 15.0f;
+    conf->p_pid_ki = 0.0f;
+    conf->p_pid_kd = 0.03f;
+    conf->p_pid_kd_proc = 0.02f;
+    conf->p_pid_kd_filter = 0.2f;
+
+    // Safety Thresholds
+    conf->l_current_max = 25.0f;         // 25A max motor current
+    conf->l_voltage_max = 50.0f;         // 50V OVP
+    conf->l_voltage_min = 12.0f;         // 12V UVP
+    conf->l_temp_fet_start = 85.0f;      // 85C OTP
+}
+```
 
 ---
 
-### 3.2 Mổ xẻ `vesc_utils.h` & `vesc_utils.c`
-Các hàm toán học trong [vesc_utils.c](file:///home/du/Desktop/wheeled-humanoid/firmware/joint_driver/joint-driver-8115/Core/Src/vesc_utils.c#L15-L100) được tối ưu hóa cực hạn:
+### 3.2 Mổ xẻ toàn bộ `vesc_utils.h` & `vesc_utils.c`
+File [vesc_utils.c](file:///home/du/Desktop/wheeled-humanoid/firmware/joint_driver/joint-driver-8115/Core/Src/vesc_utils.c) thực thi các hàm toán học tối ưu số thực:
 
-1. **`utils_fast_atan2(y, x)`:** Tính $\arctan2(y, x)$ không dùng thư viện C tiêu chuẩn, áp dụng công thức xấp xỉ đa thức DSPGuru:
+1. **Hàm `utils_fast_atan2(y, x)`:**
 ```c
 float utils_fast_atan2(float y, float x) {
 	float abs_y = fabsf(y) + 1e-20;
 	float angle;
+
 	if (x >= 0) {
 		float r = (x - abs_y) / (x + abs_y);
-		angle = ((0.1963f * r * r) - 0.9817f) * r + (M_PI / 4.0f);
+		float rsq = r * r;
+		angle = ((0.1963f * rsq) - 0.9817f) * r + (M_PI / 4.0f);
 	} else {
 		float r = (x + abs_y) / (abs_y - x);
-		angle = ((0.1963f * r * r) - 0.9817f) * r + (3.0f * M_PI / 4.0f);
+		float rsq = r * r;
+		angle = ((0.1963f * rsq) - 0.9817f) * r + (3.0f * M_PI / 4.0f);
 	}
-	return y < 0 ? -angle : angle;
+
+	UTILS_NAN_ZERO(angle);
+
+	if (y < 0) {
+		return(-angle);
+	} else {
+		return(angle);
+	}
 }
 ```
-Thời gian thực thi chỉ mất 12 chu kỳ xung clock (so với $>150$ chu kỳ của `atan2f()` tiêu chuẩn).
 
-2. **`utils_fast_sincos(angle, &sin, &cos)`:** Tính đồng thời cả $\sin$ và $\cos$ dựa trên công thức xấp xỉ parabol Bhaskara I:
-$$\sin(x) \approx 1.27323954 x - 0.405284735 x |x|$$
+2. **Hàm `utils_fast_sincos(angle, sin, cos)`:**
+```c
+void utils_fast_sincos(float angle, float *sin, float *cos) {
+	while (angle < -M_PI) { angle += 2.0 * M_PI; }
+	while (angle >  M_PI) { angle -= 2.0 * M_PI; }
+
+	if (angle < 0.0) {
+		*sin = 1.27323954 * angle + 0.405284735 * angle * angle;
+	} else {
+		*sin = 1.27323954 * angle - 0.405284735 * angle * angle;
+	}
+
+	angle += 0.5 * M_PI;
+	if (angle >  M_PI) { angle -= 2.0 * M_PI; }
+
+	if (angle < 0.0) {
+		*cos = 1.27323954 * angle + 0.405284735 * angle * angle;
+	} else {
+		*cos = 1.27323954 * angle - 0.405284735 * angle * angle;
+	}
+}
+```
 
 ---
 
-### 3.3 Mổ xẻ `foc_math.h` & `foc_math.c`
-File [foc_math.c](file:///home/du/Desktop/wheeled-humanoid/firmware/joint_driver/joint-driver-8115/Core/Src/foc_math.c#L130-L245) thực hiện thuật toán SVPWM 6-Sector và Bộ điều khiển Vị trí PID tầng (Cascaded Position Controller):
+### 3.3 Mổ xẻ toàn bộ `vesc_filter.h` & `vesc_filter.c`
+File [vesc_filter.c](file:///home/du/Desktop/wheeled-humanoid/firmware/joint_driver/joint-driver-8115/Core/Src/vesc_filter.c) thực thi bộ lọc số Biquad Direct Form II:
 
 ```c
-void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *motor) {
-	mc_configuration *conf_now = motor->m_conf;
-	float angle_now = motor->m_joint_angle; // Góc khớp ra sau hộp số 1:17
-	float angle_set = motor->m_pos_pid_set;
+float biquad_process(Biquad *biquad, float in) {
+    float out = in * biquad->a0 + biquad->z1;
+    biquad->z1 = in * biquad->a1 + biquad->z2 - biquad->b1 * out;
+    biquad->z2 = in * biquad->a2 - biquad->b2 * out;
+    return out;
+}
 
-	// Ép góc target vào vùng giới hạn an toàn soft joint limits (-PI đến +PI rad)
-	utils_truncate_number(&angle_set, conf_now->joint_pos_min, conf_now->joint_pos_max);
-
-	float error = angle_set - angle_now;
-	float kp = conf_now->p_pid_kp;  // Kp = 15.0
-	float ki = conf_now->p_pid_ki;  // Ki = 0.0
-	float kd = conf_now->p_pid_kd;  // Kd = 0.03
-	float kd_proc = conf_now->p_pid_kd_proc; // Kd biến quá trình = 0.02
-
-	float p_term = error * kp;
-	motor->m_pos_i_term += error * (ki * dt);
-
-	// Tính khâu D trên tín hiệu sai số
-	float d_term = (error - motor->m_pos_prev_error) * (kd / dt);
-	UTILS_LP_FAST(motor->m_pos_d_filter, d_term, conf_now->p_pid_kd_filter);
-
-	// Tính khâu D trên biến đo góc (D on measurement - triệt tiêu va đập Derivative Kick khi đổi góc đột ngột)
-	float d_term_proc = -(angle_now - motor->m_pos_prev_proc) * (kd_proc / dt);
-	UTILS_LP_FAST(motor->m_pos_d_filter_proc, d_term_proc, conf_now->p_pid_kd_filter);
-
-	// Chống bão hòa Tích phân (Anti-windup clamping)
-	float p_tmp = p_term;
-	utils_truncate_number_abs(&p_tmp, 1.0f);
-	utils_truncate_number_abs((float*)&motor->m_pos_i_term, 1.0f - fabsf(p_tmp));
-
-	float output = p_term + motor->m_pos_i_term + motor->m_pos_d_filter + motor->m_pos_d_filter_proc;
-	utils_truncate_number(&output, -1.0f, 1.0f);
-
-	// Đầu ra bộ PID Vị trí trực tiếp sinh ra Target Dòng Momen Iq
-	motor->m_iq_set = output * conf_now->l_current_max;
+void biquad_config(Biquad *biquad, BiquadType type, float Fc) {
+	float K = tanf((float)M_PI * Fc);
+	float Q = 0.707f;
+	float norm = 1.0f / (1.0f + K / Q + K * K);
+	if (type == BQ_LOWPASS) {
+		biquad->a0 = K * K * norm;
+		biquad->a1 = 2.0f * biquad->a0;
+		biquad->a2 = biquad->a0;
+	}
+	biquad->b1 = 2.0f * (K * K - 1.0f) * norm;
+	biquad->b2 = (1.0f - K / Q + K * K) * norm;
 }
 ```
 
 ---
 
-### 3.4 Mổ xẻ `foc_control.h` & `foc_control.c`
-File [foc_control.c](file:///home/du/Desktop/wheeled-humanoid/firmware/joint_driver/joint-driver-8115/Core/Src/foc_control.c#L115-L220) chứa trái tim của firmware – hàm ngắt dòng điện 20kHz **`FOC_Control_Current_ISR()`**:
+### 3.4 Mổ xẻ toàn bộ `foc_math.h` & `foc_math.c`
+File [foc_math.c](file:///home/du/Desktop/wheeled-humanoid/firmware/joint_driver/joint-driver-8115/Core/Src/foc_math.c) chứa toàn bộ các thuật toán FOC VESC cốt lõi:
+
+```c
+/* Space Vector Modulation 6-Sector */
+void foc_svm(float alpha, float beta, float max_mod, uint32_t PWMFullDutyCycle,
+				uint32_t* tAout, uint32_t* tBout, uint32_t* tCout, uint32_t *svm_sector) {
+	uint32_t sector;
+
+	if (beta >= 0.0f) {
+		if (alpha >= 0.0f) {
+			sector = (ONE_BY_SQRT3 * beta > alpha) ? 2 : 1;
+		} else {
+			sector = (-ONE_BY_SQRT3 * beta > alpha) ? 3 : 2;
+		}
+	} else {
+		if (alpha >= 0.0f) {
+			sector = (-ONE_BY_SQRT3 * beta > alpha) ? 5 : 6;
+		} else {
+			sector = (ONE_BY_SQRT3 * beta > alpha) ? 4 : 5;
+		}
+	}
+
+	int tA, tB, tC;
+	switch (sector) {
+	case 1: {
+		int t1 = (alpha - ONE_BY_SQRT3 * beta) * PWMFullDutyCycle;
+		int t2 = (TWO_BY_SQRT3 * beta) * PWMFullDutyCycle;
+		tA = (PWMFullDutyCycle + t1 + t2) / 2;
+		tB = tA - t1;
+		tC = tB - t2;
+		break;
+	}
+	case 2: {
+		int t2 = (alpha + ONE_BY_SQRT3 * beta) * PWMFullDutyCycle;
+		int t3 = (-alpha + ONE_BY_SQRT3 * beta) * PWMFullDutyCycle;
+		tB = (PWMFullDutyCycle + t2 + t3) / 2;
+		tA = tB - t3;
+		tC = tA - t2;
+		break;
+	}
+	case 3: {
+		int t3 = (TWO_BY_SQRT3 * beta) * PWMFullDutyCycle;
+		int t4 = (-alpha - ONE_BY_SQRT3 * beta) * PWMFullDutyCycle;
+		tB = (PWMFullDutyCycle + t3 + t4) / 2;
+		tC = tB - t3;
+		tA = tC - t4;
+		break;
+	}
+	case 4: {
+		int t4 = (-alpha + ONE_BY_SQRT3 * beta) * PWMFullDutyCycle;
+		int t5 = (-TWO_BY_SQRT3 * beta) * PWMFullDutyCycle;
+		tC = (PWMFullDutyCycle + t4 + t5) / 2;
+		tB = tC - t5;
+		tA = tB - t4;
+		break;
+	}
+	case 5: {
+		int t5 = (-alpha - ONE_BY_SQRT3 * beta) * PWMFullDutyCycle;
+		int t6 = (alpha - ONE_BY_SQRT3 * beta) * PWMFullDutyCycle;
+		tC = (PWMFullDutyCycle + t5 + t6) / 2;
+		tA = tC - t5;
+		tB = tA - t6;
+		break;
+	}
+	case 6: {
+		int t6 = (-TWO_BY_SQRT3 * beta) * PWMFullDutyCycle;
+		int t1 = (alpha + ONE_BY_SQRT3 * beta) * PWMFullDutyCycle;
+		tA = (PWMFullDutyCycle + t6 + t1) / 2;
+		tC = tA - t1;
+		tB = tC - t6;
+		break;
+	}
+	}
+
+	int t_max = PWMFullDutyCycle * (1.0f - (1.0f - max_mod) * 0.5f);
+	utils_truncate_number_int(&tA, 0, t_max);
+	utils_truncate_number_int(&tB, 0, t_max);
+	utils_truncate_number_int(&tC, 0, t_max);
+
+	*tAout = tA; *tBout = tB; *tCout = tC; *svm_sector = sector;
+}
+```
+
+---
+
+### 3.5 Mổ xẻ toàn bộ `foc_control.h` & `foc_control.c`
+File [foc_control.c](file:///home/du/Desktop/wheeled-humanoid/firmware/joint_driver/joint-driver-8115/Core/Src/foc_control.c) chứa hàm ngắt dòng điện 20kHz **`FOC_Control_Current_ISR()`**:
 
 ```c
 void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float current_b, float vbus, float dt) {
@@ -341,6 +511,11 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
 
     // 1. Kiểm tra an toàn khẩn cấp
     if (!FOC_Control_CheckSafety(foc, current_a, current_b, vbus, 25.0f)) return;
+
+    if (motor->m_state != MC_STATE_RUNNING) {
+        foc->duty_a = foc->duty_b = foc->duty_c = 0.5f;
+        return;
+    }
 
     // 2. Trừ Offset ADC đã hiệu chuẩn
     state_m->i_alpha = current_a - foc->offset_ia;
@@ -358,9 +533,16 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     state_m->phase = elec_angle;
     utils_fast_sincos(elec_angle, &state_m->phase_sin, &state_m->phase_cos);
 
+    float s = state_m->phase_sin;
+    float c = state_m->phase_cos;
+
     // 4. Phép biến đổi Park (I_alpha, I_beta -> Id, Iq)
-    state_m->id = state_m->phase_cos * state_m->i_alpha + state_m->phase_sin * state_m->i_beta;
-    state_m->iq = state_m->phase_cos * state_m->i_beta  - state_m->phase_sin * state_m->i_alpha;
+    state_m->id = c * state_m->i_alpha + s * state_m->i_beta;
+    state_m->iq = c * state_m->i_beta  - s * state_m->i_alpha;
+
+    // Low-pass filter dòng điện
+    UTILS_LP_FAST(state_m->id_filter, state_m->id, conf_now->foc_current_filter_const);
+    UTILS_LP_FAST(state_m->iq_filter, state_m->iq, conf_now->foc_current_filter_const);
 
     // 5. Vòng lặp PI dòng điện với Anti-Windup
     float Ierr_d = state_m->id_target - state_m->id;
@@ -393,8 +575,8 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     state_m->mod_d = state_m->vd * voltage_normalize;
     state_m->mod_q = state_m->vq * voltage_normalize;
 
-    state_m->mod_alpha_raw = state_m->phase_cos * state_m->mod_d - state_m->phase_sin * state_m->mod_q;
-    state_m->mod_beta_raw  = state_m->phase_cos * state_m->mod_q + state_m->phase_sin * state_m->mod_d;
+    state_m->mod_alpha_raw = c * state_m->mod_d - s * state_m->mod_q;
+    state_m->mod_beta_raw  = c * state_m->mod_q + s * state_m->mod_d;
 
     // 9. Phát xung VESC 6-Sector Space Vector PWM
     uint32_t ta, tb, tc, sector;
@@ -408,8 +590,8 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
 
 ---
 
-### 3.5 Mổ xẻ `motor_interface.h` & `motor_interface.c`
-File [motor_interface.c](file:///home/du/Desktop/wheeled-humanoid/firmware/joint_driver/joint-driver-8115/Core/Src/motor_interface.c#L15-L75) cung cấp giao diện API đơn giản hóa tuyệt đối:
+### 3.6 Mổ xẻ toàn bộ `motor_interface.h` & `motor_interface.c`
+File [motor_interface.c](file:///home/du/Desktop/wheeled-humanoid/firmware/joint_driver/joint-driver-8115/Core/Src/motor_interface.c) cung cấp API giao diện người dùng:
 
 ```c
 void motor_set_position(float deg) {
@@ -418,20 +600,84 @@ void motor_set_position(float deg) {
 }
 
 float motor_get_position(void) {
-    return RAD2DEG_f(g_foc_controller.motor.m_joint_angle); // Đọc góc đầu ra khớp (đã qua 1:17)
+    return RAD2DEG_f(g_foc_controller.motor.m_joint_angle);
+}
+
+float motor_get_speed(void) {
+    float motor_rpm = RADPS2RPM_f(g_foc_controller.motor.m_speed_est_fast);
+    return motor_rpm / g_foc_controller.conf.gear_ratio;
 }
 ```
 
 ---
 
-### 3.6 Mổ xẻ `main.c`
-Trong [main.c](file:///home/du/Desktop/wheeled-humanoid/firmware/joint_driver/joint-driver-8115/Core/Src/main.c#L140-L180):
-1. `USER CODE BEGIN 2`: Gọi `motor_init(&hspi1, &hspi3)` khởi tạo phần cứng DRV8353RS và AS5048A.
-2. `USER CODE BEGIN WHILE`: Gọi `FOC_Control_Current_ISR()` ở tần số ngắt 20kHz và `FOC_Control_SlowLoop()` ở tần số 1kHz.
+### 3.7 Mổ xẻ toàn bộ `drv8353.h`/`.c` & `as5048a.h`/`.c`
+Driver IC Lái DRV8353RS trong [drv8353.c](file:///home/du/Desktop/wheeled-humanoid/firmware/joint_driver/joint-driver-8115/Core/Src/drv8353.c):
+
+```c
+HAL_StatusTypeDef DRV8353_WriteRegister(DRV8353_t *drv, uint8_t reg_addr, uint16_t reg_val) {
+    uint16_t tx_data = (0 << 15) | ((reg_addr & 0x0F) << 11) | (reg_val & 0x07FF);
+    uint16_t rx_data = 0;
+    HAL_GPIO_WritePin(drv->cs_port, drv->cs_pin, GPIO_PIN_RESET);
+    HAL_StatusTypeDef status = HAL_SPI_TransmitReceive(drv->hspi, (uint8_t*)&tx_data, (uint8_t*)&rx_data, 1, 10);
+    HAL_GPIO_WritePin(drv->cs_port, drv->cs_pin, GPIO_PIN_SET);
+    return status;
+}
+```
+
+Driver Cảm biến Vị trí AS5048A trong [as5048a.c](file:///home/du/Desktop/wheeled-humanoid/firmware/joint_driver/joint-driver-8115/Core/Src/as5048a.c):
+
+```c
+HAL_StatusTypeDef AS5048A_ReadRawAngle(AS5048A_t *enc, uint16_t *raw_angle) {
+    uint16_t tx_data = 0xFFFF; // Command read angle register 0x3FFF with parity
+    uint16_t rx_data = 0;
+    HAL_GPIO_WritePin(enc->cs_port, enc->cs_pin, GPIO_PIN_RESET);
+    HAL_StatusTypeDef status = HAL_SPI_TransmitReceive(enc->hspi, (uint8_t*)&tx_data, (uint8_t*)&rx_data, 1, 10);
+    HAL_GPIO_WritePin(enc->cs_port, enc->cs_pin, GPIO_PIN_SET);
+    *raw_angle = rx_data & 0x3FFF; // 14-bit angle
+    return status;
+}
+```
 
 ---
 
-## CHƯƠNG 4: XỬ LÝ ĐẶC THỤ HỘP SỐ CYCLOID & HỆ THỐNG AN TOÀN BẢO VỆ TUYỆT ĐỐI (CYCLOIDAL GEARBOX & ABSOLUTE SAFETY PROTECTION)
+### 3.8 Mổ xẻ toàn bộ `main.c`
+File [main.c](file:///home/du/Desktop/wheeled-humanoid/firmware/joint_driver/joint-driver-8115/Core/Src/main.c) tích hợp HAL và chạy lặp:
+
+```c
+int main(void)
+{
+  HAL_Init();
+  SystemClock_Config();
+
+  MX_GPIO_Init(); MX_ADC1_Init(); MX_TIM1_Init(); MX_SPI1_Init(); MX_SPI3_Init();
+
+  /* Khởi tạo VESC FOC Engine cho GB8115-4 và Hộp số Cycloid 1:17 */
+  motor_init(&hspi1, &hspi3);
+  motor_set_position(0.0f);
+
+  while (1)
+  {
+    current_joint_deg = motor_get_position();
+    current_joint_rpm = motor_get_speed();
+    current_iq_amps   = motor_get_current();
+
+    // Thực thi ngắt FOC 20kHz
+    FOC_Control_Current_ISR(&g_foc_controller, 0.0f, 0.0f, 24.0f, 0.00005f);
+    FOC_Control_SlowLoop(&g_foc_controller, 0.001f);
+
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (uint32_t)(g_foc_controller.duty_a * (float)htim1.Init.Period));
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (uint32_t)(g_foc_controller.duty_b * (float)htim1.Init.Period));
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (uint32_t)(g_foc_controller.duty_c * (float)htim1.Init.Period));
+
+    HAL_Delay(1);
+  }
+}
+```
+
+---
+
+## CHƯƠNG 4: XỬ LÝ HỘP SỐ CYCLOID & AN TOÀN BẢO VỆ TUYỆT ĐỐI (CYCLOIDAL ACTUATOR & SAFETY ARCHITECTURE)
 
 ### 4.1 Thuật Toán Đếm Vòng Đa Vòng (Multi-turn Accumulator)
 Do hộp số Cycloid có tỉ số truyền 1:17, khi đầu ra khớp quay $360^\circ$ ($1\text{ vòng}$), rotor động cơ phải quay $17\text{ vòng}$ ($6,120^\circ$). Cảm biến AS5048A chỉ đo góc đơn vòng $0 \rightarrow 2\pi$.
@@ -470,7 +716,7 @@ void foc_update_cycloidal_joint_angle(motor_all_state_t *motor, float raw_mech_a
 ---
 
 ### 4.3 Mạch Bảo Vệ Quá Dòng Tức Thời (Hardware Overcurrent Protection - OCP @ 25A)
-- Dòng điện biên độ $I_{mag} = \sqrt{I_a^2 + I_b^2}$ được giám sát trong từng chu kỳ ngắt ngắt 20kHz ($50\,\mu s$).
+- Dòng điện biên độ $I_{mag} = \sqrt{I_a^2 + I_b^2}$ được giám sát trong từng chu kỳ ngắt 20kHz ($50\,\mu s$).
 - Nếu $I_{mag} > 25.0\text{A}$, cờ lỗi `MC_FAULT_OVER_CURRENT` kích hoạt, ngắt PWM trong vòng $< 1\,\mu s$.
 
 ---
@@ -492,7 +738,7 @@ void foc_update_cycloidal_joint_angle(motor_all_state_t *motor, float raw_mech_a
 
 ---
 
-## CHƯƠNG 5: HƯỚNG DẪN CẤU HÌNH, CALIBRATION VÀ TỐI ƯU PID THỰC TẾ (PRACTICAL TUNING, CALIBRATION & DEPLOYMENT GUIDE)
+## CHƯƠNG 5: QUY TRÌNH CALIBRATION, TUNING PID & TRIỂN KHAI THỰC TẾ (DEPLOYMENT, CALIBRATION & PID TUNING GUIDE)
 
 ### 5.1 Quy Trình Đo Về 0 Offset Dòng Điện ADC (ADC Current Sense Zero Calibration)
 1. Giữ động cơ ở trạng thái nghỉ, không phát xung PWM (`MC_STATE_OFF`).
@@ -551,7 +797,7 @@ Nếu khớp Cycloid bị rung giật khi dừng:
 
 ---
 
-### BẢNG TỔNG HỢP CÁC FILE TRONG DỰ ÁN
+### BẢNG TỔNG HỢP TOÀN BỘ FILE TRONG DỰ ÁN
 
 | Đường dẫn File | Loại | Chức năng chính |
 | :--- | :--- | :--- |
@@ -568,6 +814,10 @@ Nếu khớp Cycloid bị rung giật khi dừng:
 | [foc_control.c](file:///home/du/Desktop/wheeled-humanoid/firmware/joint_driver/joint-driver-8115/Core/Src/foc_control.c) | Source | Thực thi ngắt FOC 20kHz, Decoupling, Circle Limitation |
 | [motor_interface.h](file:///home/du/Desktop/wheeled-humanoid/firmware/joint_driver/joint-driver-8115/Core/Inc/motor_interface.h) | Header | API giao diện người dùng cấp cao |
 | [motor_interface.c](file:///home/du/Desktop/wheeled-humanoid/firmware/joint_driver/joint-driver-8115/Core/Src/motor_interface.c) | Source | Thực thi API `motor_set_position()`, `motor_get_position()` |
+| [drv8353.h](file:///home/du/Desktop/wheeled-humanoid/firmware/joint_driver/joint-driver-8115/Core/Inc/drv8353.h) | Header | Giao tiếp IC Lái Gate Driver DRV8353RS |
+| [drv8353.c](file:///home/du/Desktop/wheeled-humanoid/firmware/joint_driver/joint-driver-8115/Core/Src/drv8353.c) | Source | Đọc/Ghi thanh ghi SPI1 & Cấu hình CSA Gain 20V/V |
+| [as5048a.h](file:///home/du/Desktop/wheeled-humanoid/firmware/joint_driver/joint-driver-8115/Core/Inc/as5048a.h) | Header | Giao tiếp Cảm biến Vị trí Từ AS5048A |
+| [as5048a.c](file:///home/du/Desktop/wheeled-humanoid/firmware/joint_driver/joint-driver-8115/Core/Src/as5048a.c) | Source | Đọc góc 14-bit SPI3 Mode 1 & Kiểm tra Bit Parity |
 | [main.c](file:///home/du/Desktop/wheeled-humanoid/firmware/joint_driver/joint-driver-8115/Core/Src/main.c) | Source | Tích hợp HAL, khởi tạo phần cứng và vòng lặp main |
 
 ---
