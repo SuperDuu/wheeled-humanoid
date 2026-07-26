@@ -27,6 +27,13 @@ software/ros2_ws/log/
 *.kicad_pcb-bak
 *.kicad_sch-bak
 *.lck
+.history/
+*_drc*.json
+*_erc*.json
+*.net
+
+# Cloned Reference Repositories
+firmware/joint_driver/vesc-reference/
 
 # Python Virtual Environments & Cache
 .venv/
