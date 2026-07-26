@@ -554,7 +554,7 @@
     "last_paths": {
       "idf": "",
       "netlist": "",
-      "plot": "",
+      "plot": "/home/du/Desktop/wheeled-humanoid/hardware/electronics/driver-bldc-foc/Gerber/",
       "specctra_dsn": "",
       "vrml": ""
     },
