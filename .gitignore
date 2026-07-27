@@ -44,3 +44,7 @@ __pycache__/
 # Runtime logs & data
 *.log
 *.csv
+
+#Mechanical
+*.STL
+*.stl
