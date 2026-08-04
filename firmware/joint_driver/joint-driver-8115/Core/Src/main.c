@@ -1,27 +1,30 @@
 /* USER CODE BEGIN Header */
 /**
-  ******************************************************************************
-  * @file           : main.c
-  * @brief          : Main program body
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2026 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
+ ******************************************************************************
+ * @file           : main.c
+ * @brief          : Main program body
+ ******************************************************************************
+ * @attention
+ *
+ * Copyright (c) 2026 STMicroelectronics.
+ * All rights reserved.
+ *
+ * This software is licensed under terms that can be found in the LICENSE file
+ * in the root directory of this software component.
+ * If no LICENSE file comes with this software, it is provided AS-IS.
+ *
+ ******************************************************************************
+ */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "foc_control.h"
 #include "motor_interface.h"
+#include "comm_can.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -41,6 +44,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
+ADC_HandleTypeDef hadc2;
 
 COMP_HandleTypeDef hcomp1;
 COMP_HandleTypeDef hcomp2;
@@ -63,7 +67,25 @@ PCD_HandleTypeDef hpcd_USB_FS;
 /* USER CODE BEGIN PV */
 float current_joint_deg = 0.0f;
 float current_joint_rpm = 0.0f;
-float current_iq_amps   = 0.0f;
+float current_iq_amps = 0.0f;
+float current_vbus = 0.0f;
+
+/* Bộ đếm chia tần cho Slow Loop 1kHz */
+static volatile uint32_t slow_loop_divider = 0;
+
+/*
+ * Hằng số chuyển đổi ADC → Ampere
+ * Công thức: ADC_TO_AMPS = (V_ref / ADC_resolution) / (R_shunt × CSA_Gain)
+ *
+ * TODO: ĐIỀU CHỈNH THEO GIÁ TRỊ R_SHUNT VÀ CSA GAIN THẬT TRÊN PCB CỦA BẠN
+ *       R_shunt = 1mΩ (0.001Ω), CSA_Gain = 20V/V → ADC_TO_AMPS ≈ 40.28
+ *       R_shunt = 0.5mΩ, CSA_Gain = 20V/V → ADC_TO_AMPS ≈ 80.57
+ *       R_shunt = 2mΩ, CSA_Gain = 20V/V → ADC_TO_AMPS ≈ 20.14
+ */
+#define CURRENT_SENSE_R_SHUNT 0.001f /* Ohm - SỬA THEO PCB THẬT */
+#define CURRENT_SENSE_CSA_GAIN 20.0f /* V/V - SỬA THEO PCB THẬT */
+#define ADC_TO_AMPS                                                            \
+  ((3.3f / 4096.0f) / (CURRENT_SENSE_R_SHUNT * CURRENT_SENSE_CSA_GAIN))
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -81,6 +103,7 @@ static void MX_USART1_UART_Init(void);
 static void MX_USB_PCD_Init(void);
 static void MX_I2C3_Init(void);
 static void MX_TIM2_Init(void);
+static void MX_ADC2_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -131,41 +154,87 @@ int main(void)
   MX_USB_PCD_Init();
   MX_I2C3_Init();
   MX_TIM2_Init();
+  MX_ADC2_Init();
   /* USER CODE BEGIN 2 */
 
-  /* Initialize VESC Industrial FOC Engine, DRV8353RS Gate Driver & AS5048A Encoder */
-  // Motor GB8115-4 (21 Pole Pairs), 1:17 Cycloidal Gearbox, 20kHz PWM, +-180 deg joint limits
+  /* ================================================================
+   * STARTUP SEQUENCE - Joint Driver 8115
+   * Motor: GB8115-4 (21PP), Gearbox: Cycloid 1:17, PWM: 20kHz
+   * ================================================================ */
+
+  /* 1. Initialize FOC Engine, DRV8353RS Gate Driver & AS5048A Encoder */
   motor_init(&hspi1, &hspi3);
 
-  /* Set Initial Target Joint Position (0.0 degrees) */
+  /* 2. Calibrate ADC hardware (internal offset calibration) */
+  HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
+  HAL_ADCEx_Calibration_Start(&hadc2, ADC_SINGLE_ENDED);
+
+  /* 3. Start PWM on all 6 channels (3 High-side + 3 Low-side complementary) */
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+  HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+  HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2);
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
+  HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_3);
+
+  /* 4. Set initial duty to 50% (zero differential voltage = safe state) */
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, htim1.Init.Period / 2);
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, htim1.Init.Period / 2);
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, htim1.Init.Period / 2);
+
+  /* 5. Start Injected ADC conversions (triggered by TIM1 TRGO at 20kHz) */
+  HAL_ADCEx_InjectedStart_IT(&hadc2);  // Slave ADC2 start first
+  HAL_ADCEx_InjectedStart_IT(&hadc1);  // Master ADC1 start (triggers both)
+
+  /* 6. Wait for ADC zero-current offset calibration (2048 samples, motor OFF) */
+  while (!g_foc_controller.calibrated_offsets) {
+      HAL_Delay(1);
+  }
+
+  /* 7. Align Encoder (lock rotor to electrical 0° and measure angle offset) */
+  FOC_Control_AlignEncoder(&g_foc_controller);
+  HAL_Delay(500);  // Hold 500ms for rotor to stabilize
+
+  /* 8. Set initial target joint position */
   motor_set_position(0.0f);
+
+  /* 9. Initialize VESC Protocol CAN Communication (Node ID = 1) */
+  comm_can_init(&hfdcan2, DEFAULT_CAN_NODE_ID);
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
-  {
+  while (1) {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    // 1. Read Telemetry Values (Position, Speed, Current)
+
+    /* ================================================================
+     * MAIN LOOP - Chạy ở tốc độ thấp (~100Hz) cho monitoring & CAN Telemetry
+     * ================================================================ */
+
+    // 1. Read Telemetry Values
     current_joint_deg = motor_get_position();
     current_joint_rpm = motor_get_speed();
-    current_iq_amps   = motor_get_current();
+    current_iq_amps = motor_get_current();
+    current_vbus = motor_get_vbus();
 
-    // 2. High-Speed 20kHz FOC Control ISR Execution (Runs inside TIM1/ADC Interrupt Callback in hardware)
-    FOC_Control_Current_ISR(&g_foc_controller, 0.0f, 0.0f, 24.0f, 0.00005f);
+    // 2. Broadcast VESC CAN Telemetry Packets Status 1 & Status 5 @ 100Hz
+    comm_can_send_status1();
+    comm_can_send_status5();
 
-    // 3. 1kHz Slow Loop Execution (Observer, PLL, PID, Field Weakening)
-    FOC_Control_SlowLoop(&g_foc_controller, 0.001f);
+    // 3. LED Heartbeat (nhấp nháy LED1 để biết MCU còn sống)
+    HAL_GPIO_TogglePin(LED_1_GPIO_Port, LED_1_Pin);
 
-    // 4. Update TIM1 PWM Duty Cycles
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (uint32_t)(g_foc_controller.duty_a * (float)htim1.Init.Period));
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (uint32_t)(g_foc_controller.duty_b * (float)htim1.Init.Period));
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (uint32_t)(g_foc_controller.duty_c * (float)htim1.Init.Period));
+    // 4. Fault indicator on LED2
+    if (motor_get_fault() != MC_FAULT_NONE) {
+      HAL_GPIO_WritePin(LED_2_GPIO_Port, LED_2_Pin, GPIO_PIN_SET);
+    } else {
+      HAL_GPIO_WritePin(LED_2_GPIO_Port, LED_2_Pin, GPIO_PIN_RESET);
+    }
 
-    HAL_Delay(1);
+    HAL_Delay(10); // ~100Hz loop
   }
   /* USER CODE END 3 */
 }
@@ -261,7 +330,9 @@ static void MX_ADC1_Init(void)
 
   /** Configure the ADC multi-mode
   */
-  multimode.Mode = ADC_MODE_INDEPENDENT;
+  multimode.Mode = ADC_DUALMODE_INJECSIMULT;
+  multimode.DMAAccessMode = ADC_DMAACCESSMODE_DISABLED;
+  multimode.TwoSamplingDelay = ADC_TWOSAMPLINGDELAY_1CYCLE;
   if (HAL_ADCEx_MultiModeConfigChannel(&hadc1, &multimode) != HAL_OK)
   {
     Error_Handler();
@@ -282,6 +353,63 @@ static void MX_ADC1_Init(void)
   /* USER CODE BEGIN ADC1_Init 2 */
 
   /* USER CODE END ADC1_Init 2 */
+
+}
+
+/**
+  * @brief ADC2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_ADC2_Init(void)
+{
+
+  /* USER CODE BEGIN ADC2_Init 0 */
+
+  /* USER CODE END ADC2_Init 0 */
+
+  ADC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN ADC2_Init 1 */
+
+  /* USER CODE END ADC2_Init 1 */
+
+  /** Common config
+  */
+  hadc2.Instance = ADC2;
+  hadc2.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
+  hadc2.Init.Resolution = ADC_RESOLUTION_12B;
+  hadc2.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc2.Init.GainCompensation = 0;
+  hadc2.Init.ScanConvMode = ADC_SCAN_DISABLE;
+  hadc2.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  hadc2.Init.LowPowerAutoWait = DISABLE;
+  hadc2.Init.ContinuousConvMode = DISABLE;
+  hadc2.Init.NbrOfConversion = 1;
+  hadc2.Init.DiscontinuousConvMode = DISABLE;
+  hadc2.Init.DMAContinuousRequests = DISABLE;
+  hadc2.Init.Overrun = ADC_OVR_DATA_PRESERVED;
+  hadc2.Init.OversamplingMode = DISABLE;
+  if (HAL_ADC_Init(&hadc2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_4;
+  sConfig.Rank = ADC_REGULAR_RANK_1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_2CYCLES_5;
+  sConfig.SingleDiff = ADC_SINGLE_ENDED;
+  sConfig.OffsetNumber = ADC_OFFSET_NONE;
+  sConfig.Offset = 0;
+  if (HAL_ADC_ConfigChannel(&hadc2, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC2_Init 2 */
+
+  /* USER CODE END ADC2_Init 2 */
 
 }
 
@@ -400,13 +528,13 @@ static void MX_FDCAN2_Init(void)
   hfdcan2.Init.ClockDivider = FDCAN_CLOCK_DIV1;
   hfdcan2.Init.FrameFormat = FDCAN_FRAME_CLASSIC;
   hfdcan2.Init.Mode = FDCAN_MODE_NORMAL;
-  hfdcan2.Init.AutoRetransmission = DISABLE;
+  hfdcan2.Init.AutoRetransmission = ENABLE;
   hfdcan2.Init.TransmitPause = DISABLE;
   hfdcan2.Init.ProtocolException = DISABLE;
-  hfdcan2.Init.NominalPrescaler = 16;
-  hfdcan2.Init.NominalSyncJumpWidth = 1;
-  hfdcan2.Init.NominalTimeSeg1 = 1;
-  hfdcan2.Init.NominalTimeSeg2 = 1;
+  hfdcan2.Init.NominalPrescaler = 20;
+  hfdcan2.Init.NominalSyncJumpWidth = 3;
+  hfdcan2.Init.NominalTimeSeg1 = 13;
+  hfdcan2.Init.NominalTimeSeg2 = 3 ;
   hfdcan2.Init.DataPrescaler = 1;
   hfdcan2.Init.DataSyncJumpWidth = 1;
   hfdcan2.Init.DataTimeSeg1 = 1;
@@ -650,6 +778,11 @@ static void MX_TIM1_Init(void)
   }
   /* USER CODE BEGIN TIM1_Init 2 */
 
+  /* DRV8353RS ~FAULT pin is active-LOW (pulls to GND on fault).
+   * Override CubeMX-generated break polarity to trigger on LOW. */
+  sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_LOW;
+  HAL_TIMEx_ConfigBreakDeadTime(&htim1, &sBreakDeadTimeConfig);
+
   /* USER CODE END TIM1_Init 2 */
   HAL_TIM_MspPostInit(&htim1);
 
@@ -848,6 +981,71 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+/**
+ * @brief  ADC Injected Conversion Complete Callback
+ *         CHẠY Ở 20 kHz - Được kích hoạt bởi TIM1 TRGO (Update Event)
+ *         Đây là trái tim của toàn bộ hệ thống điều khiển FOC.
+ *
+ *         Luồng phần cứng:
+ *         TIM1 Counter đếm tới ARR → TRGO Update Event → Kích hoạt ADC1+ADC2
+ *         → ADC Injected lấy mẫu đồng thời Ib (PA7) và Ic (PC1)
+ *         → ADC End-of-Injected-Conversion → Nhảy vào callback này
+ *         → Chạy FOC transforms + PI + SVPWM → Cập nhật TIM1 CCR1/2/3
+ *
+ * @param  hadc: ADC handle pointer (ADC1 hoặc ADC2)
+ * @note   Chỉ xử lý khi ADC1 (Master) báo xong conversion
+ * @note   Thời gian thực thi mục tiêu: < 12µs (trong chu kỳ 50µs)
+ */
+void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
+  if (hadc->Instance != ADC1)
+    return; // Chỉ xử lý Master ADC1
+
+  // ===== 1. ĐỌC GIÁ TRỊ DÒNG ĐIỆN THẬT TỪ ADC =====
+  // ADC2 Injected Rank 1 = PA7 (IB) - Dòng pha B từ DRV8353 SOB
+  // ADC1 Injected Rank 1 = PC1 (IC) - Dòng pha C từ DRV8353 SOC
+  uint32_t raw_ib = HAL_ADCEx_InjectedGetValue(&hadc2, ADC_INJECTED_RANK_1);
+  uint32_t raw_ic = HAL_ADCEx_InjectedGetValue(&hadc1, ADC_INJECTED_RANK_1);
+
+  // ===== 2. CALIBRATE OFFSET (2048 lần đầu khi motor OFF) =====
+  if (!g_foc_controller.calibrated_offsets) {
+    FOC_Control_AdcCalibrate(&g_foc_controller, (uint16_t)raw_ic,
+                             (uint16_t)raw_ib);
+    return; // Không chạy FOC khi đang calibrate
+  }
+
+  // ===== 3. CHUYỂN ĐỔI ADC RAW → DÒNG ĐIỆN (Ampere) =====
+  // V_adc = I_phase × R_shunt × CSA_Gain + V_ref/2
+  // I_phase = (ADC_raw - offset) × ADC_TO_AMPS
+  float current_b = ((float)raw_ib - g_foc_controller.offset_ib) * ADC_TO_AMPS;
+  float current_c = ((float)raw_ic - g_foc_controller.offset_ia) * ADC_TO_AMPS;
+  float current_a = -(current_b + current_c); // Kirchhoff: Ia + Ib + Ic = 0
+
+  // ===== 4. ĐỌC VBUS =====
+  // TODO: Đọc VBUS từ ADC Regular channel PC2 (ADC1_IN8) trong slow loop
+  //       Hiện dùng giá trị cố định 24V
+  float vbus = 24.0f;
+
+  // ===== 5. CHẠY FOC CURRENT CONTROL ISR =====
+  const float dt = 1.0f / 20000.0f; // 50µs = 1/20kHz
+  FOC_Control_Current_ISR(&g_foc_controller, current_a, current_b, vbus, dt);
+
+  // ===== 6. CẬP NHẬT PWM DUTY CYCLE TRỰC TIẾP VÀO TIMER =====
+  uint32_t period = htim1.Init.Period;
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1,
+                        (uint32_t)(g_foc_controller.duty_a * (float)period));
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2,
+                        (uint32_t)(g_foc_controller.duty_b * (float)period));
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3,
+                        (uint32_t)(g_foc_controller.duty_c * (float)period));
+
+  // ===== 7. SLOW LOOP 1kHz (chia 20 lần từ 20kHz) =====
+  slow_loop_divider++;
+  if (slow_loop_divider >= 20) {
+    slow_loop_divider = 0;
+    FOC_Control_SlowLoop(&g_foc_controller, 0.001f); // dt = 1ms
+  }
+}
+
 /* USER CODE END 4 */
 
 /**
@@ -859,8 +1057,7 @@ void Error_Handler(void)
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
-  while (1)
-  {
+  while (1) {
   }
   /* USER CODE END Error_Handler_Debug */
 }
@@ -875,8 +1072,9 @@ void Error_Handler(void)
 void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */
-  /* User can add his own implementation to report the file name and line number,
-     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  /* User can add his own implementation to report the file name and line
+     number, ex: printf("Wrong parameters value: file %s on line %d\r\n", file,
+     line) */
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
