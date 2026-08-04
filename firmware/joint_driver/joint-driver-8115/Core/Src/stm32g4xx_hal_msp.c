@@ -1,21 +1,21 @@
 /* USER CODE BEGIN Header */
 /**
-  ******************************************************************************
-  * @file         stm32g4xx_hal_msp.c
-  * @brief        This file provides code for the MSP Initialization
-  *               and de-Initialization codes.
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2026 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
+ ******************************************************************************
+ * @file         stm32g4xx_hal_msp.c
+ * @brief        This file provides code for the MSP Initialization
+ *               and de-Initialization codes.
+ ******************************************************************************
+ * @attention
+ *
+ * Copyright (c) 2026 STMicroelectronics.
+ * All rights reserved.
+ *
+ * This software is licensed under terms that can be found in the LICENSE file
+ * in the root directory of this software component.
+ * If no LICENSE file comes with this software, it is provided AS-IS.
+ *
+ ******************************************************************************
+ */
 /* USER CODE END Header */
 
 /* Includes ------------------------------------------------------------------*/
@@ -83,6 +83,8 @@ void HAL_MspInit(void)
   /* USER CODE END MspInit 1 */
 }
 
+static uint32_t HAL_RCC_ADC12_CLK_ENABLED=0;
+
 /**
   * @brief ADC MSP Initialization
   * This function configures the hardware resources used in this example
@@ -109,39 +111,81 @@ void HAL_ADC_MspInit(ADC_HandleTypeDef* hadc)
     }
 
     /* Peripheral clock enable */
-    __HAL_RCC_ADC12_CLK_ENABLE();
+    HAL_RCC_ADC12_CLK_ENABLED++;
+    if(HAL_RCC_ADC12_CLK_ENABLED==1){
+      __HAL_RCC_ADC12_CLK_ENABLE();
+    }
 
     __HAL_RCC_GPIOC_CLK_ENABLE();
     __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_GPIOB_CLK_ENABLE();
     /**ADC1 GPIO Configuration
     PC0     ------> ADC1_IN6
+    PC1     ------> ADC1_IN7
     PC2     ------> ADC1_IN8
     PA0     ------> ADC1_IN1
-    PA1     ------> ADC1_IN2
-    PA2     ------> ADC1_IN3
     PA3     ------> ADC1_IN4
+    PB1     ------> ADC1_IN12
     PB14     ------> ADC1_IN5
     */
-    GPIO_InitStruct.Pin = VSENSE_C_Pin|VBUS_SENSE_Pin;
+    GPIO_InitStruct.Pin = VSENSE_C_Pin|GPIO_PIN_1|VBUS_SENSE_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-    GPIO_InitStruct.Pin = FET_TEMP_Pin|GPIO_PIN_1|GPIO_PIN_2|VSENSE_A_Pin;
+    GPIO_InitStruct.Pin = FET_TEMP_Pin|VSENSE_A_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-    GPIO_InitStruct.Pin = VSENSE_B_Pin;
+    GPIO_InitStruct.Pin = GPIO_PIN_1|VSENSE_B_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
-    HAL_GPIO_Init(VSENSE_B_GPIO_Port, &GPIO_InitStruct);
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
+    /* ADC1 interrupt Init */
+    HAL_NVIC_SetPriority(ADC1_2_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(ADC1_2_IRQn);
     /* USER CODE BEGIN ADC1_MspInit 1 */
 
     /* USER CODE END ADC1_MspInit 1 */
+  }
+  else if(hadc->Instance==ADC2)
+  {
+    /* USER CODE BEGIN ADC2_MspInit 0 */
 
+    /* USER CODE END ADC2_MspInit 0 */
+
+  /** Initializes the peripherals clocks
+  */
+    PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC12;
+    PeriphClkInit.Adc12ClockSelection = RCC_ADC12CLKSOURCE_SYSCLK;
+    if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
+    {
+      Error_Handler();
+    }
+
+    /* Peripheral clock enable */
+    HAL_RCC_ADC12_CLK_ENABLED++;
+    if(HAL_RCC_ADC12_CLK_ENABLED==1){
+      __HAL_RCC_ADC12_CLK_ENABLE();
+    }
+
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+    /**ADC2 GPIO Configuration
+    PA7     ------> ADC2_IN4
+    */
+    GPIO_InitStruct.Pin = GPIO_PIN_7;
+    GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+    /* ADC2 interrupt Init */
+    HAL_NVIC_SetPriority(ADC1_2_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(ADC1_2_IRQn);
+    /* USER CODE BEGIN ADC2_MspInit 1 */
+
+    /* USER CODE END ADC2_MspInit 1 */
   }
 
 }
@@ -160,26 +204,67 @@ void HAL_ADC_MspDeInit(ADC_HandleTypeDef* hadc)
 
     /* USER CODE END ADC1_MspDeInit 0 */
     /* Peripheral clock disable */
-    __HAL_RCC_ADC12_CLK_DISABLE();
+    HAL_RCC_ADC12_CLK_ENABLED--;
+    if(HAL_RCC_ADC12_CLK_ENABLED==0){
+      __HAL_RCC_ADC12_CLK_DISABLE();
+    }
 
     /**ADC1 GPIO Configuration
     PC0     ------> ADC1_IN6
+    PC1     ------> ADC1_IN7
     PC2     ------> ADC1_IN8
     PA0     ------> ADC1_IN1
-    PA1     ------> ADC1_IN2
-    PA2     ------> ADC1_IN3
     PA3     ------> ADC1_IN4
+    PB1     ------> ADC1_IN12
     PB14     ------> ADC1_IN5
     */
-    HAL_GPIO_DeInit(GPIOC, VSENSE_C_Pin|VBUS_SENSE_Pin);
+    HAL_GPIO_DeInit(GPIOC, VSENSE_C_Pin|GPIO_PIN_1|VBUS_SENSE_Pin);
 
-    HAL_GPIO_DeInit(GPIOA, FET_TEMP_Pin|GPIO_PIN_1|GPIO_PIN_2|VSENSE_A_Pin);
+    HAL_GPIO_DeInit(GPIOA, FET_TEMP_Pin|VSENSE_A_Pin);
 
-    HAL_GPIO_DeInit(VSENSE_B_GPIO_Port, VSENSE_B_Pin);
+    HAL_GPIO_DeInit(GPIOB, GPIO_PIN_1|VSENSE_B_Pin);
+
+    /* ADC1 interrupt DeInit */
+    /* USER CODE BEGIN ADC1:ADC1_2_IRQn disable */
+    /**
+    * Uncomment the line below to disable the "ADC1_2_IRQn" interrupt
+    * Be aware, disabling shared interrupt may affect other IPs
+    */
+    /* HAL_NVIC_DisableIRQ(ADC1_2_IRQn); */
+    /* USER CODE END ADC1:ADC1_2_IRQn disable */
 
     /* USER CODE BEGIN ADC1_MspDeInit 1 */
 
     /* USER CODE END ADC1_MspDeInit 1 */
+  }
+  else if(hadc->Instance==ADC2)
+  {
+    /* USER CODE BEGIN ADC2_MspDeInit 0 */
+
+    /* USER CODE END ADC2_MspDeInit 0 */
+    /* Peripheral clock disable */
+    HAL_RCC_ADC12_CLK_ENABLED--;
+    if(HAL_RCC_ADC12_CLK_ENABLED==0){
+      __HAL_RCC_ADC12_CLK_DISABLE();
+    }
+
+    /**ADC2 GPIO Configuration
+    PA7     ------> ADC2_IN4
+    */
+    HAL_GPIO_DeInit(GPIOA, GPIO_PIN_7);
+
+    /* ADC2 interrupt DeInit */
+    /* USER CODE BEGIN ADC2:ADC1_2_IRQn disable */
+    /**
+    * Uncomment the line below to disable the "ADC1_2_IRQn" interrupt
+    * Be aware, disabling shared interrupt may affect other IPs
+    */
+    /* HAL_NVIC_DisableIRQ(ADC1_2_IRQn); */
+    /* USER CODE END ADC2:ADC1_2_IRQn disable */
+
+    /* USER CODE BEGIN ADC2_MspDeInit 1 */
+
+    /* USER CODE END ADC2_MspDeInit 1 */
   }
 
 }
