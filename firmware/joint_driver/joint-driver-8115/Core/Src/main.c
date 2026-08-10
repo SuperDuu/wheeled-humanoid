@@ -215,26 +215,28 @@ int main(void)
      * ================================================================ */
 
     // 1. Read Telemetry Values
-    current_joint_deg = motor_get_position();
-    current_joint_rpm = motor_get_speed();
-    current_iq_amps = motor_get_current();
-    current_vbus = motor_get_vbus();
-
-    // 2. Broadcast VESC CAN Telemetry Packets Status 1 & Status 5 @ 100Hz
-    comm_can_send_status1();
-    comm_can_send_status5();
+//    current_joint_deg = motor_get_position();
+//    current_joint_rpm = motor_get_speed();
+//    current_iq_amps = motor_get_current();
+//    current_vbus = motor_get_vbus();
+//
+//    // 2. Broadcast VESC CAN Telemetry Packets Status 1 & Status 5 @ 100Hz
+//    comm_can_send_status1();
+//    comm_can_send_status5();
 
     // 3. LED Heartbeat (nhấp nháy LED1 để biết MCU còn sống)
-    HAL_GPIO_TogglePin(LED_1_GPIO_Port, LED_1_Pin);
+	  AS5048A_ReadRawAngle(&g_foc_controller.encoder, &g_foc_controller.encoder.raw_angle);
+//
+//	  HAL_GPIO_TogglePin(LED_1_GPIO_Port, LED_1_Pin);
+//
+//    // 4. Fault indicator on LED2
+//    if (motor_get_fault() != MC_FAULT_NONE) {
+//      HAL_GPIO_WritePin(LED_2_GPIO_Port, LED_2_Pin, GPIO_PIN_SET);
+//    } else {
+//      HAL_GPIO_WritePin(LED_2_GPIO_Port, LED_2_Pin, GPIO_PIN_RESET);
+//    }
 
-    // 4. Fault indicator on LED2
-    if (motor_get_fault() != MC_FAULT_NONE) {
-      HAL_GPIO_WritePin(LED_2_GPIO_Port, LED_2_Pin, GPIO_PIN_SET);
-    } else {
-      HAL_GPIO_WritePin(LED_2_GPIO_Port, LED_2_Pin, GPIO_PIN_RESET);
-    }
-
-    HAL_Delay(10); // ~100Hz loop
+	  HAL_Delay(1); // ~100Hz loop
   }
   /* USER CODE END 3 */
 }
