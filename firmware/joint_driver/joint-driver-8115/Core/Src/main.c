@@ -187,9 +187,9 @@ int main(void)
   HAL_ADCEx_InjectedStart_IT(&hadc1);  // Master ADC1 start (triggers both)
 
   /* 6. Wait for ADC zero-current offset calibration (2048 samples, motor OFF) */
-  while (!g_foc_controller.calibrated_offsets) {
-      HAL_Delay(1);
-  }
+//  while (!g_foc_controller.calibrated_offsets) {
+//      HAL_Delay(1);
+//  }
 
   /* 7. Align Encoder (lock rotor to electrical 0° and measure angle offset) */
   FOC_Control_AlignEncoder(&g_foc_controller);
@@ -300,6 +300,7 @@ static void MX_ADC1_Init(void)
 
   ADC_MultiModeTypeDef multimode = {0};
   ADC_ChannelConfTypeDef sConfig = {0};
+  ADC_InjectionConfTypeDef sConfigInjected = {0};
 
   /* USER CODE BEGIN ADC1_Init 1 */
 
@@ -340,13 +341,33 @@ static void MX_ADC1_Init(void)
 
   /** Configure Regular Channel
   */
-  sConfig.Channel = ADC_CHANNEL_1;
+  sConfig.Channel = ADC_CHANNEL_7;
   sConfig.Rank = ADC_REGULAR_RANK_1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_2CYCLES_5;
+  sConfig.SamplingTime = ADC_SAMPLETIME_6CYCLES_5;
   sConfig.SingleDiff = ADC_SINGLE_ENDED;
   sConfig.OffsetNumber = ADC_OFFSET_NONE;
   sConfig.Offset = 0;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Injected Channel
+  */
+  sConfigInjected.InjectedChannel = ADC_CHANNEL_7;
+  sConfigInjected.InjectedRank = ADC_INJECTED_RANK_1;
+  sConfigInjected.InjectedSamplingTime = ADC_SAMPLETIME_6CYCLES_5;
+  sConfigInjected.InjectedSingleDiff = ADC_SINGLE_ENDED;
+  sConfigInjected.InjectedOffsetNumber = ADC_OFFSET_NONE;
+  sConfigInjected.InjectedOffset = 0;
+  sConfigInjected.InjectedNbrOfConversion = 1;
+  sConfigInjected.InjectedDiscontinuousConvMode = DISABLE;
+  sConfigInjected.AutoInjectedConv = DISABLE;
+  sConfigInjected.QueueInjectedContext = DISABLE;
+  sConfigInjected.ExternalTrigInjecConv = ADC_EXTERNALTRIGINJEC_T1_TRGO;
+  sConfigInjected.ExternalTrigInjecConvEdge = ADC_EXTERNALTRIGINJECCONV_EDGE_RISING;
+  sConfigInjected.InjecOversamplingMode = DISABLE;
+  if (HAL_ADCEx_InjectedConfigChannel(&hadc1, &sConfigInjected) != HAL_OK)
   {
     Error_Handler();
   }
@@ -369,6 +390,7 @@ static void MX_ADC2_Init(void)
   /* USER CODE END ADC2_Init 0 */
 
   ADC_ChannelConfTypeDef sConfig = {0};
+  ADC_InjectionConfTypeDef sConfigInjected = {0};
 
   /* USER CODE BEGIN ADC2_Init 1 */
 
@@ -404,6 +426,24 @@ static void MX_ADC2_Init(void)
   sConfig.OffsetNumber = ADC_OFFSET_NONE;
   sConfig.Offset = 0;
   if (HAL_ADC_ConfigChannel(&hadc2, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Injected Channel
+  */
+  sConfigInjected.InjectedChannel = ADC_CHANNEL_4;
+  sConfigInjected.InjectedRank = ADC_INJECTED_RANK_1;
+  sConfigInjected.InjectedSamplingTime = ADC_SAMPLETIME_6CYCLES_5;
+  sConfigInjected.InjectedSingleDiff = ADC_SINGLE_ENDED;
+  sConfigInjected.InjectedOffsetNumber = ADC_OFFSET_NONE;
+  sConfigInjected.InjectedOffset = 0;
+  sConfigInjected.InjectedNbrOfConversion = 1;
+  sConfigInjected.InjectedDiscontinuousConvMode = DISABLE;
+  sConfigInjected.AutoInjectedConv = DISABLE;
+  sConfigInjected.QueueInjectedContext = DISABLE;
+  sConfigInjected.InjecOversamplingMode = DISABLE;
+  if (HAL_ADCEx_InjectedConfigChannel(&hadc2, &sConfigInjected) != HAL_OK)
   {
     Error_Handler();
   }

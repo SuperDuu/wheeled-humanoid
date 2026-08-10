@@ -50,7 +50,7 @@ void comm_can_init(FDCAN_HandleTypeDef *hfdcan, uint8_t node_id)
     sFilterConfig.FilterID2 = 0x00000000; // Mask = 0 -> Accept all IDs
 
     HAL_FDCAN_ConfigFilter(g_hfdcan, &sFilterConfig);
-    HAL_FDCAN_ConfigGlobalFilter(g_hfdcan, FDCAN_ACCEPT_IN_RX_FIFO0, FDCAN_ACCEPT_IN_RX_FIFO0, FDCAN_FILTER_REMOTE_LOCATION, FDCAN_FILTER_REMOTE_LOCATION);
+    HAL_FDCAN_ConfigGlobalFilter(g_hfdcan, FDCAN_ACCEPT_IN_RX_FIFO0, FDCAN_ACCEPT_IN_RX_FIFO0, FDCAN_FILTER_REMOTE, FDCAN_FILTER_REMOTE);
 
     /* Start FDCAN Peripheral */
     HAL_FDCAN_Start(g_hfdcan);

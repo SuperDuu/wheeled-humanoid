@@ -9,6 +9,7 @@
 #ifndef MOTOR_INTERFACE_H_
 #define MOTOR_INTERFACE_H_
 
+#include "main.h"
 #include "foc_control.h"
 
 /* High-Level User API Functions for main.c */
