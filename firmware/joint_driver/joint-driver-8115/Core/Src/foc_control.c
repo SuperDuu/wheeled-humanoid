@@ -52,9 +52,16 @@ bool FOC_Control_CheckSafety(FOC_Controller_t *foc, float current_a, float curre
 
     float current_mag = sqrtf(current_a * current_a + current_b * current_b);
 
-    // Overcurrent Check - Cho phép vượt giới hạn 2.0x để tránh ngắt giả lập lúc bắt đầu tăng tốc
-    if (current_mag > (foc->conf.l_current_max * 2.0f)) {
-        foc->fault |= MC_FAULT_OVER_CURRENT;
+    // Overcurrent Check - Cần 50 mẫu liên tiếp (>2.5ms) vượt ngưỡng 20.0A mới kích hoạt Lỗi Quá Dòng
+    // Tránh bị ngắt giả do nhiễu gai dòng hoặc đợt tăng tốc ban đầu
+    static uint32_t overcurrent_count = 0;
+    if (current_mag > 20.0f) {
+        overcurrent_count++;
+        if (overcurrent_count >= 50) {
+            foc->fault |= MC_FAULT_OVER_CURRENT;
+        }
+    } else {
+        if (overcurrent_count > 0) overcurrent_count--;
     }
 
     // Overvoltage Check (50V max OVP)
