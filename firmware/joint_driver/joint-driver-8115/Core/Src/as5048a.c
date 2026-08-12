@@ -57,36 +57,34 @@ HAL_StatusTypeDef AS5048A_Init(AS5048A_t *enc, SPI_HandleTypeDef *hspi, GPIO_Typ
   */
 HAL_StatusTypeDef AS5048A_ReadRawAngle(AS5048A_t *enc, uint16_t *raw_angle)
 {
-    if (enc == NULL || raw_angle == NULL) return HAL_ERROR;
+    if (enc == NULL || raw_angle == NULL || enc->hspi == NULL) return HAL_ERROR;
 
-    // Command: Read Angle Register (0x3FFF) with Read Bit (1 << 14) and Parity
     uint16_t command = AS5048A_CalculateEvenParity((1 << 14) | AS5048A_CMD_ANGLE);
     uint16_t response = 0;
 
-    // SPI Transfer (Transmits command for current frame, receives result of previous frame)
+    // Assert CS (Active LOW)
     HAL_GPIO_WritePin(enc->cs_port, enc->cs_pin, GPIO_PIN_RESET);
-    HAL_StatusTypeDef status = HAL_SPI_TransmitReceive(enc->hspi, (uint8_t*)&command, (uint8_t*)&response, 1, 10);
+
+    // Perform 16-bit SPI transfer (takes ~3.5µs at 5.3Mbps SPI clock)
+    HAL_StatusTypeDef status = HAL_SPI_TransmitReceive(enc->hspi, (uint8_t*)&command, (uint8_t*)&response, 1, 2);
+
+    // Deassert CS (HIGH)
     HAL_GPIO_WritePin(enc->cs_port, enc->cs_pin, GPIO_PIN_SET);
 
-    if (status != HAL_OK) return status;
-
-    // Check Error Flag (Bit 14 of response)
-    if (response & (1 << 14)) {
-        enc->error_flag = 1;
+    if (status == HAL_OK) {
+        enc->error_flag = (response & (1 << 14)) ? 1 : 0;
+        uint16_t angleData = response & 0x3FFF;
+        enc->raw_angle = angleData;
+        enc->angle_rad = ((float)angleData / 16384.0f) * (2.0f * (float)M_PI);
+        enc->angle_deg = ((float)angleData / 16384.0f) * 360.0f;
     } else {
-        enc->error_flag = 0;
+        // Clear SPI state on error to prevent latchup
+        enc->hspi->State = HAL_SPI_STATE_READY;
+        __HAL_SPI_CLEAR_OVRFLAG(enc->hspi);
     }
 
-    // Extract 14-bit angle data (Bits 0..13)
-    uint16_t angleData = response & 0x3FFF;
-    enc->raw_angle = angleData;
-    *raw_angle = angleData;
-
-    // Update converted values
-    enc->angle_rad = ((float)angleData / 16384.0f) * (2.0f * M_PI_F);
-    enc->angle_deg = ((float)angleData / 16384.0f) * 360.0f;
-
-    return HAL_OK;
+    *raw_angle = enc->raw_angle;
+    return status;
 }
 
 /**
@@ -96,7 +94,7 @@ HAL_StatusTypeDef AS5048A_ReadRadians(AS5048A_t *enc, float *angle_rad)
 {
     uint16_t raw;
     HAL_StatusTypeDef status = AS5048A_ReadRawAngle(enc, &raw);
-    if (status == HAL_OK && angle_rad != NULL) {
+    if (enc != NULL && angle_rad != NULL) {
         *angle_rad = enc->angle_rad;
     }
     return status;
@@ -109,7 +107,7 @@ HAL_StatusTypeDef AS5048A_ReadDegrees(AS5048A_t *enc, float *angle_deg)
 {
     uint16_t raw;
     HAL_StatusTypeDef status = AS5048A_ReadRawAngle(enc, &raw);
-    if (status == HAL_OK && angle_deg != NULL) {
+    if (enc != NULL && angle_deg != NULL) {
         *angle_deg = enc->angle_deg;
     }
     return status;

@@ -36,7 +36,27 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
+typedef struct {
+  float    vbus;           /* Điện áp bus DC (V) */
+  float    fet_temp_raw;   /* Điện áp NTC FET (V) */
+  float    fet_temp;       /* Nhiệt độ FET (°C) */
+  float    vsense_a;       /* Back-EMF pha A (V) */
+  float    vsense_b;       /* Back-EMF pha B (V) */
+  float    vsense_c;       /* Back-EMF pha C (V) */
+  uint16_t vbus_raw;
+  uint16_t fet_temp_raw_adc;
+  uint16_t vsense_a_raw;
+  uint16_t vsense_b_raw;
+  uint16_t vsense_c_raw;
 
+  uint16_t drv_fault1;
+  uint16_t drv_fault2;
+  uint8_t  drv_otw;
+  uint8_t  drv_otsd;
+  uint8_t  drv_has_fault;
+} ADC_Readings_t;
+
+extern volatile ADC_Readings_t g_adc_readings;
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
