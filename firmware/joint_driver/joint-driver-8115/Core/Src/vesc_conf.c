@@ -23,9 +23,9 @@ void vesc_conf_set_defaults(mc_configuration *conf)
 
     // Motor Parameters (GB8115-4 Gimbal/Actuator Motor)
     conf->foc_motor_pole_pairs = 21;     // 21 Pole Pairs
-    conf->foc_motor_r = 0.090f;          // ~90 mOhm phase resistance
-    conf->foc_motor_l = 0.000120f;       // ~120 uH phase inductance
-    conf->foc_motor_flux_linkage = 0.0045f; // ~4.5 mWb flux linkage
+    conf->foc_motor_r = 3.89f;           // 3.89 Ohm phase resistance (was 0.090f)
+    conf->foc_motor_l = 0.00314f;        // 3.14 mH phase inductance (was 0.000120f)
+    conf->foc_motor_flux_linkage = 0.025f; // 0.025 Wb (~25 mWb) flux linkage (was 0.0045f)
     conf->foc_motor_ld_lq_diff = 0.0f;   // Non-salient PMSM motor
 
     // Cycloidal Gearbox & Joint Safety Limits
@@ -34,25 +34,25 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->joint_pos_min = -3.14159265f;  // -180 degrees (-PI rad)
     conf->joint_pos_max =  3.14159265f;  // +180 degrees (+PI rad)
 
-    // Current Controller (PI D/Q)
-    conf->foc_current_kp = 0.25f;
-    conf->foc_current_ki = 150.0f;
+    // Current Controller (PI D/Q) - Đã tối ưu Kp, Ki để ổn định với nội trở lớn 3.89 Ohm mà không bị quá nhạy với nhiễu/offset ADC
+    conf->foc_current_kp = 1.0f;         // Giảm từ 1.5f xuống 1.0f để êm hơn
+    conf->foc_current_ki = 200.0f;       // Giảm từ 300.0f xuống 200.0f để ổn định tích phân dòng
     conf->foc_current_filter_const = 0.1f;
     conf->foc_cc_decoupling = FOC_CC_DECOUPLING_CROSS_BEMF; // BEMF + Cross decoupling
 
     // Speed Controller (PID)
-    conf->s_pid_kp = 0.02f;
-    conf->s_pid_ki = 0.4f;
-    conf->s_pid_kd = 0.0001f;
+    conf->s_pid_kp = 0.0005f;           // Standard VESC Kp for ERPM
+    conf->s_pid_ki = 0.002f;            // Standard VESC Ki for ERPM
+    conf->s_pid_kd = 0.00001f;
     conf->s_pid_kd_filter = 0.2f;
-    conf->s_pid_min_erpm = 10.0f;
-    conf->s_pid_ramp_erpms_s = 50000.0f;
+    conf->s_pid_min_erpm = 5.0f;        // 5 ERPM (~0.2 RPM)
+    conf->s_pid_ramp_erpms_s = 2000.0f;  // Ramp gia tốc 2000 ERPM/s
 
-    // Position Controller (PID + Process D)
-    conf->p_pid_kp = 15.0f;
-    conf->p_pid_ki = 0.0f;
-    conf->p_pid_kd = 0.03f;
-    conf->p_pid_kd_proc = 0.02f;
+    // Position Controller (PID + Process D) - Tuned for 1:17 Cycloid Joint
+    conf->p_pid_kp = 3.5f;               // Smooth proportional gain (was 15.0f causing bang-bang saturation)
+    conf->p_pid_ki = 0.2f;               // Low integral gain to remove steady-state error
+    conf->p_pid_kd = 0.08f;              // Damping gain against oscillations
+    conf->p_pid_kd_proc = 0.05f;         // Damping on measurement
     conf->p_pid_kd_filter = 0.2f;
     conf->p_pid_ang_div = 1.0f;
     conf->p_pid_gain_dec_angle = 0.0f;
@@ -60,8 +60,9 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     // Observer & Sensorless Configuration
     conf->foc_observer_type = FOC_OBSERVER_ORTEGA_ORIGINAL;
     conf->foc_observer_gain = 1000.0f;
-    conf->foc_pll_kp = 2000.0f;
-    conf->foc_pll_ki = 40000.0f;
+    // Đã hạ Kp, Ki của PLL từ (2000/40000) xuống (100/1000) vì PLL chạy ở Slow Loop 1kHz chứ không phải 20kHz
+    conf->foc_pll_kp = 100.0f;           // Giảm từ 2000.0f
+    conf->foc_pll_ki = 1000.0f;          // Giảm từ 40000.0f
     conf->foc_sl_erpm = 2000.0f;
 
     // Field Weakening
@@ -75,10 +76,10 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_mag_vd_max = 0.2f;         // Max 20% voltage in Vd
 
     // Protection & Safety Limits
-    conf->l_current_max = 25.0f;         // 25A max motor current
-    conf->l_current_min = -25.0f;        // -25A max braking current
-    conf->l_in_current_max = 20.0f;      // 20A max battery current
-    conf->l_in_current_min = -10.0f;     // -10A max regen current
+    conf->l_current_max = 4.0f;          // Limit current to 4A to prevent voltage saturation on 4-ohm gimbal motor
+    conf->l_current_min = -4.0f;         // Limit braking current to -4A
+    conf->l_in_current_max = 20.0f;      // Khôi phục 20A dòng nguồn tối đa
+    conf->l_in_current_min = -10.0f;     // Khôi phục -10A dòng sạc ngược tối đa
     conf->l_max_erpm = 100000.0f;        // 100k ERPM max
     conf->l_min_erpm = -100000.0f;
     conf->l_max_erpm_fbreak = 150000.0f;
