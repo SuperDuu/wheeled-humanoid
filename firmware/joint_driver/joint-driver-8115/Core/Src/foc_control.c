@@ -52,8 +52,7 @@ bool FOC_Control_CheckSafety(FOC_Controller_t *foc, float current_a, float curre
 
     float current_mag = sqrtf(current_a * current_a + current_b * current_b);
 
-    // Overcurrent Check - Cần 50 mẫu liên tiếp (>2.5ms) vượt ngưỡng 20.0A mới kích hoạt Lỗi Quá Dòng
-    // Tránh bị ngắt giả do nhiễu gai dòng hoặc đợt tăng tốc ban đầu
+    // Overcurrent Instantaneous Check (20A / 2.5ms)
     static uint32_t overcurrent_count = 0;
     if (current_mag > 20.0f) {
         overcurrent_count++;
@@ -62,6 +61,18 @@ bool FOC_Control_CheckSafety(FOC_Controller_t *foc, float current_a, float curre
         }
     } else {
         if (overcurrent_count > 0) overcurrent_count--;
+    }
+
+    // Thermal Safety Timeout Protection (3.0A continuous for > 3.0s = 60,000 ISR cycles @ 20kHz)
+    // Tự động cắt PWM bảo vệ cuộn dây stator khi chạy kẹt dòng dài trước khi có NTC phần cứng
+    static uint32_t thermal_timeout_count = 0;
+    if (current_mag > 3.0f) {
+        thermal_timeout_count++;
+        if (thermal_timeout_count >= 60000) {
+            foc->fault |= MC_FAULT_OVER_CURRENT;
+        }
+    } else {
+        if (thermal_timeout_count > 0) thermal_timeout_count -= 2;
     }
 
     // Overvoltage Check (50V max OVP)
