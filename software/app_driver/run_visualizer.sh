@@ -45,7 +45,7 @@ if ! groups | grep -q "dialout"; then
 fi
 
 # Launch web server in background
-PORT=8080
+PORT=5050
 echo "🚀 Launching local telemetry server on http://localhost:$PORT..."
 python3 server.py $PORT &
 SERVER_PID=$!

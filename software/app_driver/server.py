@@ -442,7 +442,7 @@ def run_server(port=8080):
         httpd.server_close()
 
 if __name__ == '__main__':
-    port_arg = 8080
+    port_arg = 5050
     if len(sys.argv) > 1:
         try:
             port_arg = int(sys.argv[1])
