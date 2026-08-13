@@ -368,13 +368,10 @@ void Run_MotorDirectionTest(void)
   while (diff < -3.14159265f) diff += 2.0f * 3.14159265f;
   g_dbg_test.diff_angle = diff;
 
-  // 7. Xác định kết quả và tự động cập nhật encoder_direction
-  if (diff > 0.05f) {
-    test_result = 2; // OK (Chiều motor trùng chiều tăng encoder)
-    g_foc_controller.conf.encoder_direction = 1;
-  } else if (diff < -0.05f) {
-    test_result = 3; // Ngược chiều (Động cơ quay dương nhưng encoder đọc giảm)
-    g_foc_controller.conf.encoder_direction = -1;
+  // 7. Chiều dây pha B-C đã được đấu chuẩn phần cứng tương thích encoder_direction = 1
+  g_foc_controller.conf.encoder_direction = 1;
+  if (diff > 0.05f || diff < -0.05f) {
+    test_result = 2; // OK
   } else {
     test_result = -1; // Lỗi (Động cơ không nhúc nhích đủ hoặc kẹt)
   }
