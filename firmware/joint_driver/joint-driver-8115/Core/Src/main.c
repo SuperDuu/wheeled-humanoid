@@ -1652,9 +1652,9 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1,
                           (uint32_t)(g_foc_controller.duty_a * (float)period));
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2,
-                          (uint32_t)(g_foc_controller.duty_b * (float)period));
+                          (uint32_t)(g_foc_controller.duty_c * (float)period)); // Pha B nối cọc C -> cấp duty_c cho Ch2
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3,
-                          (uint32_t)(g_foc_controller.duty_c * (float)period));
+                          (uint32_t)(g_foc_controller.duty_b * (float)period)); // Pha C nối cọc B -> cấp duty_b cho Ch3
 
     // ===== 7. SLOW LOOP 1kHz (chia 20 lần từ 20kHz) =====
     // Cũng chỉ chạy khi FOC active - SlowLoop đọc SPI3 encoder sẽ xung đột với alignment SPI reads
