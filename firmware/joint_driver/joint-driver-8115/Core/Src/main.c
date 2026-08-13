@@ -381,93 +381,101 @@ void Run_MotorDirectionTest(void)
   run_direction_test = 0; // Kết thúc test
 }
 
-/**
-  * @brief  Encoder Alignment - Tìm góc điện offset (zero_electric_angle)
-  *
-  * Quy trình:
-  * 1. Áp vector điện áp Vd (trục d) với góc điện = 0
-  *    → Rotor bị hút về vị trí electrical angle = 0
-  * 2. Ramp Vd từ 0V lên vd_align từ từ (tránh giật)
-  * 3. Giữ 1.5 giây cho rotor lock ổn định
-  * 4. Đọc encoder → tính zero_electric_angle
-  * 5. Trả motor về safe state
-  *
-  * Kích hoạt: Set run_alignment = 1 trong Live Expressions
-  */
 void Run_EncoderAlignment(void)
 {
   if (run_alignment != 1) return;
-  align_result = 1; // Đang chạy
+  align_result = 1; // Running
 
   mc_state old_state = g_foc_controller.motor.m_state;
   g_foc_controller.motor.m_state = MC_STATE_DETECTING;
 
   TIM1_EnsureMoeEnabled();
 
-  uint32_t period = htim1.Init.Period; // = 4249
+  uint32_t period = htim1.Init.Period; // 4249
   float vbus = g_adc_readings.vbus;
   if (vbus < 6.0f) vbus = 24.0f;
 
-  /* Reset DRV8353 to clear any latched faults (e.g. Overcurrent, GDF) */
+  /* Reset DRV8353 */
   HAL_GPIO_WritePin(DRV_EN_GPIO_Port, DRV_EN_Pin, GPIO_PIN_RESET);
-  HAL_Delay(1); // Wait 1ms
+  HAL_Delay(1);
   HAL_GPIO_WritePin(DRV_EN_GPIO_Port, DRV_EN_Pin, GPIO_PIN_SET);
-  HAL_Delay(5); // Wait 5ms for wakeup
-  DRV8353_SetCSAGain(&g_foc_controller.drv8353, DRV8353_CSA_GAIN_20V); // Khôi phục cấu hình SPI
+  HAL_Delay(5);
+  DRV8353_SetCSAGain(&g_foc_controller.drv8353, DRV8353_CSA_GAIN_20V);
 
-  // === PHASE 0: Tự động phát hiện chiều quay encoder_direction (+1 hay -1) ===
-  run_direction_test = 1;
-  Run_MotorDirectionTest();
+  float vd_align = 12.0f; // 12V voltage for alignment
+
+  // STEP 1: Lock to Electrical Zero (theta_e = 0)
+  for (int step = 0; step <= 50; step++) {
+    float vd = vd_align * (float)step / 50.0f;
+    float valpha = vd / vbus, vbeta = 0.0f;
+    uint32_t ta, tb, tc, sector;
+    foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
+    HAL_Delay(5);
+  }
+  HAL_Delay(500); // Wait for rotor to lock at elec zero
+
+  // Read starting encoder position
+  float enc_start = 0.0f;
+  AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_start);
+
+  // STEP 2: Rotate voltage vector forward by 1 electrical revolution (theta_e = 0 -> 2*PI)
+  for (int step = 0; step <= 100; step++) {
+    float angle = 2.0f * 3.14159265f * (float)step / 100.0f;
+    float valpha = (vd_align / vbus) * cosf(angle);
+    float vbeta  = (vd_align / vbus) * sinf(angle);
+    uint32_t ta, tb, tc, sector;
+    foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
+    HAL_Delay(5);
+  }
+
+  // Read ending encoder position
+  float enc_end = 0.0f;
+  AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_end);
+
+  // Calculate delta angle (with 2*PI wrap-around handling)
+  float diff = enc_end - enc_start;
+  while (diff > 3.14159265f) diff -= 2.0f * 3.14159265f;
+  while (diff < -3.14159265f) diff += 2.0f * 3.14159265f;
+
+  // STEP 3: Auto-detect encoder_direction (+1 or -1)
+  if (diff > 0.01f) {
+    g_foc_controller.conf.encoder_direction = 1;
+    test_result = 2; // Direction +1 detected
+  } else if (diff < -0.01f) {
+    g_foc_controller.conf.encoder_direction = -1;
+    test_result = 3; // Direction -1 detected
+  } else {
+    test_result = -1; // Error: motor didn't move
+  }
 
   g_dbg_align.vbus = vbus;
   g_dbg_align.enc_dir = g_foc_controller.conf.encoder_direction;
 
-  // === PHASE 1: Ramp Vd từ 0 → vd_align trong 500ms ===
-  float vd_align = 14.0f; // 14V (~2.4A) - Đủ lực kéo vượt ma sát hộp số 1:17 để rotor khóa chuẩn vào electrical zero
-  int ramp_steps = 100;  // 100 steps × 5ms = 500ms
-
-  for (int i = 0; i <= ramp_steps; i++) {
-    float vd = vd_align * (float)i / (float)ramp_steps;
-
-    // Vector Vd ở electrical angle = 0: Valpha = Vd, Vbeta = 0
-    float valpha = vd / vbus;
-    float vbeta  = 0.0f;
-
+  // STEP 4: Lock back to Electrical Zero (theta_e = 0) and calculate zero_electric_angle
+  for (int step = 0; step <= 50; step++) {
+    float vd = vd_align * (float)step / 50.0f;
+    float valpha = vd / vbus, vbeta = 0.0f;
     uint32_t ta, tb, tc, sector;
-    foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000,
-            &ta, &tb, &tc, &sector);
-
+    foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
-
-    g_foc_controller.duty_a = (float)ta / 1000.0f;
-    g_foc_controller.duty_b = (float)tb / 1000.0f;
-    g_foc_controller.duty_c = (float)tc / 1000.0f;
-
     HAL_Delay(5);
   }
+  HAL_Delay(500);
 
-  g_dbg_align.vd_applied = vd_align;
+  float enc_zero = 0.0f;
+  AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_zero);
 
-  // === PHASE 2: Giữ Vd ổn định 1.5 giây cho rotor lock ===
-  HAL_Delay(1500);
-
-  // === PHASE 3: Đọc encoder và tính zero_electric_angle ===
-  uint16_t raw_angle = 0;
-  AS5048A_ReadRawAngle(&g_foc_controller.encoder, &raw_angle);
-  float enc_rad = 0.0f;
-  AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_rad);
-
-  // Áp dụng encoder_direction
-  int enc_dir = g_foc_controller.conf.encoder_direction;
-  if (enc_dir == -1) {
-    enc_rad = 2.0f * 3.14159265f - enc_rad; // Đảo chiều
-  }
-
-  // zero_electric_angle = (enc_rad × pole_pairs) mod 2π
+  float enc_zero_dir = (g_foc_controller.conf.encoder_direction == -1) ? (2.0f * 3.14159265f - enc_zero) : enc_zero;
   float pole_pairs = (float)g_foc_controller.conf.foc_motor_pole_pairs;
-  float zero_e = fmodf(enc_rad * pole_pairs, 2.0f * 3.14159265f);
+  float zero_e = fmodf(enc_zero_dir * pole_pairs, 2.0f * 3.14159265f);
   if (zero_e < 0.0f) zero_e += 2.0f * 3.14159265f;
 
   g_foc_controller.zero_electric_angle = zero_e;
@@ -475,31 +483,18 @@ void Run_EncoderAlignment(void)
 
   // Log debug
   g_dbg_align.zero_electric_angle = zero_e;
-  g_dbg_align.encoder_rad = enc_rad;
-  g_dbg_align.raw_angle = raw_angle;
+  g_dbg_align.encoder_rad = enc_zero;
   g_dbg_align.aligned = 1;
-  g_dbg_align.current_a = g_dbg_ia;
-  g_dbg_align.current_b = g_dbg_ib;
-  g_dbg_align.current_c = g_dbg_ic;
 
-  // === PHASE 4: Ramp Vd xuống 0 trong 200ms (smooth release) ===
-  int release_steps = 40;
-  for (int i = release_steps; i >= 0; i--) {
-    float vd = vd_align * (float)i / (float)release_steps;
-    float valpha = vd / vbus;
-
+  // STEP 5: Smooth ramp down to 0V
+  for (int i = 40; i >= 0; i--) {
+    float vd = vd_align * (float)i / 40.0f;
+    float valpha = vd / vbus, vbeta = 0.0f;
     uint32_t ta, tb, tc, sector;
-    foc_svm(valpha, 0.0f, g_foc_controller.conf.l_max_duty, 1000,
-            &ta, &tb, &tc, &sector);
-
+    foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
-
-    g_foc_controller.duty_a = (float)ta / 1000.0f;
-    g_foc_controller.duty_b = (float)tb / 1000.0f;
-    g_foc_controller.duty_c = (float)tc / 1000.0f;
-
     HAL_Delay(5);
   }
 
