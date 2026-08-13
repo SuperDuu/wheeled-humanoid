@@ -582,11 +582,18 @@ static uint16_t ADC_PollSingleChannel(ADC_HandleTypeDef *hadc, uint32_t channel)
  */
 void ADC_ReadAllChannels(void)
 {
-  /* TẠM THỜI TẮT POLLING ADC1 VÌ NÓ TIMEOUT VÀ LÀM TREO NGẮT 20KHZ!
-   * Ở chế độ Injected Simultaneous, việc Start/Stop Regular Group trên ADC1
-   * bị xung đột phần cứng, dẫn đến EOC không bao giờ bật -> kẹt vòng lặp while 600us. */
-  g_adc_readings.vbus = 24.0f;
-  g_adc_readings.fet_temp = 25.0f;
+  /* Đọc VBUS thực qua ADC1 kênh IN8 (PC2/VBUS_SENSE) với hệ số chia áp 26.81.
+   * AN TOÀN vì:
+   *   (1) Được gọi trong slow loop ISR (sau khi Injected xong, trước TRGO tiếp theo)
+   *   (2) ADC1 Regular đã cấu hình SOFTWARE_START (Fix 1) -> không còn xung đột T1_TRGO */
+  uint16_t raw_vbus = ADC_PollSingleChannel(&hadc1, ADC_CHANNEL_8); /* PC2 = VBUS_SENSE */
+  if (raw_vbus > 200) { /* Sanity: >200 LSB ~ 0.16V -> VBUS > 4.3V thực */
+    g_adc_readings.vbus_raw = raw_vbus;
+    g_adc_readings.vbus = (float)raw_vbus * ADC_TO_VOLT * VBUS_DIVIDER_RATIO;
+  }
+  /* Nếu raw_vbus <= 200 (lỗi ADC hoặc VBUS quá thấp): giữ giá trị cũ (init=24.0f) */
+
+  g_adc_readings.fet_temp = 25.0f; /* TODO: NTC thermistor via ADC_CHANNEL_4 (PA3) */
 
   /* Cập nhật cờ lỗi từ chân nFAULT (DRV_BKIN) của DRV8353 */
   g_adc_readings.drv_has_fault = (HAL_GPIO_ReadPin(DRV_BKIN_GPIO_Port, DRV_BKIN_Pin) == GPIO_PIN_RESET) ? 1 : 0;
