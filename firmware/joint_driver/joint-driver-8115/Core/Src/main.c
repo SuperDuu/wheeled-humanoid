@@ -700,8 +700,14 @@ int main(void)
   HAL_ADCEx_InjectedStart_IT(&hadc2);  // Slave ADC2 start first
   HAL_ADCEx_InjectedStart_IT(&hadc1);  // Master ADC1 start (triggers both)
 
-  /* 6. Wait for ADC zero-current offset calibration (2048 samples = ~100ms) */
-  HAL_Delay(150);
+  /* 6. Wait for ADC zero-current offset calibration to truly complete.
+   * Calibration timeline: 10000 ISR warmup (500ms) + 2048 samples (102ms) = ~602ms total.
+   * HAL_Delay(150) cũ KHÔNG ĐỦ -> offset chưa xong khi main loop chạy.
+   * Poll flag thực để đảm bảo offset đúng trước khi gửi telemetry. */
+  while (!g_foc_controller.calibrated_offsets) {
+      HAL_Delay(10);
+  }
+  HAL_Delay(10); /* Buffer thêm 10ms sau khi offset xong */
 
   /* 7. Đọc VBUS và các kênh ADC sau khi offset calibration hoàn tất */
   ADC_ReadAllChannels();
@@ -904,8 +910,12 @@ static void MX_ADC1_Init(void)
   hadc1.Init.ContinuousConvMode = DISABLE;
   hadc1.Init.NbrOfConversion = 1;
   hadc1.Init.DiscontinuousConvMode = DISABLE;
-  hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIG_T1_TRGO;
-  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
+  /* FIX: Regular channel KHÔNG tự động trigger theo T1_TRGO nữa.
+   * Trước đây, cả Regular và Injected cùng triggered bởi T1_TRGO và cùng đọc IN7 (PC1),
+   * gây ra xung đột kênh và khuếch đại nhiễu ADC (~±25 LSB = ±0.5A).
+   * Regular channel chỉ dùng bởi ADC_PollSingleChannel() (software start) khi cần thiết. */
+  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
   hadc1.Init.DMAContinuousRequests = DISABLE;
   hadc1.Init.Overrun = ADC_OVR_DATA_PRESERVED;
   hadc1.Init.OversamplingMode = DISABLE;
