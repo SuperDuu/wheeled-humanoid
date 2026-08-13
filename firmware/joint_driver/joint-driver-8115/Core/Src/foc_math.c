@@ -212,8 +212,6 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 	}
 
 	float error = angle_set - angle_now;
-	float error_sign = (float)conf_now->encoder_direction;
-	error *= error_sign;
 
 	float kp = conf_now->p_pid_kp;
 	float ki = conf_now->p_pid_ki;
@@ -237,7 +235,7 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 	float d_term_proc = 0.0f;
 	motor->m_pos_dt_int_proc += dt;
 	if (angle_now != motor->m_pos_prev_proc) {
-		d_term_proc = -(angle_now - motor->m_pos_prev_proc) * error_sign * (kd_proc / motor->m_pos_dt_int_proc);
+		d_term_proc = -(angle_now - motor->m_pos_prev_proc) * (kd_proc / motor->m_pos_dt_int_proc);
 		motor->m_pos_dt_int_proc = 0.0f;
 	}
 	UTILS_LP_FAST(motor->m_pos_d_filter_proc, d_term_proc, conf_now->p_pid_kd_filter);
@@ -254,7 +252,10 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 	float output = p_term + motor->m_pos_i_term + d_term + d_term_proc;
 	utils_truncate_number(&output, -1.0f, 1.0f);
 
-	motor->m_iq_set = output * conf_now->l_current_max;
+	// Cap max position control current output to 3.0A max for bench safety
+	float max_pos_current = 3.0f; 
+	if (max_pos_current > conf_now->l_current_max) max_pos_current = conf_now->l_current_max;
+	motor->m_iq_set = output * max_pos_current;
 }
 
 /**
@@ -275,18 +276,19 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		utils_truncate_number(&motor->m_speed_pid_set_rpm, conf_now->l_min_erpm, conf_now->l_max_erpm);
 	}
 
-	float rpm = RADPS2RPM_f(motor->m_speed_est_fast);
-	float error = motor->m_speed_pid_set_rpm - rpm;
+	float erpm = RADPS2RPM_f(motor->m_speed_est_fast);
+	float target_erpm = motor->m_speed_command_rpm; // ERPM target
+	float error = target_erpm - erpm;
 
-	if (fabsf(motor->m_speed_pid_set_rpm) < conf_now->s_pid_min_erpm) {
+	if (fabsf(target_erpm) < conf_now->s_pid_min_erpm) {
 		motor->m_speed_i_term = 0.0f;
 		motor->m_speed_prev_error = error;
 		motor->m_iq_set = 0.0f;
 		return;
 	}
 
-	float p_term = error * conf_now->s_pid_kp * 0.05f;
-	float d_term = (error - motor->m_speed_prev_error) * (conf_now->s_pid_kd / dt) * 0.05f;
+	float p_term = error * conf_now->s_pid_kp;
+	float d_term = (error - motor->m_speed_prev_error) * (conf_now->s_pid_kd / dt);
 
 	UTILS_LP_FAST(motor->m_speed_d_filter, d_term, conf_now->s_pid_kd_filter);
 	d_term = motor->m_speed_d_filter;
@@ -296,7 +298,7 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	float output = p_term + motor->m_speed_i_term + d_term;
 	utils_truncate_number_abs(&output, 1.0f);
 
-	motor->m_speed_i_term += error * conf_now->s_pid_ki * dt * 0.05f;
+	motor->m_speed_i_term += error * conf_now->s_pid_ki * dt;
 	utils_truncate_number_abs(&motor->m_speed_i_term, 1.0f);
 
 	motor->m_iq_set = output * conf_now->l_current_max;
