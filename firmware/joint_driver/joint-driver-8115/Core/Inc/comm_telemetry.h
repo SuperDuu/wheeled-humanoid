@@ -68,7 +68,7 @@ typedef struct {
 /* Public Functions (Pure USB CDC Telemetry) */
 void Comm_Telemetry_Init(void);
 void Comm_Telemetry_Process(FOC_Controller_t *foc);
-void Comm_Telemetry_Send(FOC_Controller_t *foc);
+bool Comm_Telemetry_Send(FOC_Controller_t *foc);
 void Comm_Telemetry_RxByte(uint8_t rx_byte);
 void Comm_Telemetry_RxBuffer(const uint8_t *buf, uint32_t len);
 
