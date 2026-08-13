@@ -54,7 +54,11 @@ bool Comm_Telemetry_Send(FOC_Controller_t *foc)
     motor_state_t *state_m = &motor->m_motor_state;
     mc_configuration *conf = motor->m_conf;
 
-    telemetry_packet_t packet;
+    /* CRITICAL: packet PHẢI là static vì CDC_Transmit_FS chỉ lưu CON TRỎ.
+     * Packet 78 bytes > 64 bytes (USB FS max packet) → cần 2 USB transactions.
+     * Transaction thứ 2 (14 bytes cuối) xảy ra trong USB IRQ SAU KHI hàm return.
+     * Nếu packet trên stack → pointer trỏ vào rác → 14 bytes cuối corrupt → checksum fail 95%. */
+    static telemetry_packet_t packet;
     memset(&packet, 0, sizeof(packet));
 
     packet.magic1 = TELEMETRY_MAGIC_BYTE1;
