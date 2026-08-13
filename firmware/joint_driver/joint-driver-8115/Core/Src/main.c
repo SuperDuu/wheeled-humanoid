@@ -1648,34 +1648,24 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
   const float dt = 1.0f / 20000.0f; // 50µs = 1/20kHz
   if (run_direction_test != 1 && run_alignment != 1) {
     FOC_Control_Current_ISR(&g_foc_controller, current_a, current_b, vbus, temp_fet, dt);
-  }
 
-  // Cập nhật FOC debug telemetry
-  g_dbg_foc.id = g_foc_controller.motor.m_motor_state.id;
-  g_dbg_foc.iq = g_foc_controller.motor.m_motor_state.iq;
-  g_dbg_foc.id_target = g_foc_controller.motor.m_motor_state.id_target;
-  g_dbg_foc.iq_target = g_foc_controller.motor.m_motor_state.iq_target;
-  g_dbg_foc.vd = g_foc_controller.motor.m_motor_state.vd;
-  g_dbg_foc.vq = g_foc_controller.motor.m_motor_state.vq;
-  g_dbg_foc.phase_elec = g_foc_controller.motor.m_motor_state.phase;
-  /* Chuyển đổi từ ERPM ngược lại RPM cơ học của trục động cơ để hiển thị debug */
-  g_dbg_foc.speed_est_rpm = RADPS2RPM_f(g_foc_controller.motor.m_speed_est_fast) / (float)g_foc_controller.conf.foc_motor_pole_pairs;
-  g_dbg_foc.speed_target_rpm = g_foc_controller.motor.m_speed_pid_set_rpm / (float)g_foc_controller.conf.foc_motor_pole_pairs;
+    // ===== 6. CẬP NHẬT PWM DUTY CYCLE TRỰC TIẾP VÀO TIMER =====
+    // CHỈ ghi khi FOC ISR đang chạy. Khi alignment/direction test, main loop ghi trực tiếp.
+    uint32_t period = htim1.Init.Period;
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1,
+                          (uint32_t)(g_foc_controller.duty_a * (float)period));
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2,
+                          (uint32_t)(g_foc_controller.duty_b * (float)period));
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3,
+                          (uint32_t)(g_foc_controller.duty_c * (float)period));
 
-  // ===== 6. CẬP NHẬT PWM DUTY CYCLE TRỰC TIẾP VÀO TIMER =====
-  uint32_t period = htim1.Init.Period;
-  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1,
-                        (uint32_t)(g_foc_controller.duty_a * (float)period));
-  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2,
-                        (uint32_t)(g_foc_controller.duty_b * (float)period));
-  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3,
-                        (uint32_t)(g_foc_controller.duty_c * (float)period));
-
-  // ===== 7. SLOW LOOP 1kHz (chia 20 lần từ 20kHz) =====
-  slow_loop_divider++;
-  if (slow_loop_divider >= 20) {
-    slow_loop_divider = 0;
-    FOC_Control_SlowLoop(&g_foc_controller, 0.001f); // dt = 1ms
+    // ===== 7. SLOW LOOP 1kHz (chia 20 lần từ 20kHz) =====
+    // Cũng chỉ chạy khi FOC active - SlowLoop đọc SPI3 encoder sẽ xung đột với alignment SPI reads
+    slow_loop_divider++;
+    if (slow_loop_divider >= 20) {
+      slow_loop_divider = 0;
+      FOC_Control_SlowLoop(&g_foc_controller, 0.001f); // dt = 1ms
+    }
   }
 }
 
