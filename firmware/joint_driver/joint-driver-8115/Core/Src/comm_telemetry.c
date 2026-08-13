@@ -204,10 +204,14 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         float mech_rpm = atof(&cmd[6]);
         float pole_pairs = (motor->m_conf != NULL) ? (float)motor->m_conf->foc_motor_pole_pairs : 21.0f;
         speed_target_dbg = mech_rpm;
-        motor->m_speed_command_rpm = mech_rpm * pole_pairs;
-        motor->m_control_mode = CONTROL_MODE_SPEED;
-        motor->m_state = MC_STATE_RUNNING;
-        run_foc_mode = 3;
+        if (run_open_loop == 1) {
+            open_loop_target_rpm = mech_rpm;
+        } else {
+            motor->m_speed_command_rpm = mech_rpm * pole_pairs;
+            motor->m_control_mode = CONTROL_MODE_SPEED;
+            motor->m_state = MC_STATE_RUNNING;
+            run_foc_mode = 3;
+        }
     }
     else if (strncmp(cmd, "IQ ", 3) == 0 || strncmp(cmd, "CURRENT ", 8) == 0) {
         float iq = atof((strncmp(cmd, "IQ ", 3) == 0) ? &cmd[3] : &cmd[8]);
