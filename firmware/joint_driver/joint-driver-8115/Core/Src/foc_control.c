@@ -268,7 +268,7 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     utils_truncate_number_abs((float*)&state_m->vq_int, max_vq);
 
     // Normalize voltages for Inverse Park & Modulation
-    const float voltage_normalize = 1.5f / state_m->v_bus;
+    const float voltage_normalize = 1.0f / state_m->v_bus;
     state_m->mod_d = state_m->vd * voltage_normalize;
     state_m->mod_q = state_m->vq * voltage_normalize;
 
