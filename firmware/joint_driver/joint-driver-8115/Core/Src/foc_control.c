@@ -312,7 +312,7 @@ void FOC_Control_SlowLoop(FOC_Controller_t *foc, float dt)
 
     // Dùng trực tiếp góc điện của Encoder (m_motor_state.phase) thay vì góc điện ước lượng của Observer để tính toán tốc độ bằng PLL
     foc_pll_run(motor->m_motor_state.phase, dt, &motor->m_pll_phase, &motor->m_pll_speed, motor->m_conf);
-    motor->m_speed_est_fast = motor->m_pll_speed;
+    motor->m_speed_est_fast = (motor->m_conf != NULL && motor->m_conf->encoder_direction == -1) ? -motor->m_pll_speed : motor->m_pll_speed;
 
     // 2. Run Position PID or Speed PID based on Control Mode
     if (motor->m_control_mode == CONTROL_MODE_POS) {
