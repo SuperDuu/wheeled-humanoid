@@ -173,7 +173,11 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     motor_state_t *state_m = &motor->m_motor_state;
     mc_configuration *conf_now = motor->m_conf;
 
-    state_m->v_bus = vbus > 0.0f ? vbus : 24.0f;
+    /* FIX: ngưỡng 5V thay vì 0.0f.
+     * Trước: vbus=0.9V (ADC thiếu hệ số chia) -> 0.9V > 0.0f -> state_m->v_bus=0.9V
+     * -> UVP trip (0.9V < l_voltage_min=12V) -> motor luôn ở IDLE!
+     * Sau fix: vbus=0.9V < 5.0f -> fallback 24.0f -> FOC hoạt động đúng. */
+    state_m->v_bus = vbus > 5.0f ? vbus : 24.0f;
 
     // 1. Đọc Encoder: Nếu SPI3 rảnh, đọc ngay (sẽ xong trong ~3.5µs @ 5.3MHz).
     // Nếu SPI3 bận (rất hiếm), fallback về cache nhằm tránh ISR treo.
