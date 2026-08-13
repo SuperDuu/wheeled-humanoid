@@ -421,9 +421,9 @@ void Run_EncoderAlignment(void)
   float enc_start = 0.0f;
   AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_start);
 
-  // STEP 2: Rotate voltage vector forward by 1 electrical revolution (theta_e = 0 -> 2*PI)
-  for (int step = 0; step <= 100; step++) {
-    float angle = 2.0f * 3.14159265f * (float)step / 100.0f;
+  // STEP 2: Rotate voltage vector forward by 2 electrical revolutions (theta_e = 0 -> 4*PI)
+  for (int step = 0; step <= 200; step++) {
+    float angle = 4.0f * 3.14159265f * (float)step / 200.0f;
     float valpha = (vd_align / vbus) * cosf(angle);
     float vbeta  = (vd_align / vbus) * sinf(angle);
     uint32_t ta, tb, tc, sector;
@@ -443,11 +443,11 @@ void Run_EncoderAlignment(void)
   while (diff > 3.14159265f) diff -= 2.0f * 3.14159265f;
   while (diff < -3.14159265f) diff += 2.0f * 3.14159265f;
 
-  // STEP 3: Auto-detect encoder_direction (+1 or -1)
-  if (diff > 0.01f) {
+  // STEP 3: Auto-detect encoder_direction (+1 or -1) with 0.05 rad threshold
+  if (diff > 0.05f) {
     g_foc_controller.conf.encoder_direction = 1;
     test_result = 2; // Direction +1 detected
-  } else if (diff < -0.01f) {
+  } else if (diff < -0.05f) {
     g_foc_controller.conf.encoder_direction = -1;
     test_result = 3; // Direction -1 detected
   } else {
