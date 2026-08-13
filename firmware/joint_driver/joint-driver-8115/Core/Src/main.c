@@ -716,7 +716,8 @@ int main(void)
   }
   HAL_Delay(10); /* Buffer thêm 10ms sau khi offset xong */
 
-  /* 7. Đọc VBUS và các kênh ADC sau khi offset calibration hoàn tất */
+  /* 7. Đọc VBUS thực và cập nhật g_adc_readings sau khi offset calibration hoàn tất
+   * AN TOÀN gọi từ main loop: ADC1 Regular = SOFTWARE_START (Fix 1) -> không xung đột T1_TRGO */
   ADC_ReadAllChannels();
 
   /* 8. Set initial target joint position */
@@ -790,10 +791,34 @@ int main(void)
       }
     }
 
-    /* 1. VBUS, FET_TEMP giờ được đọc an toàn trong ngắt ADC (slow loop 1kHz) */
-    // Đã gỡ ADC_ReadAllChannels() khỏi vòng lặp chính để tránh xung đột ADC Injected.
+    /* 1. Đọc VBUS qua ADC1 Regular (SOFTWARE_START, an toàn) + DRV status ở 2Hz
+     * Giữ main loop chạy nhanh cho Comm_Telemetry_Process (~100Hz+) */
+    {
+      static uint32_t last_slow_sensor_ms = 0;
+      uint32_t now_ms = HAL_GetTick();
+      if (now_ms - last_slow_sensor_ms >= 500) {
+        last_slow_sensor_ms = now_ms;
 
-    /* Cập nhật toàn bộ các trường chẩn đoán vào g_dbg_test trên Live Expressions */
+        ADC_ReadAllChannels();
+
+        /* Đọc trạng thái DRV8353 qua SoftSPI (Fault, OTW, OTSD) */
+        DRV8353_ReadStatus();
+
+        /* Đọc thêm các thanh ghi cấu hình để debug */
+        DRV8353_ReadRegister(&g_foc_controller.drv8353, 0x00, (uint16_t*)&g_dbg_test.drv_reg_00);
+        DRV8353_ReadRegister(&g_foc_controller.drv8353, 0x01, (uint16_t*)&g_dbg_test.drv_reg_01);
+        DRV8353_ReadRegister(&g_foc_controller.drv8353, 0x02, (uint16_t*)&g_dbg_test.drv_reg_02);
+        DRV8353_ReadRegister(&g_foc_controller.drv8353, 0x03, (uint16_t*)&g_dbg_test.drv_reg_03);
+        DRV8353_ReadRegister(&g_foc_controller.drv8353, 0x04, (uint16_t*)&g_dbg_test.drv_reg_04);
+        DRV8353_ReadRegister(&g_foc_controller.drv8353, 0x05, (uint16_t*)&g_dbg_test.drv_reg_05);
+        DRV8353_ReadRegister(&g_foc_controller.drv8353, 0x06, (uint16_t*)&g_dbg_test.drv_reg_06);
+
+        /* LED Heartbeat (chớp mỗi 500ms = 1Hz, thay vì chớp cuồng ở tốc độ main loop) */
+        HAL_GPIO_TogglePin(LED_1_GPIO_Port, LED_1_Pin);
+      }
+    }
+
+    /* Cập nhật live debug expressions (rất nhanh, chỉ đọc RAM) */
     g_dbg_test.raw_start = g_foc_controller.encoder.raw_angle;
     g_dbg_test.start_angle = g_foc_controller.encoder.angle_rad;
     g_dbg_test.vbus = g_adc_readings.vbus;
@@ -804,35 +829,15 @@ int main(void)
     g_dbg_test.bdtr = TIM1->BDTR;
     g_dbg_test.ccer = TIM1->CCER;
 
-    /* 2. Đọc trạng thái DRV8353 qua SPI1 (Fault, OTW, OTSD) */
-    DRV8353_ReadStatus();
-
-    /* Đọc thêm các thanh ghi cấu hình để check SPI hoạt động thực sự */
-    DRV8353_ReadRegister(&g_foc_controller.drv8353, 0x00, (uint16_t*)&g_dbg_test.drv_reg_00);
-    DRV8353_ReadRegister(&g_foc_controller.drv8353, 0x01, (uint16_t*)&g_dbg_test.drv_reg_01);
-    DRV8353_ReadRegister(&g_foc_controller.drv8353, 0x02, (uint16_t*)&g_dbg_test.drv_reg_02);
-    DRV8353_ReadRegister(&g_foc_controller.drv8353, 0x03, (uint16_t*)&g_dbg_test.drv_reg_03);
-    DRV8353_ReadRegister(&g_foc_controller.drv8353, 0x04, (uint16_t*)&g_dbg_test.drv_reg_04);
-    DRV8353_ReadRegister(&g_foc_controller.drv8353, 0x05, (uint16_t*)&g_dbg_test.drv_reg_05);
-    DRV8353_ReadRegister(&g_foc_controller.drv8353, 0x06, (uint16_t*)&g_dbg_test.drv_reg_06);
-
-    /* 3. Đọc Encoder (Đã comment lại để tránh đụng độ SPI với ngắt ADC) */
-    // AS5048A_ReadRawAngle(&g_foc_controller.encoder, &g_foc_controller.encoder.raw_angle);
-
-    /* 4. Truyền dữ liệu Telemetry thời gian thực qua USB/UART (100Hz) */
-    Comm_Telemetry_Process(&g_foc_controller);
-
-    /* 5. LED Heartbeat */
-    HAL_GPIO_TogglePin(LED_1_GPIO_Port, LED_1_Pin);
-
-    /* 6. Fault indicator on LED2 (Active-Low: RESET = ON, SET = OFF) */
+    /* Fault indicator on LED2 (Active-Low: RESET = ON, SET = OFF) */
     if (g_adc_readings.drv_has_fault) {
       HAL_GPIO_WritePin(LED_2_GPIO_Port, LED_2_Pin, GPIO_PIN_RESET);
     } else {
       HAL_GPIO_WritePin(LED_2_GPIO_Port, LED_2_Pin, GPIO_PIN_SET);
     }
 
-    HAL_Delay(5);
+    /* Truyền Telemetry 100Hz qua USB CDC - PHẢI gọi nhanh nhất có thể */
+    Comm_Telemetry_Process(&g_foc_controller);
   }
   /* USER CODE END 3 */
 }
@@ -1670,12 +1675,6 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
   slow_loop_divider++;
   if (slow_loop_divider >= 20) {
     slow_loop_divider = 0;
-
-    /* Gọi ADC_ReadAllChannels() ở đây là AN TOÀN NHẤT!
-     * Vì tại thời điểm này Injected Conversion đã hoàn tất, timer chưa kích chu kỳ mới.
-     * Các hàm PollSingleChannel bên trong sẽ hoàn tất trong <1us trước TRGO tiếp theo. */
-    ADC_ReadAllChannels();
-
     FOC_Control_SlowLoop(&g_foc_controller, 0.001f); // dt = 1ms
   }
 }
