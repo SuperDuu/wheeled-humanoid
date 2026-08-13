@@ -294,8 +294,7 @@ void Run_MotorDirectionTest(void)
   g_dbg_test.raw_start = raw_start;
   g_dbg_test.start_angle = g_foc_controller.encoder.angle_rad;
 
-  // 3. Xoay vector điện áp để nhích motor từ từ
-  float v_test_max = 8.0f; // Áp thử nghiệm 8V
+  float v_test_max = 14.0f; // Áp thử nghiệm 14V - Đủ mạnh để nhích motor qua hộp số 1:17 nhằm đo chính xác encoder_direction
   float vbus_test = (g_adc_readings.vbus > 6.0f) ? g_adc_readings.vbus : 24.0f;
   float angle = 0.0f;
 
