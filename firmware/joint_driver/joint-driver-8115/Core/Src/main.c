@@ -1620,11 +1620,12 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
     return; // Không chạy FOC khi đang calibrate
   }
 
-  // ===== 3. CHUYỂN ĐỔI ADC RAW → DÒNG ĐIỆN (Ampere) =====
-  // V_adc = I_phase × R_shunt × CSA_Gain + V_ref/2
-  // I_phase = (ADC_raw - offset) × ADC_TO_AMPS
-  float current_b = ((float)raw_ib - g_foc_controller.offset_ib) * ADC_TO_AMPS;
-  float current_c = ((float)raw_ic - g_foc_controller.offset_ia) * ADC_TO_AMPS;
+  // Do dây pha B-C động cơ vừa được đảo ở phần cứng, gán lại tín hiệu đo dòng cho đúng pha động cơ:
+  float meas_ib = ((float)raw_ib - g_foc_controller.offset_ib) * ADC_TO_AMPS;
+  float meas_ic = ((float)raw_ic - g_foc_controller.offset_ia) * ADC_TO_AMPS;
+
+  float current_b = meas_ic; // Dây pha B động cơ cắm vào cọc C trên PCB -> lấy mẫu từ meas_ic
+  float current_c = meas_ib; // Dây pha C động cơ cắm vào cọc B trên PCB -> lấy mẫu từ meas_ib
   float current_a = -(current_b + current_c); // Kirchhoff: Ia + Ib + Ic = 0
 
   // Debug: cập nhật dòng điện realtime cho monitoring
