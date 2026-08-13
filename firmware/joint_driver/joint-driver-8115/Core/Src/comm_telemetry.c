@@ -170,20 +170,19 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         run_alignment = 1;
         run_open_loop = 0;
     }
-    else if (strncmp(cmd, "OPENLOOP ", 9) == 0 || strncmp(cmd, "TEST", 4) == 0) {
+    else if (strncmp(cmd, "OPENLOOP", 8) == 0 || strncmp(cmd, "TEST", 4) == 0 || strncmp(cmd, "RUN", 3) == 0) {
         float rpm = 100.0f;
-        if (strncmp(cmd, "OPENLOOP ", 9) == 0) {
-            rpm = atof(&cmd[9]);
+        if (strlen(cmd) > 8 && strncmp(cmd, "OPENLOOP", 8) == 0) {
+            float val = atof(&cmd[8]);
+            if (val != 0.0f) rpm = val;
+        } else if (strlen(cmd) > 4 && strncmp(cmd, "TEST", 4) == 0) {
+            float val = atof(&cmd[4]);
+            if (val != 0.0f) rpm = val;
         }
-        if (rpm != 0.0f) {
-            open_loop_target_rpm = rpm;
-            run_open_loop = 1;
-            motor->m_state = MC_STATE_RUNNING;
-            TIM1_EnsureMoeEnabled();
-        } else {
-            run_open_loop = 0;
-            motor->m_state = MC_STATE_OFF;
-        }
+        open_loop_target_rpm = rpm;
+        run_open_loop = 1;
+        motor->m_state = MC_STATE_RUNNING;
+        TIM1_EnsureMoeEnabled();
     }
     else if (strncmp(cmd, "MODE ", 5) == 0) {
         int m = atoi(&cmd[5]);
