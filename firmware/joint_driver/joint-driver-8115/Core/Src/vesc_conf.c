@@ -18,7 +18,7 @@ void vesc_conf_set_defaults(mc_configuration *conf)
 
     // Switching Frequency & Limits
     conf->foc_f_zv = 20000.0f;           // 20 kHz PWM Frequency
-    conf->l_max_duty = 0.95f;            // 95% max duty cycle
+    conf->l_max_duty = 0.85f;            // 85% max duty cycle (bảo đảm minimum 7.5us cho CSA amplifier ổn định)
     conf->l_min_duty = 0.005f;           // 0.5% min duty cycle
 
     // Motor Parameters (GB8115-4 Gimbal/Actuator Motor)
@@ -34,9 +34,9 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->joint_pos_min = -3.14159265f;  // -180 degrees (-PI rad)
     conf->joint_pos_max =  3.14159265f;  // +180 degrees (+PI rad)
 
-    // Current Controller (PI D/Q) - Đã tối ưu Kp, Ki để ổn định với nội trở lớn 3.89 Ohm mà không bị quá nhạy với nhiễu/offset ADC
-    conf->foc_current_kp = 1.0f;         // Giảm từ 1.5f xuống 1.0f để êm hơn
-    conf->foc_current_ki = 200.0f;       // Giảm từ 300.0f xuống 200.0f để ổn định tích phân dòng
+    // Current Controller (PI D/Q) - Đã tối ưu Kp, Ki phù hợp với R=3.89 Ohm, L=3.14mH
+    conf->foc_current_kp = 2.0f;         // Kp = 2.0 V/A
+    conf->foc_current_ki = 1500.0f;      // Ki = 1500.0 V/(A*s)
     conf->foc_current_filter_const = 0.1f;
     conf->foc_cc_decoupling = FOC_CC_DECOUPLING_CROSS_BEMF; // BEMF + Cross decoupling
 
