@@ -693,7 +693,7 @@ void HAL_TIM_PWM_MspInit(TIM_HandleTypeDef* htim_pwm)
     */
     GPIO_InitStruct.Pin = DRV_BKIN_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Pull = GPIO_PULLUP;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     GPIO_InitStruct.Alternate = GPIO_AF12_TIM1_COMP1;
     HAL_GPIO_Init(DRV_BKIN_GPIO_Port, &GPIO_InitStruct);
@@ -935,62 +935,6 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef* huart)
     /* USER CODE BEGIN USART1_MspDeInit 1 */
 
     /* USER CODE END USART1_MspDeInit 1 */
-  }
-
-}
-
-/**
-  * @brief PCD MSP Initialization
-  * This function configures the hardware resources used in this example
-  * @param hpcd: PCD handle pointer
-  * @retval None
-  */
-void HAL_PCD_MspInit(PCD_HandleTypeDef* hpcd)
-{
-  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
-  if(hpcd->Instance==USB)
-  {
-    /* USER CODE BEGIN USB_MspInit 0 */
-
-    /* USER CODE END USB_MspInit 0 */
-
-  /** Initializes the peripherals clocks
-  */
-    PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USB;
-    PeriphClkInit.UsbClockSelection = RCC_USBCLKSOURCE_HSI48;
-    if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
-    {
-      Error_Handler();
-    }
-
-    /* Peripheral clock enable */
-    __HAL_RCC_USB_CLK_ENABLE();
-    /* USER CODE BEGIN USB_MspInit 1 */
-
-    /* USER CODE END USB_MspInit 1 */
-
-  }
-
-}
-
-/**
-  * @brief PCD MSP De-Initialization
-  * This function freeze the hardware resources used in this example
-  * @param hpcd: PCD handle pointer
-  * @retval None
-  */
-void HAL_PCD_MspDeInit(PCD_HandleTypeDef* hpcd)
-{
-  if(hpcd->Instance==USB)
-  {
-    /* USER CODE BEGIN USB_MspDeInit 0 */
-
-    /* USER CODE END USB_MspDeInit 0 */
-    /* Peripheral clock disable */
-    __HAL_RCC_USB_CLK_DISABLE();
-    /* USER CODE BEGIN USB_MspDeInit 1 */
-
-    /* USER CODE END USB_MspDeInit 1 */
   }
 
 }
