@@ -402,7 +402,7 @@ void Run_EncoderAlignment(void)
   HAL_Delay(5);
   DRV8353_SetCSAGain(&g_foc_controller.drv8353, DRV8353_CSA_GAIN_20V);
 
-  float vd_align = 12.0f; // 12V voltage for alignment
+  float vd_align = 8.0f; // 8.0V voltage for alignment (dòng nhẹ ~0.9A RMS mát máy)
 
   // STEP 1: Lock to Electrical Zero (theta_e = 0)
   for (int step = 0; step <= 50; step++) {
