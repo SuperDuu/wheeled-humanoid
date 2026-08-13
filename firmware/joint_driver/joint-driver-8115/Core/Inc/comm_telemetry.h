@@ -68,6 +68,7 @@ typedef struct {
 /* Open-Loop Test Run Control Globals (Bypasses PID/Current loops) */
 extern volatile uint8_t run_open_loop;
 extern volatile float open_loop_target_rpm;
+extern volatile float open_loop_current_rpm;
 extern volatile float open_loop_angle;
 
 /* Public Functions (Pure USB CDC Telemetry) */
