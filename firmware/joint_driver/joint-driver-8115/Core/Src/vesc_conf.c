@@ -40,13 +40,13 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_current_filter_const = 0.1f;
     conf->foc_cc_decoupling = FOC_CC_DECOUPLING_CROSS_BEMF; // BEMF + Cross decoupling
 
-    // Speed Controller (PID)
-    conf->s_pid_kp = 0.005f;            // Kp cho ERPM speed loop
-    conf->s_pid_ki = 0.05f;             // Ki cho 1kHz slow loop (tích phân nhanh trong 200ms)
+    // Speed Controller (PID) - Tối ưu tự phá ma sát tĩnh khi khởi động
+    conf->s_pid_kp = 0.008f;            // Kp cho ERPM speed loop
+    conf->s_pid_ki = 0.10f;             // Ki tích phân nhanh phá ma sát tĩnh trong 50ms
     conf->s_pid_kd = 0.00001f;
     conf->s_pid_kd_filter = 0.2f;
     conf->s_pid_min_erpm = 5.0f;        // 5 ERPM (~0.2 RPM)
-    conf->s_pid_ramp_erpms_s = 10000.0f; // Ramp gia tốc 10000 ERPM/s (~470 RPM/s)
+    conf->s_pid_ramp_erpms_s = 5000.0f; // Ramp gia tốc mượt 5000 ERPM/s (~238 RPM/s)
 
     // Position Controller (PID + Process D) - Tuned for 1:17 Cycloid Joint
     conf->p_pid_kp = 3.5f;               // Smooth proportional gain (was 15.0f causing bang-bang saturation)
