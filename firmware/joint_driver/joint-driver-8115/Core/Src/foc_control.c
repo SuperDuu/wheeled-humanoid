@@ -175,9 +175,13 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
 
     state_m->v_bus = vbus > 0.0f ? vbus : 24.0f;
 
-    // 1. ALWAYS Read Encoder & Update Angle (even in IDLE/OFF state)
-    float raw_enc_rad = foc->encoder.angle_rad;
-    AS5048A_ReadRadians(&foc->encoder, &raw_enc_rad);
+    // 1. Đọc Encoder: Nếu SPI3 rảnh, đọc ngay (sẽ xong trong ~3.5µs @ 5.3MHz).
+    // Nếu SPI3 bận (rất hiếm), fallback về cache nhằm tránh ISR treo.
+    // SPI được cập nhật đầy đủ ở Slow Loop 1kHz (FOC_Control_SlowLoop).
+    float raw_enc_rad = foc->encoder.angle_rad; // default = cache
+    if (!(foc->encoder.hspi->Instance->SR & SPI_SR_BSY)) {
+        AS5048A_ReadRadians(&foc->encoder, &raw_enc_rad);
+    }
     foc_update_cycloidal_joint_angle(motor, raw_enc_rad);
 
     float enc_rad_dir = (conf_now->encoder_direction == -1) ? (2.0f * (float)M_PI - raw_enc_rad) : raw_enc_rad;
@@ -282,7 +286,18 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
   */
 void FOC_Control_SlowLoop(FOC_Controller_t *foc, float dt)
 {
-    if (foc == NULL || foc->motor.m_state != MC_STATE_RUNNING) return;
+    if (foc == NULL) return;
+
+    // Đọc Encoder qua SPI3 ở đây (1kHz) - an toàn, SysTick hoạt động bình thường.
+    // Cập nhật cache foc->encoder.angle_rad để ISR 20kHz sử dụng.
+    // Đọc cả khi IDLE để góc cơ khật luôn chính xác.
+    {
+        float enc_rad_sl = foc->encoder.angle_rad;
+        AS5048A_ReadRadians(&foc->encoder, &enc_rad_sl);
+        foc_update_cycloidal_joint_angle(&foc->motor, enc_rad_sl);
+    }
+
+    if (foc->motor.m_state != MC_STATE_RUNNING) return;
 
     motor_all_state_t *motor = &foc->motor;
 
