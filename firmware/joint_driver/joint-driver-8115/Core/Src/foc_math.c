@@ -298,8 +298,11 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	float output = p_term + motor->m_speed_i_term + d_term;
 	utils_truncate_number_abs(&output, 1.0f);
 
-	motor->m_speed_i_term += error * conf_now->s_pid_ki * dt;
-	utils_truncate_number_abs(&motor->m_speed_i_term, 1.0f);
+	// Conditional Integration Anti-Windup: Pause integral accumulation during output saturation
+	if (!((output >= 1.0f && error > 0.0f) || (output <= -1.0f && error < 0.0f))) {
+		motor->m_speed_i_term += error * conf_now->s_pid_ki * dt;
+		utils_truncate_number_abs(&motor->m_speed_i_term, 1.0f);
+	}
 
 	motor->m_iq_set = output * conf_now->l_current_max;
 }
