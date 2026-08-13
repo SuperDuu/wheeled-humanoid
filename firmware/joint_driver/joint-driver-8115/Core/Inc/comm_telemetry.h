@@ -65,6 +65,11 @@ typedef struct {
 } telemetry_packet_t;
 #pragma pack(pop)
 
+/* Open-Loop Test Run Control Globals (Bypasses PID/Current loops) */
+extern volatile uint8_t run_open_loop;
+extern volatile float open_loop_target_rpm;
+extern volatile float open_loop_angle;
+
 /* Public Functions (Pure USB CDC Telemetry) */
 void Comm_Telemetry_Init(void);
 void Comm_Telemetry_Process(FOC_Controller_t *foc);

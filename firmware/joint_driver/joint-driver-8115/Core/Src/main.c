@@ -1635,6 +1635,29 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
 
   // ===== 5. CHẠY FOC CURRENT CONTROL ISR (Chỉ chạy khi không trong chế độ test/align) =====
   const float dt = 1.0f / 20000.0f; // 50µs = 1/20kHz
+  if (run_open_loop == 1) {
+    TIM1_EnsureMoeEnabled();
+    float elec_rad_s = (open_loop_target_rpm * 21.0f * 2.0f * 3.14159265f) / 60.0f;
+    open_loop_angle += elec_rad_s * dt;
+    utils_norm_angle_rad((float*)&open_loop_angle);
+
+    float v_open = 6.0f; // 6V open loop voltage vector
+    float valpha = (v_open / vbus) * cosf(open_loop_angle);
+    float vbeta  = (v_open / vbus) * sinf(open_loop_angle);
+
+    uint32_t ta, tb, tc, sector;
+    foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
+
+    uint32_t period = htim1.Init.Period;
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
+    g_foc_controller.duty_a = (float)ta / 1000.0f;
+    g_foc_controller.duty_b = (float)tb / 1000.0f;
+    g_foc_controller.duty_c = (float)tc / 1000.0f;
+    return;
+  }
+
   if (run_direction_test != 1 && run_alignment != 1) {
     FOC_Control_Current_ISR(&g_foc_controller, current_a, current_b, vbus, temp_fet, dt);
 

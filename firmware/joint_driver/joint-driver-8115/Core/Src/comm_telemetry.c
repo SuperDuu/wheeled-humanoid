@@ -24,6 +24,11 @@ static uint32_t s_last_telemetry_tx_ms = 0;
 static char s_rx_cmd_buffer[64];
 static uint8_t s_rx_cmd_idx = 0;
 
+/* Open-Loop Test Run Control Globals */
+volatile uint8_t run_open_loop = 0;
+volatile float open_loop_target_rpm = 100.0f;
+volatile float open_loop_angle = 0.0f;
+
 /* Checksum calculation */
 static uint16_t CalculateChecksum(const uint8_t *data, uint16_t len)
 {
@@ -153,22 +158,36 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         p++;
     }
 
-    if (strncmp(cmd, "STOP", 4) == 0) {
+    if (strncmp(cmd, "STOP", 4) == 0 || strncmp(cmd, "OFF", 3) == 0) {
         motor->m_state = MC_STATE_OFF;
         motor->m_iq_set = 0.0f;
         motor->m_speed_command_rpm = 0.0f;
-        motor->m_speed_pid_set_rpm = 0.0f;
-        motor->m_pos_pid_set = motor->m_joint_angle;
         run_foc_mode = 0;
-        speed_target_dbg = 0.0f;
-        iq_target_dbg = 0.0f;
+        run_open_loop = 0;
     }
     else if (strncmp(cmd, "ALIGN", 5) == 0) {
         extern volatile int run_alignment;
         run_alignment = 1;
+        run_open_loop = 0;
+    }
+    else if (strncmp(cmd, "OPENLOOP ", 9) == 0 || strncmp(cmd, "TEST", 4) == 0) {
+        float rpm = 100.0f;
+        if (strncmp(cmd, "OPENLOOP ", 9) == 0) {
+            rpm = atof(&cmd[9]);
+        }
+        if (rpm != 0.0f) {
+            open_loop_target_rpm = rpm;
+            run_open_loop = 1;
+            motor->m_state = MC_STATE_RUNNING;
+            TIM1_EnsureMoeEnabled();
+        } else {
+            run_open_loop = 0;
+            motor->m_state = MC_STATE_OFF;
+        }
     }
     else if (strncmp(cmd, "MODE ", 5) == 0) {
         int m = atoi(&cmd[5]);
+        run_open_loop = 0;
         if (m == 0) {
             motor->m_state = MC_STATE_OFF;
             motor->m_iq_set = 0.0f;

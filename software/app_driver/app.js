@@ -297,6 +297,15 @@ class FOCOscilloscopeStudio {
       });
     });
 
+    // Open-Loop Test Run Button (Bypasses PID/Current loops)
+    const btnOpenloop = document.getElementById('btn-openloop-test');
+    if (btnOpenloop) {
+      btnOpenloop.addEventListener('click', () => {
+        this.sendCommand('OPENLOOP 100');
+        this.appendLog('⚡ TEST RUN (Open-Loop 100 RPM) started. Bypassing PID & Encoder loops!', 'success');
+      });
+    }
+
     // Align Encoder Button
     const btnAlign = document.getElementById('btn-align');
     if (btnAlign) {
