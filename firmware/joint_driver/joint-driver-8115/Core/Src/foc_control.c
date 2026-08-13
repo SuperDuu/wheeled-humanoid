@@ -189,7 +189,7 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     foc_update_cycloidal_joint_angle(motor, raw_enc_rad);
 
     float enc_rad_dir = (conf_now->encoder_direction == -1) ? (2.0f * (float)M_PI - raw_enc_rad) : raw_enc_rad;
-    float elec_angle = (enc_rad_dir * (float)conf_now->foc_motor_pole_pairs) - foc->zero_electric_angle;
+    float elec_angle = fmodf((enc_rad_dir * (float)conf_now->foc_motor_pole_pairs) - foc->zero_electric_angle, 2.0f * (float)M_PI);
     utils_norm_angle_rad(&elec_angle);
 
     state_m->phase = elec_angle;

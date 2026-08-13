@@ -1641,7 +1641,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
     open_loop_angle += elec_rad_s * dt;
     utils_norm_angle_rad((float*)&open_loop_angle);
 
-    float v_open = 6.0f; // 6V open loop voltage vector
+    float v_open = 4.0f; // 4V open loop voltage vector for smooth quiet rotation
     float valpha = (v_open / vbus) * cosf(open_loop_angle);
     float vbeta  = (v_open / vbus) * sinf(open_loop_angle);
 
