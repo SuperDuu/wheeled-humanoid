@@ -427,7 +427,7 @@ void Run_EncoderAlignment(void)
   g_dbg_align.enc_dir = g_foc_controller.conf.encoder_direction;
 
   // === PHASE 1: Ramp Vd từ 0 → vd_align trong 500ms ===
-  float vd_align = 8.0f; // 8V - đủ mạnh để lock rotor qua hộp số 1:17 với nội trở lớn 3.89 Ohm
+  float vd_align = 14.0f; // 14V (~2.4A) - Đủ lực kéo vượt ma sát hộp số 1:17 để rotor khóa chuẩn vào electrical zero
   int ramp_steps = 100;  // 100 steps × 5ms = 500ms
 
   for (int i = 0; i <= ramp_steps; i++) {
