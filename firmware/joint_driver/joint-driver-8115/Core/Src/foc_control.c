@@ -281,8 +281,8 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     foc_svm(state_m->mod_alpha_raw, state_m->mod_beta_raw, conf_now->l_max_duty, 1000, &ta, &tb, &tc, &sector);
 
     foc->duty_a = (float)ta / 1000.0f;
-    foc->duty_b = (float)tb / 1000.0f;
-    foc->duty_c = (float)tc / 1000.0f;
+    foc->duty_b = (float)tc / 1000.0f; // Swap Ch2/Ch3 to match hardware phase sequence with encoder
+    foc->duty_c = (float)tb / 1000.0f;
 }
 
 /**
