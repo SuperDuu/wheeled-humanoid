@@ -18,7 +18,7 @@ void vesc_conf_set_defaults(mc_configuration *conf)
 
     // Switching Frequency & Limits
     conf->foc_f_zv = 20000.0f;           // 20 kHz PWM Frequency
-    conf->l_max_duty = 0.85f;            // 85% max duty cycle (bảo đảm minimum 7.5us cho CSA amplifier ổn định)
+    conf->l_max_duty = 0.92f;            // 92% max duty cycle
     conf->l_min_duty = 0.005f;           // 0.5% min duty cycle
 
     // Motor Parameters (GB8115-4 Gimbal/Actuator Motor)
