@@ -1638,8 +1638,8 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
   if (run_open_loop == 1) {
     TIM1_EnsureMoeEnabled();
 
-    // Smooth open-loop acceleration ramp (150 RPM / second)
-    float ramp_step = 150.0f * dt;
+    // Smooth open-loop acceleration ramp (250 RPM / second)
+    float ramp_step = 250.0f * dt;
     if (open_loop_current_rpm < open_loop_target_rpm) {
       open_loop_current_rpm += ramp_step;
       if (open_loop_current_rpm > open_loop_target_rpm) open_loop_current_rpm = open_loop_target_rpm;
@@ -1655,8 +1655,8 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
     g_foc_controller.motor.m_speed_est_fast = elec_rad_s;
 
     float abs_rpm = fabsf(open_loop_current_rpm);
-    float v_open = 5.0f + (abs_rpm / 500.0f) * 7.0f; // 5.0V tại 0RPM -> 12.0V tại 500RPM
-    if (v_open > 14.0f) v_open = 14.0f;
+    float v_open = 6.0f + (abs_rpm / 300.0f) * 8.0f; // 6.0V tại 0RPM -> 14.0V tại 300RPM (dòng khỏe, lực kéo mạnh)
+    if (v_open > 16.0f) v_open = 16.0f;
     float valpha = (v_open / vbus) * cosf(open_loop_angle);
     float vbeta  = (v_open / vbus) * sinf(open_loop_angle);
 

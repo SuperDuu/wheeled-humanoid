@@ -301,15 +301,15 @@ class FOCOscilloscopeStudio {
     const btnFwd = document.getElementById('btn-openloop-fwd');
     if (btnFwd) {
       btnFwd.addEventListener('click', () => {
-        this.sendCommand('OPENLOOP 100');
-        this.appendLog('⚡ TEST RUN (+100 RPM) started.', 'success');
+        this.sendCommand('OPENLOOP 300');
+        this.appendLog('⚡ TEST RUN (+300 RPM) started.', 'success');
       });
     }
     const btnRev = document.getElementById('btn-openloop-rev');
     if (btnRev) {
       btnRev.addEventListener('click', () => {
-        this.sendCommand('OPENLOOP -100');
-        this.appendLog('🔄 TEST RUN (-100 RPM Reverse) started.', 'success');
+        this.sendCommand('OPENLOOP -300');
+        this.appendLog('🔄 TEST RUN (-300 RPM Reverse) started.', 'success');
       });
     }
 
