@@ -27,6 +27,7 @@ static uint8_t s_rx_cmd_idx = 0;
 /* Open-Loop Test Run Control Globals */
 volatile uint8_t run_open_loop = 0;
 volatile float open_loop_target_rpm = 100.0f;
+volatile float open_loop_current_rpm = 0.0f;
 volatile float open_loop_angle = 0.0f;
 
 /* Checksum calculation */
@@ -180,6 +181,7 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
             if (val != 0.0f) rpm = val;
         }
         open_loop_target_rpm = rpm;
+        open_loop_current_rpm = 0.0f;
         run_open_loop = 1;
         motor->m_state = MC_STATE_RUNNING;
         TIM1_EnsureMoeEnabled();
