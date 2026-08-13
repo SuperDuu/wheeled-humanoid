@@ -1633,13 +1633,15 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
   float temp_fet = g_adc_readings.fet_temp;
   if (temp_fet < -20.0f || temp_fet > 150.0f) temp_fet = 25.0f;
 
-  // ===== 5. CHẠY FOC CURRENT CONTROL ISR (Chỉ chạy khi không trong chế độ test/align) =====
-  const float dt = 1.0f / 20000.0f; // 50µs = 1/20kHz
+  // ===== 5. CHẠY FOC CURRENT CONTROL ISR (RepetitionCounter=1 -> ISR chạy ở 10kHz) =====
+  const float dt = 1.0f / 10000.0f; // 100µs = 1/10kHz (TRGO fires once per 2 PWM periods)
   if (run_open_loop == 1) {
     TIM1_EnsureMoeEnabled();
-    float elec_rad_s = (open_loop_target_rpm * 21.0f * 2.0f * 3.14159265f) / 60.0f;
+    float pole_pairs = (float)g_foc_controller.conf.foc_motor_pole_pairs;
+    float elec_rad_s = (open_loop_target_rpm * pole_pairs * 2.0f * 3.14159265f) / 60.0f;
     open_loop_angle += elec_rad_s * dt;
     utils_norm_angle_rad((float*)&open_loop_angle);
+    g_foc_controller.motor.m_speed_est_fast = elec_rad_s;
 
     float abs_rpm = fabsf(open_loop_target_rpm);
     float v_open = 3.0f + (abs_rpm / 500.0f) * 9.0f; // V/f scaling: 3.0V tại 0RPM -> 12.0V tại 500RPM
