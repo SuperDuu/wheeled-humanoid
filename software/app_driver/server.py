@@ -227,7 +227,7 @@ class TelemetryManager:
                             computed_chk = sum(packet_bytes[4:-2]) & 0xFFFF
                             if computed_chk != chk_val:
                                 self.error_count += 1
-                                buffer = buffer[PACKET_SIZE:]
+                                buffer.pop(0)
                                 continue
 
                             pkt_dict = {

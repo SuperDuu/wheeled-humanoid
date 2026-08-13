@@ -46,9 +46,9 @@ void Comm_Telemetry_Init(void)
 /**
   * @brief  Transmit high-speed binary telemetry frame over Native USB CDC
   */
-void Comm_Telemetry_Send(FOC_Controller_t *foc)
+bool Comm_Telemetry_Send(FOC_Controller_t *foc)
 {
-    if (foc == NULL) return;
+    if (foc == NULL) return false;
 
     motor_all_state_t *motor = &foc->motor;
     motor_state_t *state_m = &motor->m_motor_state;
@@ -113,8 +113,10 @@ void Comm_Telemetry_Send(FOC_Controller_t *foc)
         USBD_CDC_HandleTypeDef *hcdc = (USBD_CDC_HandleTypeDef*)hUsbDeviceFS.pClassData;
         if (hcdc->TxState == 0) {
             CDC_Transmit_FS((uint8_t*)&packet, sizeof(packet));
+            return true;
         }
     }
+    return false;
 }
 
 /**
@@ -213,8 +215,9 @@ void Comm_Telemetry_Process(FOC_Controller_t *foc)
     // Transmit telemetry at 100Hz (every 10ms)
     uint32_t now = HAL_GetTick();
     if (now - s_last_telemetry_tx_ms >= 10) {
-        s_last_telemetry_tx_ms = now;
-        Comm_Telemetry_Send(foc);
+        if (Comm_Telemetry_Send(foc)) {
+            s_last_telemetry_tx_ms = now;
+        }
     }
 }
 
