@@ -179,13 +179,10 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
      * Sau fix: vbus=0.9V < 5.0f -> fallback 24.0f -> FOC hoạt động đúng. */
     state_m->v_bus = vbus > 5.0f ? vbus : 24.0f;
 
-    // 1. Đọc Encoder: Nếu SPI3 rảnh, đọc ngay (sẽ xong trong ~3.5µs @ 5.3MHz).
-    // Nếu SPI3 bận (rất hiếm), fallback về cache nhằm tránh ISR treo.
-    // SPI được cập nhật đầy đủ ở Slow Loop 1kHz (FOC_Control_SlowLoop).
-    float raw_enc_rad = foc->encoder.angle_rad; // default = cache
-    if (!(foc->encoder.hspi->Instance->SR & SPI_SR_BSY)) {
-        AS5048A_ReadRadians(&foc->encoder, &raw_enc_rad);
-    }
+    // 1. Đọc Encoder 20kHz trực tiếp từ SPI3.
+    // SPI3 chỉ do ISR quản lý 100% độc quyền (không đọc ở Slow Loop nữa) -> triệt tiêu hoàn toàn nhiễu giật khục 1kHz.
+    float raw_enc_rad = foc->encoder.angle_rad;
+    AS5048A_ReadRadians(&foc->encoder, &raw_enc_rad);
     foc_update_cycloidal_joint_angle(motor, raw_enc_rad);
 
     float enc_rad_dir = (conf_now->encoder_direction == -1) ? (2.0f * (float)M_PI - raw_enc_rad) : raw_enc_rad;
@@ -220,11 +217,13 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
         state_m->vq_int = 0.0f;
         state_m->vd = 0.0f;
         state_m->vq = 0.0f;
-        foc->duty_a = foc->duty_b = foc->duty_c = 0.5f;
+        foc->duty_a = 0.0f;
+        foc->duty_b = 0.0f;
+        foc->duty_c = 0.0f;
         return;
     }
 
-    // 5. Current Control PI Loop
+    // 5. Standard VESC Current PI Controller (Id -> Vd, Iq -> Vq)
     if (motor->m_control_mode != CONTROL_MODE_CURRENT) {
         state_m->iq_target = motor->m_iq_set;
     }
@@ -293,14 +292,8 @@ void FOC_Control_SlowLoop(FOC_Controller_t *foc, float dt)
 {
     if (foc == NULL) return;
 
-    // Đọc Encoder qua SPI3 ở đây (1kHz) - an toàn, SysTick hoạt động bình thường.
-    // Cập nhật cache foc->encoder.angle_rad để ISR 20kHz sử dụng.
-    // Đọc cả khi IDLE để góc cơ khật luôn chính xác.
-    {
-        float enc_rad_sl = foc->encoder.angle_rad;
-        AS5048A_ReadRadians(&foc->encoder, &enc_rad_sl);
-        foc_update_cycloidal_joint_angle(&foc->motor, enc_rad_sl);
-    }
+    // Slow Loop 1kHz: Cập nhật joint angle accumulator từ cache của 20kHz ISR
+    foc_update_cycloidal_joint_angle(&foc->motor, foc->encoder.angle_rad);
 
     if (foc->motor.m_state != MC_STATE_RUNNING) return;
 
