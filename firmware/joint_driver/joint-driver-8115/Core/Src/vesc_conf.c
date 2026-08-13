@@ -34,9 +34,9 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->joint_pos_min = -3.14159265f;  // -180 degrees (-PI rad)
     conf->joint_pos_max =  3.14159265f;  // +180 degrees (+PI rad)
 
-    // Current Controller (PI D/Q) - Đã tối ưu Kp = R = 3.89 V/A cho phản hồi tức thì
-    conf->foc_current_kp = 3.89f;        // Kp = 3.89 V/A (khớp điện trở cuộn dây 3.89 Ohm)
-    conf->foc_current_ki = 1000.0f;      // Ki = 1000.0 V/(A*s)
+    // Current Controller (PI D/Q) - Tính theo công thức pole-zero chuyên gia (50% nominal bandwidth ~500Hz)
+    conf->foc_current_kp = 10.0f;        // Kp = L * w_c = 0.00314 * 3141 ≈ 10.0 V/A
+    conf->foc_current_ki = 12000.0f;     // Ki = R * w_c = 3.89 * 3141 ≈ 12000.0 V/(A*s)
     conf->foc_current_filter_const = 0.1f;
     conf->foc_cc_decoupling = FOC_CC_DECOUPLING_CROSS_BEMF; // BEMF + Cross decoupling
 

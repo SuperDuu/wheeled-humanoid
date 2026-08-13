@@ -185,9 +185,11 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     AS5048A_ReadRadians(&foc->encoder, &raw_enc_rad);
     foc_update_cycloidal_joint_angle(motor, raw_enc_rad);
 
-    float enc_rad_dir = (conf_now->encoder_direction == -1) ? (2.0f * (float)M_PI - raw_enc_rad) : raw_enc_rad;
-    float elec_angle = fmodf((enc_rad_dir * (float)conf_now->foc_motor_pole_pairs) - foc->zero_electric_angle, 2.0f * (float)M_PI);
-    utils_norm_angle_rad(&elec_angle);
+    float enc_diff = (conf_now->encoder_direction == -1) ?
+                     (foc->zero_electric_angle - raw_enc_rad) :
+                     (raw_enc_rad - foc->zero_electric_angle);
+    float elec_angle = fmodf(enc_diff * (float)conf_now->foc_motor_pole_pairs, 2.0f * (float)M_PI);
+    if (elec_angle < 0.0f) elec_angle += 2.0f * (float)M_PI;
 
     state_m->phase = elec_angle;
     utils_fast_sincos(elec_angle, &state_m->phase_sin, &state_m->phase_cos);
@@ -306,7 +308,7 @@ void FOC_Control_SlowLoop(FOC_Controller_t *foc, float dt)
 
     // Dùng trực tiếp góc điện của Encoder (m_motor_state.phase) thay vì góc điện ước lượng của Observer để tính toán tốc độ bằng PLL
     foc_pll_run(motor->m_motor_state.phase, dt, &motor->m_pll_phase, &motor->m_pll_speed, motor->m_conf);
-    motor->m_speed_est_fast = (motor->m_conf != NULL && motor->m_conf->encoder_direction == -1) ? -motor->m_pll_speed : motor->m_pll_speed;
+    motor->m_speed_est_fast = motor->m_pll_speed;
 
     // 2. Run Position PID or Speed PID based on Control Mode
     if (motor->m_control_mode == CONTROL_MODE_POS) {
