@@ -223,6 +223,13 @@ class TelemetryManager:
                              speed, speed_tgt, vbus, temp,
                              mode, state, fault, reserved, chk_val) = unpacked
 
+                            # Verify 16-bit checksum (firmware: sum of bytes[4:-2])
+                            computed_chk = sum(packet_bytes[4:-2]) & 0xFFFF
+                            if computed_chk != chk_val:
+                                self.error_count += 1
+                                buffer = buffer[PACKET_SIZE:]
+                                continue
+
                             pkt_dict = {
                                 "timestamp_ms": ts_ms,
                                 "i_a": round(ia, 4),
@@ -256,9 +263,13 @@ class TelemetryManager:
                             now = time.time()
                             if now - self.last_console_log_time >= self.console_log_interval:
                                 self.last_console_log_time = now
-                                mode_names = ["IDLE", "CURRENT", "BRAKE", "SPEED", "POS"]
+                                # mode = control_mode enum: 0=DUTY,1=POWER,2=CURRENT,3=BRAKE,4=SPEED,5=POS,6=HANDBRAKE,7=OPENLOOP
+                                mode_names = ["DUTY", "POWER", "CURRENT", "BRAKE", "SPEED", "POS", "HANDBRAKE", "OPENLOOP"]
                                 m_str = mode_names[mode] if mode < len(mode_names) else f"MODE_{mode}"
-                                log_line = f"Telemetry @ {self.fps:.0f}Hz | {m_str} | Id={id_c:+.2f}A, Iq={iq_c:+.2f}A (Tgt={iq_tgt:+.2f}A) | RPM={speed:+.1f}/{speed_tgt:+.1f} | Vbus={vbus:.1f}V"
+                                # state = mc_state enum: 0=OFF,1=DETECTING,2=RUNNING,3=FULL_BRAKE
+                                state_names = ["OFF", "DETECTING", "RUNNING", "BRAKE"]
+                                s_str = state_names[state] if state < len(state_names) else f"STATE_{state}"
+                                log_line = f"Telemetry @ {self.fps:.0f}Hz | mode={m_str} state={s_str} | Id={id_c:+.2f}A, Iq={iq_c:+.2f}A (Tgt={iq_tgt:+.2f}A) | RPM={speed:+.1f}/{speed_tgt:+.1f} | Vbus={vbus:.1f}V"
                                 if fault > 0:
                                     log_line += f" | FAULT={fault}"
                                 self.log_diagnostic(log_line)
