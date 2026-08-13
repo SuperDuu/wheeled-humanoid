@@ -473,16 +473,11 @@ void Run_EncoderAlignment(void)
   float enc_zero = 0.0f;
   AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_zero);
 
-  float enc_zero_dir = (g_foc_controller.conf.encoder_direction == -1) ? (2.0f * 3.14159265f - enc_zero) : enc_zero;
-  float pole_pairs = (float)g_foc_controller.conf.foc_motor_pole_pairs;
-  float zero_e = fmodf(enc_zero_dir * pole_pairs, 2.0f * 3.14159265f);
-  if (zero_e < 0.0f) zero_e += 2.0f * 3.14159265f;
-
-  g_foc_controller.zero_electric_angle = zero_e;
+  g_foc_controller.zero_electric_angle = enc_zero;
   g_foc_controller.aligned = true;
 
   // Log debug
-  g_dbg_align.zero_electric_angle = zero_e;
+  g_dbg_align.zero_electric_angle = enc_zero;
   g_dbg_align.encoder_rad = enc_zero;
   g_dbg_align.aligned = 1;
 
