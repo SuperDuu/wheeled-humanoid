@@ -411,8 +411,8 @@ void Run_EncoderAlignment(void)
     uint32_t ta, tb, tc, sector;
     foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tc * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tb * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
     HAL_Delay(5);
   }
   HAL_Delay(500); // Wait for rotor to lock at elec zero
@@ -429,8 +429,8 @@ void Run_EncoderAlignment(void)
     uint32_t ta, tb, tc, sector;
     foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tc * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tb * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
     HAL_Delay(5);
   }
 
@@ -464,8 +464,8 @@ void Run_EncoderAlignment(void)
     uint32_t ta, tb, tc, sector;
     foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tc * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tb * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
     HAL_Delay(5);
   }
   HAL_Delay(500);
@@ -493,8 +493,8 @@ void Run_EncoderAlignment(void)
     uint32_t ta, tb, tc, sector;
     foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tc * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tb * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
     HAL_Delay(5);
   }
 
@@ -1615,12 +1615,9 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
     return; // Không chạy FOC khi đang calibrate
   }
 
-  // Do dây pha B-C động cơ vừa được đảo ở phần cứng, gán lại tín hiệu đo dòng cho đúng pha động cơ:
-  float meas_ib = ((float)raw_ib - g_foc_controller.offset_ib) * ADC_TO_AMPS;
-  float meas_ic = ((float)raw_ic - g_foc_controller.offset_ia) * ADC_TO_AMPS;
-
-  float current_b = meas_ic; // Dây pha B động cơ cắm vào cọc C trên PCB -> lấy mẫu từ meas_ic
-  float current_c = meas_ib; // Dây pha C động cơ cắm vào cọc B trên PCB -> lấy mẫu từ meas_ib
+  // Chuyển đổi dòng điện 3 pha chuẩn (Channel 1 = Pha A, Channel 2 = Pha B, Channel 3 = Pha C)
+  float current_b = ((float)raw_ib - g_foc_controller.offset_ib) * ADC_TO_AMPS;
+  float current_c = ((float)raw_ic - g_foc_controller.offset_ia) * ADC_TO_AMPS;
   float current_a = -(current_b + current_c); // Kirchhoff: Ia + Ib + Ic = 0
 
   // Debug: cập nhật dòng điện realtime cho monitoring
@@ -1647,9 +1644,9 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1,
                           (uint32_t)(g_foc_controller.duty_a * (float)period));
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2,
-                          (uint32_t)(g_foc_controller.duty_c * (float)period)); // Pha B nối cọc C -> cấp duty_c cho Ch2
+                          (uint32_t)(g_foc_controller.duty_b * (float)period));
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3,
-                          (uint32_t)(g_foc_controller.duty_b * (float)period)); // Pha C nối cọc B -> cấp duty_b cho Ch3
+                          (uint32_t)(g_foc_controller.duty_c * (float)period));
 
     // ===== 7. SLOW LOOP 1kHz (chia 20 lần từ 20kHz) =====
     // Cũng chỉ chạy khi FOC active - SlowLoop đọc SPI3 encoder sẽ xung đột với alignment SPI reads
