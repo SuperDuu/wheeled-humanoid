@@ -368,8 +368,8 @@ void Run_MotorDirectionTest(void)
   while (diff < -3.14159265f) diff += 2.0f * 3.14159265f;
   g_dbg_test.diff_angle = diff;
 
-  // 7. Chiều dây pha B-C đã được đấu chuẩn phần cứng tương thích encoder_direction = 1
-  g_foc_controller.conf.encoder_direction = 1;
+  // 7. Direction test chỉ kiểm tra motor có quay hay không — chiều thật do ALIGN Step 5 xác định
+  // KHÔNG hardcode encoder_direction ở đây nữa (ALIGN open-loop handoff sẽ auto-detect chính xác)
   if (diff > 0.05f || diff < -0.05f) {
     test_result = 2; // OK
   } else {
@@ -457,7 +457,7 @@ void Run_EncoderAlignment(void)
   g_dbg_align.vbus = vbus;
   g_dbg_align.enc_dir = g_foc_controller.conf.encoder_direction;
 
-  // STEP 4: Lock back to Electrical Zero (theta_e = 0) and calculate zero_electric_angle
+  // STEP 4: Lock back to Electrical Zero (theta_e = 0) — initial rough offset
   for (int step = 0; step <= 50; step++) {
     float vd = vd_align * (float)step / 50.0f;
     float valpha = vd / vbus, vbeta = 0.0f;
@@ -474,14 +474,75 @@ void Run_EncoderAlignment(void)
   AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_zero);
 
   g_foc_controller.zero_electric_angle = enc_zero;
-  g_foc_controller.aligned = true;
 
   // Log debug
   g_dbg_align.zero_electric_angle = enc_zero;
   g_dbg_align.encoder_rad = enc_zero;
   g_dbg_align.aligned = 1;
 
-  // STEP 5: Smooth ramp down to 0V
+  // STEP 5: Open-Loop Handoff Calibration — verify & auto-correct theta_e offset
+  // Quay open-loop chậm 1 vòng điện (theta_e: 0 → 2*PI), đo encoder trước/sau.
+  // So sánh chiều encoder tăng/giảm với chiều stator field quay → tự chỉnh offset.
+  float enc_before_ol = 0.0f;
+  AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_before_ol);
+
+  // Quay voltage vector forward 1 vòng điện chậm (200 bước × 5ms = 1 giây)
+  float ol_vd = 6.0f; // Áp nhẹ hơn alignment (6V thay vì 8V)
+  for (int step = 0; step <= 200; step++) {
+    float angle = 2.0f * 3.14159265f * (float)step / 200.0f;
+    float valpha_ol = (ol_vd / vbus) * cosf(angle);
+    float vbeta_ol  = (ol_vd / vbus) * sinf(angle);
+    uint32_t ta, tb, tc, sector;
+    foc_svm(valpha_ol, vbeta_ol, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
+    HAL_Delay(5);
+  }
+
+  float enc_after_ol = 0.0f;
+  AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_after_ol);
+
+  // Tính delta encoder (có wrap-around handling)
+  float ol_diff = enc_after_ol - enc_before_ol;
+  while (ol_diff > 3.14159265f) ol_diff -= 2.0f * 3.14159265f;
+  while (ol_diff < -3.14159265f) ol_diff += 2.0f * 3.14159265f;
+
+  // Voltage vector quay forward (angle tăng) = stator field tăng.
+  // Nếu encoder GIẢM (ol_diff < 0) → enc_direction thực tế là -1, cần dùng nhánh đảo.
+  // Nếu encoder TĂNG (ol_diff > 0) → enc_direction thực tế là +1.
+  if (ol_diff < -0.01f) {
+    g_foc_controller.conf.encoder_direction = -1;
+  } else if (ol_diff > 0.01f) {
+    g_foc_controller.conf.encoder_direction = 1;
+  }
+  // else: motor không nhúc nhích — giữ nguyên
+
+  g_dbg_align.enc_dir = g_foc_controller.conf.encoder_direction;
+
+  // STEP 6: Lock lại theta_e=0, đọc offset cuối cùng SAU KHI đã xác định đúng direction
+  for (int step = 0; step <= 50; step++) {
+    float vd = vd_align * (float)step / 50.0f;
+    float valpha = vd / vbus, vbeta = 0.0f;
+    uint32_t ta, tb, tc, sector;
+    foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
+    HAL_Delay(5);
+  }
+  HAL_Delay(800); // Chờ lâu hơn (800ms) để rotor qua cycloidal gearbox settle chính xác
+
+  // Đọc offset cuối cùng — đây là offset tin cậy nhất
+  float enc_final = 0.0f;
+  AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_final);
+  g_foc_controller.zero_electric_angle = enc_final;
+  g_foc_controller.aligned = true;
+
+  g_dbg_align.zero_electric_angle = enc_final;
+  g_dbg_align.encoder_rad = enc_final;
+
+  // STEP 7: Smooth ramp down to 0V
   for (int i = 40; i >= 0; i--) {
     float vd = vd_align * (float)i / 40.0f;
     float valpha = vd / vbus, vbeta = 0.0f;
@@ -510,6 +571,7 @@ void Run_EncoderAlignment(void)
   align_result = 2; // OK
   run_alignment = 0;
 }
+
 
 /**
  * @brief  Đọc 1 kênh ADC regular bằng polling (reconfigure + start + wait + read)
