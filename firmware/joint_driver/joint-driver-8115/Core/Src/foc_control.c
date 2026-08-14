@@ -305,21 +305,21 @@ void FOC_Control_SlowLoop(FOC_Controller_t *foc, float dt)
 {
     if (foc == NULL) return;
 
-    // Slow Loop 1kHz: Cập nhật joint angle accumulator từ cache của 20kHz ISR
+    // Slow Loop 1kHz: Cập nhật joint angle accumulator & PLL Speed Estimator liên tục (kể cả khi OFF)
     foc_update_cycloidal_joint_angle(&foc->motor, foc->encoder.angle_rad);
-
-    if (foc->motor.m_state != MC_STATE_RUNNING) return;
 
     motor_all_state_t *motor = &foc->motor;
 
-    // 1. Run VESC Observer & PLL Speed Estimator
+    // Run PLL speed estimator unconditionally so hand-turning reads speed even when state=OFF
+    foc_pll_run(motor->m_motor_state.phase, dt, &motor->m_pll_phase, &motor->m_pll_speed, motor->m_conf);
+    motor->m_speed_est_fast = motor->m_pll_speed;
+
+    if (foc->motor.m_state != MC_STATE_RUNNING) return;
+
+    // 1. Run VESC Observer
     foc_observer_update(motor->m_motor_state.v_alpha, motor->m_motor_state.v_beta,
                         motor->m_motor_state.i_alpha, motor->m_motor_state.i_beta,
                         dt, &motor->m_observer_state, &motor->m_phase_now_observer, motor);
-
-    // Dùng trực tiếp góc điện của Encoder (m_motor_state.phase) thay vì góc điện ước lượng của Observer để tính toán tốc độ bằng PLL
-    foc_pll_run(motor->m_motor_state.phase, dt, &motor->m_pll_phase, &motor->m_pll_speed, motor->m_conf);
-    motor->m_speed_est_fast = motor->m_pll_speed;
 
     // 2. Run Position PID or Speed PID based on Control Mode
     if (motor->m_control_mode == CONTROL_MODE_POS) {
