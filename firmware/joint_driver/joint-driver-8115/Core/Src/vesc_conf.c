@@ -41,13 +41,13 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_current_filter_const = 0.1f;
     conf->foc_cc_decoupling = FOC_CC_DECOUPLING_DISABLED; // Disabled until flux_linkage is verified
 
-    // Speed Controller (PID) - Tối ưu tự phá ma sát tĩnh khi khởi động
-    conf->s_pid_kp = 0.008f;            // Kp cho ERPM speed loop
-    conf->s_pid_ki = 0.10f;             // Ki tích phân nhanh phá ma sát tĩnh trong 50ms
+    // Speed Controller (PID) - Điều khiển tốc độ mượt mà, không giật phanh gắt
+    conf->s_pid_kp = 0.002f;            // Kp êm dịu, không giật phanh mạnh khi overshoot nhẹ
+    conf->s_pid_ki = 0.02f;             // Ki tích phân ổn định steady-state error
     conf->s_pid_kd = 0.00001f;
     conf->s_pid_kd_filter = 0.2f;
     conf->s_pid_min_erpm = 5.0f;        // 5 ERPM (~0.2 RPM)
-    conf->s_pid_ramp_erpms_s = 5000.0f; // Ramp gia tốc mượt 5000 ERPM/s (~238 RPM/s)
+    conf->s_pid_ramp_erpms_s = 2000.0f; // Ramp gia tốc mượt 2000 ERPM/s (~95 RPM/s, lên 100RPM trong ~1s)
 
     // Position Controller (PID + Process D) - Tuned for 1:17 Cycloid Joint
     conf->p_pid_kp = 3.5f;               // Smooth proportional gain (was 15.0f causing bang-bang saturation)
@@ -77,8 +77,8 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_mag_vd_max = 0.2f;         // Max 20% voltage in Vd
 
     // Protection & Safety Limits
-    conf->l_current_max = 4.0f;          // Limit current to 4A to prevent voltage saturation on 4-ohm gimbal motor
-    conf->l_current_min = -4.0f;         // Limit braking current to -4A
+    conf->l_current_max = 2.5f;          // 2.5A max current (2.5A * 3.89 Ohm = 9.7V < 12.8V Vbus max linear range)
+    conf->l_current_min = -2.5f;         // -2.5A max braking current
     conf->l_in_current_max = 20.0f;      // Khôi phục 20A dòng nguồn tối đa
     conf->l_in_current_min = -10.0f;     // Khôi phục -10A dòng sạc ngược tối đa
     conf->l_max_erpm = 100000.0f;        // 100k ERPM max
