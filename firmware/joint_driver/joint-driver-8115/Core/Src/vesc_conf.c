@@ -35,8 +35,9 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->joint_pos_max =  3.14159265f;  // +180 degrees (+PI rad)
 
     // Current Controller (PI D/Q) - Tính theo công thức pole-zero chuyên gia (50% nominal bandwidth ~500Hz)
-    conf->foc_current_kp = 10.0f;        // Kp = L * w_c = 0.00314 * 3141 ≈ 10.0 V/A
-    conf->foc_current_ki = 12000.0f;     // Ki = R * w_c = 3.89 * 3141 ≈ 12000.0 V/(A*s)
+    // Current Controller (PI D/Q) - Pole-zero cancellation exact match for R=3.89 Ohm, L=3.14 mH
+    conf->foc_current_kp = 3.89f;        // Kp = R = 3.89 V/A
+    conf->foc_current_ki = 4819.0f;      // Ki = Kp * (R/L) = 3.89 * (3.89/0.00314) = 4819.0 V/(A*s)
     conf->foc_current_filter_const = 0.1f;
     conf->foc_cc_decoupling = FOC_CC_DECOUPLING_CROSS_BEMF; // BEMF + Cross decoupling
 
