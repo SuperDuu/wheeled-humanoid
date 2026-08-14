@@ -39,7 +39,7 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_current_kp = 3.89f;        // Kp = R = 3.89 V/A
     conf->foc_current_ki = 4819.0f;      // Ki = Kp * (R/L) = 3.89 * (3.89/0.00314) = 4819.0 V/(A*s)
     conf->foc_current_filter_const = 0.1f;
-    conf->foc_cc_decoupling = FOC_CC_DECOUPLING_CROSS_BEMF; // BEMF + Cross decoupling
+    conf->foc_cc_decoupling = FOC_CC_DECOUPLING_DISABLED; // Disabled until flux_linkage is verified
 
     // Speed Controller (PID) - Tối ưu tự phá ma sát tĩnh khi khởi động
     conf->s_pid_kp = 0.008f;            // Kp cho ERPM speed loop

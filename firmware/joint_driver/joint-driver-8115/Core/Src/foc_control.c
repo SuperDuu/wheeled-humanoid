@@ -250,9 +250,9 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     state_m->vd_int += Ierr_d * ki * dt;
     state_m->vq_int += Ierr_q * ki * dt;
 
-    // Add I*R feedforward to ensure immediate driving voltage for high-resistance gimbal motor (3.89 Ohm)
-    state_m->vd = state_m->vd_int + Ierr_d * kp + (state_m->id_target * conf_now->foc_motor_r);
-    state_m->vq = state_m->vq_int + Ierr_q * kp + (state_m->iq_target * conf_now->foc_motor_r);
+    // Pure PI controller (no I*R feedforward — pole-zero cancellation with Kp=R already handles R-drop)
+    state_m->vd = state_m->vd_int + Ierr_d * kp;
+    state_m->vq = state_m->vq_int + Ierr_q * kp;
 
     // 6. Cross-Coupling Decoupling (BEMF + Cross Feedforward)
     float dec_vd = 0.0f;
