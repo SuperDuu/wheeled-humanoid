@@ -246,9 +246,10 @@ class FOCOscilloscopeStudio {
       const numVal = parseFloat(val).toFixed(1);
       if (inputVq) inputVq.value = numVal;
       if (vqDisplay) vqDisplay.innerText = `${numVal} V`;
+      this.sendCommand(`MODE 5`);
       this.sendCommand(`VQ ${numVal}`);
       document.querySelectorAll('.btn-mode').forEach(b => b.classList.remove('active'));
-      const vqBtn = document.querySelector('.btn-mode[data-mode="duty"]');
+      const vqBtn = document.querySelector('.btn-mode[data-mode="5"]');
       if (vqBtn) vqBtn.classList.add('active');
     };
 

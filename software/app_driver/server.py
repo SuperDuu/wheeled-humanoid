@@ -278,7 +278,7 @@ class TelemetryManager:
                                 # state = mc_state enum: 0=OFF,1=DETECTING,2=RUNNING,3=FULL_BRAKE
                                 state_names = ["OFF", "DETECTING", "RUNNING", "BRAKE"]
                                 s_str = state_names[state] if state < len(state_names) else f"STATE_{state}"
-                                log_line = f"Telemetry @ {self.fps:.0f}Hz | mode={m_str} state={s_str} | Id={id_c:+.2f}A, Iq={iq_c:+.2f}A (Tgt={iq_tgt:+.2f}A) | RPM={speed:+.1f}/{speed_tgt:+.1f} | Vbus={vbus:.1f}V | Vd={vd:+.1f}V Vq={vq:+.1f}V θe={phase:.2f} θ0={zero_elec:.2f} dir={enc_dir}"
+                                log_line = f"Telemetry @ {self.fps:.0f}Hz | mode={m_str} state={s_str} | Id={id_c:+.2f}A, Iq={iq_c:+.2f}A (Tgt={iq_tgt:+.2f}A) | RPM={speed:+.1f}/{speed_tgt:+.1f} | Vbus={vbus:.1f}V | Vd={vd:+.1f}V Vq={vq:+.1f}V θe={phase:.2f} θ0={zero_elec:.2f} dir={enc_dir} | duty={da:.3f}/{db:.3f}/{dc:.3f}"
                                 if fault > 0:
                                     log_line += f" | FAULT={fault}"
                                 self.log_diagnostic(log_line)
@@ -343,6 +343,12 @@ class TelemetryHTTPHandler(SimpleHTTPRequestHandler):
         # Serve static files from current directory
         directory = os.path.dirname(os.path.abspath(__file__))
         super().__init__(*args, directory=directory, **kwargs)
+
+    def end_headers(self):
+        self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+        self.send_header('Pragma', 'no-cache')
+        self.send_header('Expires', '0')
+        super().end_headers()
 
     def do_GET(self):
         parsed = urlparse(self.path)

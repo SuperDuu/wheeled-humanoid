@@ -200,12 +200,13 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
             motor->m_iq_set = 0.0f;
             motor->m_speed_command_rpm = 0.0f;
             run_foc_mode = 0;
-        } else if (m >= 1 && m <= 4) {
+        } else if (m >= 1 && m <= 5) {
             motor->m_state = MC_STATE_RUNNING;
             if (m == 1) { motor->m_control_mode = CONTROL_MODE_CURRENT; run_foc_mode = 1; }
             else if (m == 2) { motor->m_control_mode = CONTROL_MODE_CURRENT_BRAKE; run_foc_mode = 1; }
             else if (m == 3) { motor->m_control_mode = CONTROL_MODE_SPEED; run_foc_mode = 3; }
             else if (m == 4) { motor->m_control_mode = CONTROL_MODE_POS; run_foc_mode = 2; }
+            else if (m == 5) { motor->m_control_mode = CONTROL_MODE_DUTY; run_foc_mode = 4; }
         }
     }
     else if (strncmp(cmd, "SPEED ", 6) == 0) {
