@@ -237,38 +237,45 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
 
     // 5. Standard VESC Current PI Controller (Id -> Vd, Iq -> Vq)
     // 5. Standard VESC Current PI Controller with I*R Feedforward & Anti-Windup
-    if (motor->m_control_mode != CONTROL_MODE_CURRENT) {
-        state_m->iq_target = motor->m_iq_set;
+    if (motor->m_control_mode == CONTROL_MODE_DUTY) {
+        state_m->vd = 0.0f;
+        state_m->vq = state_m->duty_now * state_m->v_bus;
+        state_m->vd_int = 0.0f;
+        state_m->vq_int = 0.0f;
+    } else {
+        if (motor->m_control_mode != CONTROL_MODE_CURRENT) {
+            state_m->iq_target = motor->m_iq_set;
+        }
+
+        float Ierr_d = state_m->id_target - state_m->id;
+        float Ierr_q = state_m->iq_target - state_m->iq;
+
+        float ki = conf_now->foc_current_ki;
+        float kp = conf_now->foc_current_kp;
+
+        // Strict Voltage Vector Circle Limitation (Max = Vbus / sqrt(3))
+        float max_v_mag = ONE_BY_SQRT3 * conf_now->l_max_duty * state_m->v_bus * conf_now->foc_overmod_factor;
+        float max_vd = max_v_mag * conf_now->foc_mag_vd_max;
+        float max_vq = sqrtf(SQ(max_v_mag) - SQ(state_m->vd));
+        UTILS_NAN_ZERO(max_vq);
+
+        // Conditional Anti-Windup on Current Integrator: Pause integration during voltage saturation
+        if (!((state_m->vd >= max_vd && Ierr_d > 0.0f) || (state_m->vd <= -max_vd && Ierr_d < 0.0f))) {
+            state_m->vd_int += Ierr_d * ki * dt;
+            utils_truncate_number_abs((float*)&state_m->vd_int, max_vd);
+        }
+        if (!((state_m->vq >= max_vq && Ierr_q > 0.0f) || (state_m->vq <= -max_vq && Ierr_q < 0.0f))) {
+            state_m->vq_int += Ierr_q * ki * dt;
+            utils_truncate_number_abs((float*)&state_m->vq_int, max_vq);
+        }
+
+        // Standard VESC Current PI: Kp = R inherently provides proportional voltage R*Ierr (9.72V @ 2.5A)
+        state_m->vd = state_m->vd_int + Ierr_d * kp;
+        state_m->vq = state_m->vq_int + Ierr_q * kp;
+
+        utils_truncate_number_abs((float*)&state_m->vd, max_vd);
+        utils_truncate_number_abs((float*)&state_m->vq, max_vq);
     }
-
-    float Ierr_d = state_m->id_target - state_m->id;
-    float Ierr_q = state_m->iq_target - state_m->iq;
-
-    float ki = conf_now->foc_current_ki;
-    float kp = conf_now->foc_current_kp;
-
-    // Strict Voltage Vector Circle Limitation (Max = Vbus / sqrt(3))
-    float max_v_mag = ONE_BY_SQRT3 * conf_now->l_max_duty * state_m->v_bus * conf_now->foc_overmod_factor;
-    float max_vd = max_v_mag * conf_now->foc_mag_vd_max;
-    float max_vq = sqrtf(SQ(max_v_mag) - SQ(state_m->vd));
-    UTILS_NAN_ZERO(max_vq);
-
-    // Conditional Anti-Windup on Current Integrator: Pause integration during voltage saturation
-    if (!((state_m->vd >= max_vd && Ierr_d > 0.0f) || (state_m->vd <= -max_vd && Ierr_d < 0.0f))) {
-        state_m->vd_int += Ierr_d * ki * dt;
-        utils_truncate_number_abs((float*)&state_m->vd_int, max_vd);
-    }
-    if (!((state_m->vq >= max_vq && Ierr_q > 0.0f) || (state_m->vq <= -max_vq && Ierr_q < 0.0f))) {
-        state_m->vq_int += Ierr_q * ki * dt;
-        utils_truncate_number_abs((float*)&state_m->vq_int, max_vq);
-    }
-
-    // Standard VESC Current PI: Kp = R inherently provides proportional voltage R*Ierr (9.72V @ 2.5A)
-    state_m->vd = state_m->vd_int + Ierr_d * kp;
-    state_m->vq = state_m->vq_int + Ierr_q * kp;
-
-    utils_truncate_number_abs((float*)&state_m->vd, max_vd);
-    utils_truncate_number_abs((float*)&state_m->vq, max_vq);
 
     // Normalize voltages for Inverse Park & Modulation
     const float voltage_normalize = 1.0f / state_m->v_bus;

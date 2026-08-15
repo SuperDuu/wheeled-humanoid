@@ -229,6 +229,16 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         motor->m_state = MC_STATE_RUNNING;
         run_foc_mode = 1;
     }
+    else if (strncmp(cmd, "VQ ", 3) == 0 || strncmp(cmd, "VOLT ", 5) == 0) {
+        float vq = atof((strncmp(cmd, "VQ ", 3) == 0) ? &cmd[3] : &cmd[5]);
+        extern volatile ADC_Readings_t g_adc_readings;
+        float vbus = (g_adc_readings.vbus > 5.0f) ? g_adc_readings.vbus : 24.0f;
+        motor->m_motor_state.duty_now = vq / vbus;
+        motor->m_control_mode = CONTROL_MODE_DUTY;
+        motor->m_state = MC_STATE_RUNNING;
+        run_foc_mode = 4;
+        TIM1_EnsureMoeEnabled();
+    }
     else if (strncmp(cmd, "POS ", 4) == 0) {
         float pos = atof(&cmd[4]);
         pos_target_dbg = pos;
