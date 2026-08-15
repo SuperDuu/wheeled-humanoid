@@ -64,19 +64,27 @@ HAL_StatusTypeDef AS5048A_ReadRawAngle(AS5048A_t *enc, uint16_t *raw_angle)
 
     // Assert CS (Active LOW)
     HAL_GPIO_WritePin(enc->cs_port, enc->cs_pin, GPIO_PIN_RESET);
+    for (volatile int i = 0; i < 6; i++) { __NOP(); } // CS setup time > 350ns
 
     // Perform 16-bit SPI transfer (takes ~3.5µs at 5.3Mbps SPI clock)
     HAL_StatusTypeDef status = HAL_SPI_TransmitReceive(enc->hspi, (uint8_t*)&command, (uint8_t*)&response, 1, 2);
 
+    for (volatile int i = 0; i < 3; i++) { __NOP(); } // CS hold time > 50ns
     // Deassert CS (HIGH)
     HAL_GPIO_WritePin(enc->cs_port, enc->cs_pin, GPIO_PIN_SET);
 
     if (status == HAL_OK) {
-        enc->error_flag = (response & (1 << 14)) ? 1 : 0;
-        uint16_t angleData = response & 0x3FFF;
-        enc->raw_angle = angleData;
-        enc->angle_rad = ((float)angleData / 16384.0f) * (2.0f * (float)M_PI);
-        enc->angle_deg = ((float)angleData / 16384.0f) * 360.0f;
+        // Verify Even Parity and ensure Error Flag (bit 14) is NOT set
+        uint16_t expected_parity_frame = AS5048A_CalculateEvenParity(response & 0x7FFF);
+        if (response == expected_parity_frame && !(response & (1 << 14))) {
+            uint16_t angleData = response & 0x3FFF;
+            enc->raw_angle = angleData;
+            enc->angle_rad = ((float)angleData / 16384.0f) * (2.0f * (float)M_PI);
+            enc->angle_deg = ((float)angleData / 16384.0f) * 360.0f;
+            enc->error_flag = 0;
+        } else {
+            enc->error_flag = 1; // Glitch or error frame: silently keep previous valid angle
+        }
     } else {
         // Clear SPI state on error to prevent latchup
         enc->hspi->State = HAL_SPI_STATE_READY;
