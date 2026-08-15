@@ -248,16 +248,24 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
         state_m->vd_int = 0.0f;
         state_m->vq_int = 0.0f;
     } else if (motor->m_control_mode == CONTROL_MODE_SPEED) {
-        // Direct Voltage Velocity Control (Chuẩn SimpleFOC: Feedforward + Proportional Trim)
-        // Vff = 3.4V @ 100 RPM, Vp = 0.04V per RPM error -> Tuyệt đối không trôi áp, phẳng đét 100 RPM vĩnh viễn
+        // Direct Voltage Velocity Control (Chuẩn SimpleFOC: Smooth Ramped Feedforward + Proportional Trim)
         float pole_pairs = (conf_now->foc_motor_pole_pairs > 0) ? (float)conf_now->foc_motor_pole_pairs : 21.0f;
         float target_mech_rpm = motor->m_speed_command_rpm / pole_pairs;
+        
+        // Gia tốc mượt mà từ 0 -> 100 RPM trong 1.0s (100 RPM/s) tránh sốc điện áp khởi động
+        static float s_ramped_mech_rpm = 0.0f;
+        if (motor->m_state != MC_STATE_RUNNING) {
+            s_ramped_mech_rpm = 0.0f;
+        } else {
+            utils_step_towards(&s_ramped_mech_rpm, target_mech_rpm, 100.0f * dt);
+        }
+        
         float actual_mech_rpm = RADPS2RPM_f(motor->m_speed_est_fast) / pole_pairs;
         
-        float v_ff = (target_mech_rpm / 100.0f) * 3.40f;
-        float v_p  = (target_mech_rpm - actual_mech_rpm) * 0.04f;
+        float v_ff = (s_ramped_mech_rpm / 100.0f) * 3.40f;
+        float v_p  = (s_ramped_mech_rpm - actual_mech_rpm) * 0.02f;
         float v_total = v_ff + v_p;
-        utils_truncate_number_abs(&v_total, 6.0f); // Max 6.0V safe voltage clamp
+        utils_truncate_number_abs(&v_total, 5.0f); // Max 5.0V safe clamp
         
         state_m->vd = 0.0f;
         state_m->vq = v_total;
