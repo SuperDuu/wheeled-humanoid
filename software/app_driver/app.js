@@ -237,6 +237,47 @@ class FOCOscilloscopeStudio {
       });
     });
 
+    // Voltage Vq Controls (Direct Vector Voltage Mode)
+    const inputVq = document.getElementById('input-vq');
+    const vqDisplay = document.getElementById('vq-display');
+    const btnSetVq = document.getElementById('btn-set-vq');
+
+    const updateVq = (val) => {
+      const numVal = parseFloat(val).toFixed(1);
+      if (inputVq) inputVq.value = numVal;
+      if (vqDisplay) vqDisplay.innerText = `${numVal} V`;
+      this.sendCommand(`VQ ${numVal}`);
+      document.querySelectorAll('.btn-mode').forEach(b => b.classList.remove('active'));
+      const vqBtn = document.querySelector('.btn-mode[data-mode="duty"]');
+      if (vqBtn) vqBtn.classList.add('active');
+    };
+
+    if (btnSetVq && inputVq) {
+      btnSetVq.addEventListener('click', () => {
+        updateVq(inputVq.value);
+      });
+      inputVq.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') updateVq(inputVq.value);
+      });
+    }
+
+    document.querySelectorAll('.btn-vq-preset').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const vq = btn.dataset.vq;
+        if (vq !== undefined) {
+          updateVq(vq);
+        }
+      });
+    });
+
+    const btnVqTest = document.getElementById('btn-vq-test');
+    if (btnVqTest) {
+      btnVqTest.addEventListener('click', () => {
+        updateVq(4.0);
+        this.appendLog('⚡ Direct Voltage VQ (+4.0V) started.', 'success');
+      });
+    }
+
     // Current Iq Controls
     const inputIq = document.getElementById('input-iq');
     const iqDisplay = document.getElementById('iq-display');
@@ -330,6 +371,8 @@ class FOCOscilloscopeStudio {
         if (sliderSpeed) sliderSpeed.value = 0;
         if (inputSpeed) inputSpeed.value = 0;
         if (speedDisplay) speedDisplay.innerText = '0 RPM';
+        if (inputVq) inputVq.value = 0;
+        if (vqDisplay) vqDisplay.innerText = '0.0 V';
         if (inputIq) inputIq.value = 0;
         if (iqDisplay) iqDisplay.innerText = '0.0 A';
         document.querySelectorAll('.btn-mode').forEach(b => b.classList.remove('active'));
