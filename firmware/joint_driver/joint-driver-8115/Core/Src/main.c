@@ -402,7 +402,7 @@ void Run_EncoderAlignment(void)
   HAL_Delay(5);
   DRV8353_SetCSAGain(&g_foc_controller.drv8353, DRV8353_CSA_GAIN_20V);
 
-  float vd_align = 8.0f; // 8.0V voltage for alignment (dòng nhẹ ~0.9A RMS mát máy)
+  float vd_align = 10.0f; // 10.0V alignment voltage (~2.5A peak torque for solid locking through cycloid gearbox)
 
   // STEP 1: Lock to Electrical Zero (theta_e = 0)
   for (int step = 0; step <= 50; step++) {
@@ -415,15 +415,15 @@ void Run_EncoderAlignment(void)
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
     HAL_Delay(5);
   }
-  HAL_Delay(500); // Wait for rotor to lock at elec zero
+  HAL_Delay(800); // Chờ rotor ổn định tuyệt đối tại góc 0 điện
 
   // Read starting encoder position
   float enc_start = 0.0f;
   AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_start);
 
-  // STEP 2: Rotate voltage vector forward by 2 electrical revolutions (theta_e = 0 -> 4*PI)
+  // STEP 2: Rotate voltage vector forward by 4 electrical revolutions (theta_e = 0 -> 8*PI = 68.6 deg mech)
   for (int step = 0; step <= 200; step++) {
-    float angle = 4.0f * 3.14159265f * (float)step / 200.0f;
+    float angle = 8.0f * 3.14159265f * (float)step / 200.0f;
     float valpha = (vd_align / vbus) * cosf(angle);
     float vbeta  = (vd_align / vbus) * sinf(angle);
     uint32_t ta, tb, tc, sector;
@@ -443,11 +443,11 @@ void Run_EncoderAlignment(void)
   while (diff > 3.14159265f) diff -= 2.0f * 3.14159265f;
   while (diff < -3.14159265f) diff += 2.0f * 3.14159265f;
 
-  // STEP 3: Auto-detect encoder_direction (+1 or -1) with 0.05 rad threshold
-  if (diff > 0.05f) {
+  // STEP 3: Auto-detect encoder_direction (+1 or -1) with 0.10 rad threshold
+  if (diff > 0.10f) {
     g_foc_controller.conf.encoder_direction = 1;
     test_result = 2; // Direction +1 detected
-  } else if (diff < -0.05f) {
+  } else if (diff < -0.10f) {
     g_foc_controller.conf.encoder_direction = -1;
     test_result = 3; // Direction -1 detected
   } else {
@@ -468,7 +468,7 @@ void Run_EncoderAlignment(void)
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
     HAL_Delay(5);
   }
-  HAL_Delay(800); // Chờ 800ms để rotor qua cycloid gearbox settle chính xác ở góc 0 điện
+  HAL_Delay(1000); // Chờ 1000ms để rotor qua cycloid gearbox settle chính xác tuyệt đối ở góc 0 điện
 
   float enc_zero = 0.0f;
   AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_zero);
