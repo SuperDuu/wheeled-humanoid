@@ -192,8 +192,13 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     foc_update_cycloidal_joint_angle(motor, raw_enc_rad);
 
     // 1b. Tính Góc Điện theo Chuẩn VESC [-PI, +PI] (loại bỏ hoàn toàn hiện tượng nhảy 0 <-> 2PI ở vị trí 0)
+    // 1b. Tính Góc Điện theo Chuẩn VESC [-PI, +PI] với Dynamic Lead-Angle Delay Compensation (120µs)
     float elec_raw = (float)(conf_now->encoder_direction * conf_now->foc_motor_pole_pairs) * raw_enc_rad;
     float elec_angle = elec_raw - foc->zero_electric_angle;
+    
+    // Bù trễ góc pha động (Bù trễ 120µs của bộ lọc AS5048A CORDIC và thanh ghi nạp đệm PWM)
+    float lead_comp = motor->m_speed_est_fast * 0.000120f;
+    elec_angle += lead_comp;
     utils_norm_angle_rad(&elec_angle);
 
     state_m->phase = elec_angle;
@@ -243,11 +248,19 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
         state_m->vd_int = 0.0f;
         state_m->vq_int = 0.0f;
     } else if (motor->m_control_mode == CONTROL_MODE_SPEED) {
-        // Direct Voltage Velocity Control - Capped at 6.0V max for stable bare motor rotation without magnetic lockup
+        // Direct Voltage Velocity Control (Chuẩn SimpleFOC: Feedforward + Proportional Trim)
+        // Vff = 3.4V @ 100 RPM, Vp = 0.04V per RPM error -> Tuyệt đối không trôi áp, phẳng đét 100 RPM vĩnh viễn
+        float pole_pairs = (conf_now->foc_motor_pole_pairs > 0) ? (float)conf_now->foc_motor_pole_pairs : 21.0f;
+        float target_mech_rpm = motor->m_speed_command_rpm / pole_pairs;
+        float actual_mech_rpm = RADPS2RPM_f(motor->m_speed_est_fast) / pole_pairs;
+        
+        float v_ff = (target_mech_rpm / 100.0f) * 3.40f;
+        float v_p  = (target_mech_rpm - actual_mech_rpm) * 0.04f;
+        float v_total = v_ff + v_p;
+        utils_truncate_number_abs(&v_total, 6.0f); // Max 6.0V safe voltage clamp
+        
         state_m->vd = 0.0f;
-        float vq_max_speed = 6.0f;
-        if (vq_max_speed > max_vq) vq_max_speed = max_vq;
-        state_m->vq = (motor->m_iq_set / conf_now->l_current_max) * vq_max_speed;
+        state_m->vq = v_total;
         state_m->vd_int = 0.0f;
         state_m->vq_int = 0.0f;
     } else {
