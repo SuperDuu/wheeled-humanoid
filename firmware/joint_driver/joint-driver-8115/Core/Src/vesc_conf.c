@@ -23,7 +23,7 @@ void vesc_conf_set_defaults(mc_configuration *conf)
 
     // Motor Parameters (GB8115-4 Gimbal/Actuator Motor)
     conf->foc_motor_pole_pairs = 21;     // 21 Pole Pairs
-    conf->foc_motor_r = 3.89f;           // 3.89 Ohm phase resistance (was 0.090f)
+    conf->foc_motor_r = 2.25f;           // 2.25 Ohm phase resistance (measured: 4.5 Ohm line-to-line / 2)
     conf->foc_motor_l = 0.00314f;        // 3.14 mH phase inductance (was 0.000120f)
     conf->foc_motor_flux_linkage = 0.025f; // 0.025 Wb (~25 mWb) flux linkage (was 0.0045f)
     conf->foc_motor_ld_lq_diff = 0.0f;   // Non-salient PMSM motor
@@ -36,15 +36,15 @@ void vesc_conf_set_defaults(mc_configuration *conf)
 
     // Current Controller (PI D/Q) - Tính theo công thức pole-zero chuyên gia (50% nominal bandwidth ~500Hz)
     // Current Controller (PI D/Q) - Pole-zero cancellation exact match for R=3.89 Ohm, L=3.14 mH
-    conf->foc_current_kp = 3.89f;        // Kp = R = 3.89 V/A
-    conf->foc_current_ki = 4819.0f;      // Ki = Kp * (R/L) = 3.89 * (3.89/0.00314) = 4819.0 V/(A*s)
+    conf->foc_current_kp = 2.25f;        // Kp = R = 2.25 V/A
+    conf->foc_current_ki = 1612.0f;      // Ki = Kp * (R/L) = 2.25 * (2.25/0.00314) = 1612.0 V/(A*s)
     conf->foc_current_filter_const = 0.1f;
     conf->foc_cc_decoupling = FOC_CC_DECOUPLING_DISABLED; // Disabled until flux_linkage is verified
 
     // Speed Controller (PID) - Điều khiển tốc độ mượt mà, không giật phanh gắt
-    conf->s_pid_kp = 0.002f;            // Kp êm dịu, không giật phanh mạnh khi overshoot nhẹ
-    conf->s_pid_ki = 0.02f;             // Ki tích phân ổn định steady-state error
-    conf->s_pid_kd = 0.00001f;
+    conf->s_pid_kp = 0.0003f;           // Kp êm dịu, không giật phanh mạnh khi overshoot nhẹ
+    conf->s_pid_ki = 0.003f;            // Ki tích phân ổn định steady-state error
+    conf->s_pid_kd = 0.000005f;
     conf->s_pid_kd_filter = 0.2f;
     conf->s_pid_min_erpm = 5.0f;        // 5 ERPM (~0.2 RPM)
     conf->s_pid_ramp_erpms_s = 2000.0f; // Ramp gia tốc mượt 2000 ERPM/s (~95 RPM/s, lên 100RPM trong ~1s)
