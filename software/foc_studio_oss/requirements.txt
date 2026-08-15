@@ -1,0 +1,29 @@
+# ==============================================================================
+# FOC Telemetry Studio OSS - Open Source Dependencies
+# ==============================================================================
+# Backend Web & API Framework (MIT)
+fastapi>=0.110.0
+
+# Asynchronous ASGI Web Server (BSD-3-Clause)
+uvicorn[standard]>=0.28.0
+
+# Real-time WebSocket Protocol Support (BSD-3-Clause)
+websockets>=12.0
+
+# Data Validation & Schema Modeling (MIT)
+pydantic>=2.6.0
+
+# High-Performance Scientific Vector Computing (BSD-3-Clause)
+numpy>=1.26.0
+
+# Telemetry Data Analysis & MATLAB CSV Export (BSD-3-Clause)
+pandas>=2.2.0
+
+# Hardware Serial Communication (BSD-3-Clause)
+pyserial>=3.5
+
+# Asynchronous Serial I/O (BSD-3-Clause)
+pyserial-asyncio>=0.6
+
+# Asynchronous File I/O (Apache-2.0)
+aiofiles>=23.2.1
