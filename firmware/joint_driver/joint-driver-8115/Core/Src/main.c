@@ -395,12 +395,8 @@ void Run_EncoderAlignment(void)
   float vbus = g_adc_readings.vbus;
   if (vbus < 6.0f) vbus = 24.0f;
 
-  /* Reset DRV8353 */
-  HAL_GPIO_WritePin(DRV_EN_GPIO_Port, DRV_EN_Pin, GPIO_PIN_RESET);
-  HAL_Delay(1);
-  HAL_GPIO_WritePin(DRV_EN_GPIO_Port, DRV_EN_Pin, GPIO_PIN_SET);
-  HAL_Delay(5);
-  DRV8353_SetCSAGain(&g_foc_controller.drv8353, DRV8353_CSA_GAIN_20V);
+  /* Giữ DRV8353 ổn định liên tục, không reset EN để tránh trôi DC bias của mạch CSA */
+  TIM1_EnsureMoeEnabled();
 
   float vd_align = 10.0f; // 10.0V alignment voltage (~2.5A peak torque for solid locking through cycloid gearbox)
 
