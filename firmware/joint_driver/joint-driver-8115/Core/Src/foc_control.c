@@ -235,11 +235,22 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
         return;
     }
 
-    // 5. Standard VESC Current PI Controller (Id -> Vd, Iq -> Vq)
-    // 5. Standard VESC Current PI Controller with I*R Feedforward & Anti-Windup
+    // Strict Voltage Vector Circle Limitation (Max = Vbus / sqrt(3))
+    float max_v_mag = ONE_BY_SQRT3 * conf_now->l_max_duty * state_m->v_bus * conf_now->foc_overmod_factor;
+    float max_vd = max_v_mag * conf_now->foc_mag_vd_max;
+    float max_vq = sqrtf(SQ(max_v_mag) - SQ(state_m->vd));
+    UTILS_NAN_ZERO(max_vq);
+
+    // 5. Standard VESC Current PI Controller / Direct Voltage Modes
     if (motor->m_control_mode == CONTROL_MODE_DUTY) {
         state_m->vd = 0.0f;
         state_m->vq = state_m->duty_now * state_m->v_bus;
+        state_m->vd_int = 0.0f;
+        state_m->vq_int = 0.0f;
+    } else if (motor->m_control_mode == CONTROL_MODE_SPEED) {
+        // Direct Voltage Velocity Control (Chuẩn SimpleFOC - siêu mượt, loại bỏ 100% ripple hộp số và nhiễu cảm biến dòng)
+        state_m->vd = 0.0f;
+        state_m->vq = (motor->m_iq_set / conf_now->l_current_max) * max_vq;
         state_m->vd_int = 0.0f;
         state_m->vq_int = 0.0f;
     } else {
@@ -252,12 +263,6 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
 
         float ki = conf_now->foc_current_ki;
         float kp = conf_now->foc_current_kp;
-
-        // Strict Voltage Vector Circle Limitation (Max = Vbus / sqrt(3))
-        float max_v_mag = ONE_BY_SQRT3 * conf_now->l_max_duty * state_m->v_bus * conf_now->foc_overmod_factor;
-        float max_vd = max_v_mag * conf_now->foc_mag_vd_max;
-        float max_vq = sqrtf(SQ(max_v_mag) - SQ(state_m->vd));
-        UTILS_NAN_ZERO(max_vq);
 
         // Conditional Anti-Windup on Current Integrator: Pause integration during voltage saturation
         if (!((state_m->vd >= max_vd && Ierr_d > 0.0f) || (state_m->vd <= -max_vd && Ierr_d < 0.0f))) {
