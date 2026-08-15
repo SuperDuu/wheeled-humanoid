@@ -41,10 +41,12 @@ except ImportError:
 #     float    phase_elec, mech_angle, joint_angle; // (offset 44, 48, 52)
 #     float    speed_rpm, speed_target_rpm; // (offset 56, 60)
 #     float    v_bus, temp_fet;    // (offset 64, 68)
-#     uint8_t  control_mode, motor_state, fault_code, reserved; // (offset 72, 73, 74, 75)
-#     uint16_t checksum;           // (offset 76)
-# } telemetry_packet_t; Total = 78 bytes.
-PACKET_FORMAT = "<BBBB I 16f BBBB H"
+#     uint8_t  control_mode, motor_state, fault_code; // (offset 72, 73, 74)
+#     int8_t   encoder_dir;        // (offset 75)
+#     float    vd, vq, zero_elec_angle, id_target; // (offset 76, 80, 84, 88)
+#     uint16_t checksum;           // (offset 92)
+# } telemetry_packet_t; Total = 94 bytes.
+PACKET_FORMAT = "<BBBB I 16f BBBb 4f H"
 PACKET_SIZE = struct.calcsize(PACKET_FORMAT)
 
 class TelemetryManager:
@@ -212,7 +214,7 @@ class TelemetryManager:
 
                 # Search for 4-byte packet header 0xAA 0x55 0x01 0x4A (74)
                 while len(buffer) >= PACKET_SIZE:
-                    if buffer[0] == 0xAA and buffer[1] == 0x55 and buffer[2] == 0x01 and buffer[3] == 74:
+                    if buffer[0] == 0xAA and buffer[1] == 0x55 and buffer[2] == 0x01 and buffer[3] == (PACKET_SIZE - 4):
                         packet_bytes = buffer[:PACKET_SIZE]
                         
                         try:
@@ -221,7 +223,9 @@ class TelemetryManager:
                              ia, ib, ic, id_c, iq_c, iq_tgt,
                              da, db, dc, phase, mech, joint,
                              speed, speed_tgt, vbus, temp,
-                             mode, state, fault, reserved, chk_val) = unpacked
+                             mode, state, fault, enc_dir,
+                             vd, vq, zero_elec, id_tgt,
+                             chk_val) = unpacked
 
                             # Verify 16-bit checksum (firmware: sum of bytes[4:-2])
                             computed_chk = sum(packet_bytes[4:-2]) & 0xFFFF
@@ -250,7 +254,12 @@ class TelemetryManager:
                                 "temp_fet": round(temp, 1),
                                 "control_mode": mode,
                                 "motor_state": state,
-                                "fault_code": fault
+                                "fault_code": fault,
+                                "encoder_dir": enc_dir,
+                                "vd": round(vd, 3),
+                                "vq": round(vq, 3),
+                                "zero_elec_angle": round(zero_elec, 4),
+                                "id_target": round(id_tgt, 4)
                             }
 
                             with self.lock:
@@ -269,7 +278,7 @@ class TelemetryManager:
                                 # state = mc_state enum: 0=OFF,1=DETECTING,2=RUNNING,3=FULL_BRAKE
                                 state_names = ["OFF", "DETECTING", "RUNNING", "BRAKE"]
                                 s_str = state_names[state] if state < len(state_names) else f"STATE_{state}"
-                                log_line = f"Telemetry @ {self.fps:.0f}Hz | mode={m_str} state={s_str} | Id={id_c:+.2f}A, Iq={iq_c:+.2f}A (Tgt={iq_tgt:+.2f}A) | RPM={speed:+.1f}/{speed_tgt:+.1f} | Vbus={vbus:.1f}V"
+                                log_line = f"Telemetry @ {self.fps:.0f}Hz | mode={m_str} state={s_str} | Id={id_c:+.2f}A, Iq={iq_c:+.2f}A (Tgt={iq_tgt:+.2f}A) | RPM={speed:+.1f}/{speed_tgt:+.1f} | Vbus={vbus:.1f}V | Vd={vd:+.1f}V Vq={vq:+.1f}V θe={phase:.2f} θ0={zero_elec:.2f} dir={enc_dir}"
                                 if fault > 0:
                                     log_line += f" | FAULT={fault}"
                                 self.log_diagnostic(log_line)
@@ -288,7 +297,14 @@ class TelemetryManager:
                 # Calculate Telemetry Rate (Hz)
                 now = time.time()
                 if now - self.last_fps_time >= 1.0:
-                    self.fps = (self.packet_count - self.last_fps_packets) / (now - self.last_fps_time)
+                    elapsed = now - self.last_fps_time
+                    self.fps = (self.packet_count - self.last_fps_packets) / elapsed
+                    # Log checksum error rate for debugging
+                    if hasattr(self, '_last_error_count'):
+                        errors_per_sec = (self.error_count - self._last_error_count) / elapsed
+                        if errors_per_sec > 0:
+                            self.log_diagnostic(f"⚠️ Checksum errors: {errors_per_sec:.0f}/s (total={self.error_count})")
+                    self._last_error_count = self.error_count
                     self.last_fps_packets = self.packet_count
                     self.last_fps_time = now
 

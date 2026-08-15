@@ -59,7 +59,13 @@ typedef struct {
     uint8_t  control_mode;       // Current control mode (0:Idle, 1:Current, 2:Brake, 3:Speed, 4:Pos)
     uint8_t  motor_state;        // MC State
     uint8_t  fault_code;         // Fault flags
-    uint8_t  reserved;
+    int8_t   encoder_dir;        // Encoder direction (+1 or -1) from ALIGN
+    
+    // FOC Diagnostic Fields (for debugging closed-loop)
+    float    vd;                 // D-axis PI voltage output (V)
+    float    vq;                 // Q-axis PI voltage output (V)
+    float    zero_elec_angle;    // Electrical zero offset from ALIGN (rad)
+    float    id_target;          // D-axis target current (A)
     
     uint16_t checksum;           // 16-bit XOR/Sum CRC
 } telemetry_packet_t;
