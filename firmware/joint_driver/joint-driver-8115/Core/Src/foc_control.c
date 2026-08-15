@@ -237,6 +237,7 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     }
 
     // 5. Standard VESC Current PI Controller (Id -> Vd, Iq -> Vq)
+    // 5. Standard VESC Current PI Controller with I*R Feedforward & Anti-Windup
     if (motor->m_control_mode != CONTROL_MODE_CURRENT) {
         state_m->iq_target = motor->m_iq_set;
     }
@@ -247,38 +248,28 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     float ki = conf_now->foc_current_ki;
     float kp = conf_now->foc_current_kp;
 
-    state_m->vd_int += Ierr_d * ki * dt;
-    state_m->vq_int += Ierr_q * ki * dt;
-
-    // Pure PI controller (no I*R feedforward — pole-zero cancellation with Kp=R already handles R-drop)
-    state_m->vd = state_m->vd_int + Ierr_d * kp;
-    state_m->vq = state_m->vq_int + Ierr_q * kp;
-
-    // 6. Cross-Coupling Decoupling (BEMF + Cross Feedforward)
-    float dec_vd = 0.0f;
-    float dec_vq = 0.0f;
-    float dec_bemf = 0.0f;
-
-    if (conf_now->foc_cc_decoupling != FOC_CC_DECOUPLING_DISABLED) {
-        dec_vd = state_m->iq * motor->m_speed_est_fast * motor->p_lq;
-        dec_vq = state_m->id * motor->m_speed_est_fast * motor->p_ld;
-        dec_bemf = motor->m_speed_est_fast * conf_now->foc_motor_flux_linkage;
-    }
-
-    state_m->vd -= dec_vd;
-    state_m->vq += dec_vq + dec_bemf;
-
-    // 7. Strict Voltage Vector Circle Limitation (Max = Vbus / sqrt(3))
+    // Strict Voltage Vector Circle Limitation (Max = Vbus / sqrt(3))
     float max_v_mag = ONE_BY_SQRT3 * conf_now->l_max_duty * state_m->v_bus * conf_now->foc_overmod_factor;
-
-    utils_truncate_number_abs((float*)&state_m->vd, max_v_mag * conf_now->foc_mag_vd_max);
-    utils_truncate_number_abs((float*)&state_m->vd_int, max_v_mag * conf_now->foc_mag_vd_max);
-
+    float max_vd = max_v_mag * conf_now->foc_mag_vd_max;
     float max_vq = sqrtf(SQ(max_v_mag) - SQ(state_m->vd));
     UTILS_NAN_ZERO(max_vq);
 
+    // Conditional Anti-Windup on Current Integrator: Pause integration during voltage saturation
+    if (!((state_m->vd >= max_vd && Ierr_d > 0.0f) || (state_m->vd <= -max_vd && Ierr_d < 0.0f))) {
+        state_m->vd_int += Ierr_d * ki * dt;
+        utils_truncate_number_abs((float*)&state_m->vd_int, max_vd);
+    }
+    if (!((state_m->vq >= max_vq && Ierr_q > 0.0f) || (state_m->vq <= -max_vq && Ierr_q < 0.0f))) {
+        state_m->vq_int += Ierr_q * ki * dt;
+        utils_truncate_number_abs((float*)&state_m->vq_int, max_vq);
+    }
+
+    // Add I*R feedforward to ensure immediate breakaway voltage (9.7V @ 2.5A) for gimbal motor (3.89 Ohm)
+    state_m->vd = state_m->vd_int + Ierr_d * kp + (state_m->id_target * conf_now->foc_motor_r);
+    state_m->vq = state_m->vq_int + Ierr_q * kp + (state_m->iq_target * conf_now->foc_motor_r);
+
+    utils_truncate_number_abs((float*)&state_m->vd, max_vd);
     utils_truncate_number_abs((float*)&state_m->vq, max_vq);
-    utils_truncate_number_abs((float*)&state_m->vq_int, max_vq);
 
     // Normalize voltages for Inverse Park & Modulation
     const float voltage_normalize = 1.0f / state_m->v_bus;
