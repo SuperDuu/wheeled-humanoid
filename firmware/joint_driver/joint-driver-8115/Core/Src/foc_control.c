@@ -272,19 +272,12 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
         float v_p  = (s_ramped_mech_rpm - actual_mech_rpm) * 0.015f;
         float v_total = v_ff + v_p;
         
-        // 3. Dynamic SVPWM Linear Ceiling = Vbus / sqrt(3) (~14.0V @ 24.3V Bus)
-        float max_linear_vq = ONE_BY_SQRT3 * conf_now->l_max_duty * state_m->v_bus;
-        utils_truncate_number_abs(&v_total, max_linear_vq);
+        // 3. Giới hạn điện áp tối đa an toàn trên nguồn 24V (8.0V tương ứng 205 RPM cực đại của động cơ trên 24V)
+        // Tránh bão hòa inverter 100% khi yêu cầu tốc độ vượt quá giới hạn vật lý của nguồn 24V
+        float max_safe_vq = 8.0f;
+        utils_truncate_number_abs(&v_total, max_safe_vq);
         
-        // 4. Giữ Vd = 0V trong toàn bộ dải vận hành bình thường (tránh khử từ sớm gây mất moment ở 200 RPM)
-        float vd_fw = 0.0f;
-        if (fabsf(actual_mech_rpm) > 260.0f && fabsf(v_total) >= (max_linear_vq - 0.5f)) {
-            float v_excess = fabsf(v_total) - (max_linear_vq - 0.5f);
-            vd_fw = -SIGN(s_ramped_mech_rpm) * v_excess * 0.8f;
-            utils_truncate_number_abs(&vd_fw, 3.0f);
-        }
-        
-        state_m->vd = vd_fw;
+        state_m->vd = 0.0f;
         state_m->vq = v_total;
         state_m->vd_int = 0.0f;
         state_m->vq_int = 0.0f;
