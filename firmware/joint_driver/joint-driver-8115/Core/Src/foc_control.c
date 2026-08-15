@@ -243,9 +243,11 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
         state_m->vd_int = 0.0f;
         state_m->vq_int = 0.0f;
     } else if (motor->m_control_mode == CONTROL_MODE_SPEED) {
-        // Direct Voltage Velocity Control (Chuẩn SimpleFOC - siêu mượt, loại bỏ 100% ripple hộp số và nhiễu cảm biến dòng)
+        // Direct Voltage Velocity Control - Capped at 6.0V max for stable bare motor rotation without magnetic lockup
         state_m->vd = 0.0f;
-        state_m->vq = (motor->m_iq_set / conf_now->l_current_max) * max_vq;
+        float vq_max_speed = 6.0f;
+        if (vq_max_speed > max_vq) vq_max_speed = max_vq;
+        state_m->vq = (motor->m_iq_set / conf_now->l_current_max) * vq_max_speed;
         state_m->vd_int = 0.0f;
         state_m->vq_int = 0.0f;
     } else {
