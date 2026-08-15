@@ -248,26 +248,41 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
         state_m->vd_int = 0.0f;
         state_m->vq_int = 0.0f;
     } else if (motor->m_control_mode == CONTROL_MODE_SPEED) {
-        // Direct Voltage Velocity Control (Chuẩn SimpleFOC: Smooth Ramped Feedforward + Proportional Trim)
+        // Direct Voltage Velocity Control (Chuẩn Back-EMF Feedforward + Proportional Trim + Field Weakening)
         float pole_pairs = (conf_now->foc_motor_pole_pairs > 0) ? (float)conf_now->foc_motor_pole_pairs : 21.0f;
         float target_mech_rpm = motor->m_speed_command_rpm / pole_pairs;
         
-        // Gia tốc mượt mà từ 0 -> 100 RPM trong 1.0s (100 RPM/s) tránh sốc điện áp khởi động
+        // Gia tốc mượt mà với tốc độ 150 RPM/s (lên 100 RPM trong 0.7s, lên 300 RPM trong 2s)
         static float s_ramped_mech_rpm = 0.0f;
         if (motor->m_state != MC_STATE_RUNNING) {
             s_ramped_mech_rpm = 0.0f;
         } else {
-            utils_step_towards(&s_ramped_mech_rpm, target_mech_rpm, 100.0f * dt);
+            utils_step_towards(&s_ramped_mech_rpm, target_mech_rpm, 150.0f * dt);
         }
         
         float actual_mech_rpm = RADPS2RPM_f(motor->m_speed_est_fast) / pole_pairs;
         
-        float v_ff = (s_ramped_mech_rpm / 100.0f) * 3.40f;
-        float v_p  = (s_ramped_mech_rpm - actual_mech_rpm) * 0.02f;
-        float v_total = v_ff + v_p;
-        utils_truncate_number_abs(&v_total, 5.0f); // Max 5.0V safe clamp
+        // 1. Back-EMF Feedforward: E = omega_e * lambda = (Pp * RPM * 2*PI/60) * lambda
+        // Sử dụng hằng số thực tế GB8115-4: 3.40V @ 100 RPM (tỷ lệ 0.034 V/RPM)
+        float v_ff = s_ramped_mech_rpm * 0.0340f;
         
-        state_m->vd = 0.0f;
+        // 2. Proportional Trim
+        float v_p  = (s_ramped_mech_rpm - actual_mech_rpm) * 0.025f;
+        float v_total = v_ff + v_p;
+        
+        // 3. Dynamic SVPWM Linear Ceiling = Vbus / sqrt(3) (~14.0V @ 24.3V Bus)
+        float max_linear_vq = ONE_BY_SQRT3 * conf_now->l_max_duty * state_m->v_bus;
+        utils_truncate_number_abs(&v_total, max_linear_vq);
+        
+        // 4. Automatic Field Weakening (khi Vq chạm trần để mở rộng dải tốc độ lên 500 RPM)
+        float vd_fw = 0.0f;
+        if (fabsf(v_total) >= (max_linear_vq - 0.5f) && fabsf(s_ramped_mech_rpm) > 250.0f) {
+            float v_excess = fabsf(v_total) - (max_linear_vq - 0.5f);
+            vd_fw = -SIGN(s_ramped_mech_rpm) * v_excess * 1.5f;
+            utils_truncate_number_abs(&vd_fw, 4.0f); // Max 4.0V FW in d-axis
+        }
+        
+        state_m->vd = vd_fw;
         state_m->vq = v_total;
         state_m->vd_int = 0.0f;
         state_m->vq_int = 0.0f;
