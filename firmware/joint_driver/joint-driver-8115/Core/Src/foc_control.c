@@ -90,12 +90,7 @@ bool FOC_Control_CheckSafety(FOC_Controller_t *foc, float current_a, float curre
         foc->fault |= MC_FAULT_OVER_TEMP_MOS;
     }
 
-    // Joint Soft Limit Check (-180 deg to +180 deg) - Chỉ kích hoạt trong Position Control Mode
-    if (foc->motor.m_control_mode == CONTROL_MODE_POS) {
-        if (foc->motor.m_joint_angle < foc->conf.joint_pos_min || foc->motor.m_joint_angle > foc->conf.joint_pos_max) {
-            foc->fault |= MC_FAULT_POS_LIMIT;
-        }
-    }
+
 
     // If any fault occurred, immediately trip motor off
     if (foc->fault != MC_FAULT_NONE) {

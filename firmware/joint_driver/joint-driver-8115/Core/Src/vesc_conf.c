@@ -28,11 +28,11 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_motor_flux_linkage = 0.02127f; // 0.02127 Wb Flux Linkage (Kt = 0.67 N.m/A, 2*Kt/(3*Pp))
     conf->foc_motor_ld_lq_diff = 0.0f;     // Surface PMSM (non-salient)
 
-    // Cycloidal Gearbox & Joint Safety Limits
-    conf->gear_ratio = 17.0f;              // 1:17 Cycloidal reduction ratio
+    // Direct Drive Mode (No Gearbox - 1:1 Direct Coupling, Unlimited Rotation)
+    conf->gear_ratio = 1.0f;               // 1:1 Direct Drive (No reduction)
     conf->encoder_direction = 1;           // Normal encoder direction
-    conf->joint_pos_min = -3.14159265f;    // -180 degrees (-PI rad)
-    conf->joint_pos_max =  3.14159265f;    // +180 degrees (+PI rad)
+    conf->joint_pos_min = -1000000.0f;     // Unlimited continuous rotation
+    conf->joint_pos_max =  1000000.0f;     // Unlimited continuous rotation
 
     // Current Controller (PI D/Q) - Pole-zero cancellation exact match: Kp=R=3.89, Ki=Kp*(R/L)=4819.0
     conf->foc_current_kp = 3.89f;          // Kp = R = 3.89 V/A
