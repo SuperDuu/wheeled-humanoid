@@ -52,9 +52,9 @@ bool FOC_Control_CheckSafety(FOC_Controller_t *foc, float current_a, float curre
 
     float current_mag = sqrtf(current_a * current_a + current_b * current_b);
 
-    // Overcurrent Instantaneous Check (20A / 2.5ms)
+    // Overcurrent Instantaneous Check (25A / 2.5ms)
     static uint32_t overcurrent_count = 0;
-    if (current_mag > 20.0f) {
+    if (current_mag > 25.0f) {
         overcurrent_count++;
         if (overcurrent_count >= 50) {
             foc->fault |= MC_FAULT_OVER_CURRENT;
@@ -63,12 +63,12 @@ bool FOC_Control_CheckSafety(FOC_Controller_t *foc, float current_a, float curre
         if (overcurrent_count > 0) overcurrent_count--;
     }
 
-    // Thermal Safety Timeout Protection (3.0A continuous for > 3.0s = 60,000 ISR cycles @ 20kHz)
-    // Tự động cắt PWM bảo vệ cuộn dây stator khi chạy kẹt dòng dài trước khi có NTC phần cứng
+    // Thermal Safety Timeout Protection (8.0A continuous for > 5.0s = 100,000 ISR cycles @ 20kHz)
+    // Nới lỏng theo đúng chuẩn Datasheet GB8115-4 (Dòng kẹt cực đại 6.6A)
     static uint32_t thermal_timeout_count = 0;
-    if (current_mag > 3.0f) {
+    if (current_mag > 8.0f) {
         thermal_timeout_count++;
-        if (thermal_timeout_count >= 60000) {
+        if (thermal_timeout_count >= 100000) {
             foc->fault |= MC_FAULT_OVER_CURRENT;
         }
     } else {
