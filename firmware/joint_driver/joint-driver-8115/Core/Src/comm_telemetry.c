@@ -84,9 +84,9 @@ bool Comm_Telemetry_Send(FOC_Controller_t *foc)
     packet.i_b = ib;
     packet.i_c = ic;
 
-    // 2. FOC Vector Currents
-    packet.i_d = state_m->id;
-    packet.i_q = state_m->iq;
+    // 2. FOC Vector Currents (Filtered DC for smooth telemetry display)
+    packet.i_d = state_m->id_filter;
+    packet.i_q = state_m->iq_filter;
     packet.i_q_target = state_m->iq_target;
 
     // 3. 3-Phase PWM Duty Cycles
