@@ -796,14 +796,7 @@ int main(void)
         /* Đọc trạng thái DRV8353 qua SoftSPI (Fault, OTW, OTSD) */
         DRV8353_ReadStatus();
 
-        /* Đọc thêm các thanh ghi cấu hình để debug */
-        DRV8353_ReadRegister(&g_foc_controller.drv8353, 0x00, (uint16_t*)&g_dbg_test.drv_reg_00);
-        DRV8353_ReadRegister(&g_foc_controller.drv8353, 0x01, (uint16_t*)&g_dbg_test.drv_reg_01);
-        DRV8353_ReadRegister(&g_foc_controller.drv8353, 0x02, (uint16_t*)&g_dbg_test.drv_reg_02);
-        DRV8353_ReadRegister(&g_foc_controller.drv8353, 0x03, (uint16_t*)&g_dbg_test.drv_reg_03);
-        DRV8353_ReadRegister(&g_foc_controller.drv8353, 0x04, (uint16_t*)&g_dbg_test.drv_reg_04);
-        DRV8353_ReadRegister(&g_foc_controller.drv8353, 0x05, (uint16_t*)&g_dbg_test.drv_reg_05);
-        DRV8353_ReadRegister(&g_foc_controller.drv8353, 0x06, (uint16_t*)&g_dbg_test.drv_reg_06);
+
 
         /* LED Heartbeat (chớp mỗi 500ms = 1Hz, thay vì chớp cuồng ở tốc độ main loop) */
         HAL_GPIO_TogglePin(LED_1_GPIO_Port, LED_1_Pin);
