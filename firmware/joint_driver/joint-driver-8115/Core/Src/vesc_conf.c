@@ -41,9 +41,9 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_cc_decoupling = FOC_CC_DECOUPLING_DISABLED;
 
     // Speed Controller (PID) - Tuned for GB8115-4 (Kt = 0.67 N.m/A, J = 2574 g.cm^2)
-    conf->s_pid_kp = 0.0005f;              // Proportional gain
-    conf->s_pid_ki = 0.005f;               // Integral gain
-    conf->s_pid_kd = 0.000005f;
+    conf->s_pid_kp = 0.0004f;              // Proportional gain
+    conf->s_pid_ki = 0.0005f;              // Low integral gain to prevent runaway voltage drift
+    conf->s_pid_kd = 0.0f;                 // No derivative kick
     conf->s_pid_kd_filter = 0.2f;
     conf->s_pid_min_erpm = 5.0f;          // 5 ERPM (~0.2 RPM)
     conf->s_pid_ramp_erpms_s = 2000.0f;   // Ramp gia tốc mượt 2000 ERPM/s (~95 RPM/s)
