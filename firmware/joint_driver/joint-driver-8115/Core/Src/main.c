@@ -417,9 +417,9 @@ void Run_EncoderAlignment(void)
   float enc_start = 0.0f;
   AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_start);
 
-  // STEP 2: Move forward by +PI/2 electrical (+90 deg electrical = +4.28 deg mech) theo chuẩn SimpleFOC
-  for (int step = 0; step <= 100; step++) {
-    float angle = (3.14159265f / 2.0f) * (float)step / 100.0f;
+  // STEP 2: Rotate forward by 2 full electrical revolutions (theta_e = 0 -> 4*PI = 34.3 deg mech)
+  for (int step = 0; step <= 150; step++) {
+    float angle = (4.0f * 3.14159265f) * (float)step / 150.0f;
     float valpha = (vd_align / vbus) * cosf(angle);
     float vbeta  = (vd_align / vbus) * sinf(angle);
     uint32_t ta, tb, tc, sector;
@@ -429,23 +429,23 @@ void Run_EncoderAlignment(void)
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
     HAL_Delay(5);
   }
-  HAL_Delay(800); // Chờ rotor ổn định tại góc +PI/2 điện
+  HAL_Delay(600); // Chờ rotor ổn định tại góc kết thúc 4*PI điện
 
   // Read ending encoder position
   float enc_end = 0.0f;
   AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_end);
 
-  // Calculate delta angle (với SimpleFOC: delta_e = dir * Pp * (enc_end - enc_start))
+  // Calculate delta angle
   float diff = enc_end - enc_start;
   while (diff > 3.14159265f) diff -= 2.0f * 3.14159265f;
   while (diff < -3.14159265f) diff += 2.0f * 3.14159265f;
 
   // STEP 3: Auto-detect encoder_direction (+1 or -1)
-  // Lý thuyết: d_mech = (PI/2)/21 = +0.0748 rad (~4.28 deg)
-  if (diff > 0.015f) {
+  // Lý thuyết: d_mech = (4*PI)/21 = +0.598 rad (~34.3 deg)
+  if (diff > 0.10f) {
     g_foc_controller.conf.encoder_direction = 1;
     test_result = 2; // Direction +1 detected
-  } else if (diff < -0.015f) {
+  } else if (diff < -0.10f) {
     g_foc_controller.conf.encoder_direction = -1;
     test_result = 3; // Direction -1 detected
   } else {
@@ -455,9 +455,9 @@ void Run_EncoderAlignment(void)
   g_dbg_align.vbus = vbus;
   g_dbg_align.enc_dir = g_foc_controller.conf.encoder_direction;
 
-  // STEP 4: Lock back to Electrical Zero (theta_e = 0)
-  for (int step = 0; step <= 100; step++) {
-    float angle = (3.14159265f / 2.0f) * (1.0f - (float)step / 100.0f);
+  // STEP 4: Rotate smoothly back to Electrical Zero (theta_e = 0)
+  for (int step = 0; step <= 150; step++) {
+    float angle = (4.0f * 3.14159265f) * (1.0f - (float)step / 150.0f);
     float valpha = (vd_align / vbus) * cosf(angle);
     float vbeta  = (vd_align / vbus) * sinf(angle);
     uint32_t ta, tb, tc, sector;
@@ -467,7 +467,7 @@ void Run_EncoderAlignment(void)
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
     HAL_Delay(5);
   }
-  HAL_Delay(1000); // Chờ 1000ms để rotor settle chính xác tuyệt đối ở góc 0 điện
+  HAL_Delay(800); // Chờ rotor settle chính xác tuyệt đối ở góc 0 điện
 
   float enc_zero = 0.0f;
   AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_zero);
