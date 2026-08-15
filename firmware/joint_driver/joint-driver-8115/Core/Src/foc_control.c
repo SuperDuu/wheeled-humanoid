@@ -265,9 +265,9 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
         utils_truncate_number_abs((float*)&state_m->vq_int, max_vq);
     }
 
-    // Add I*R feedforward to ensure immediate breakaway voltage (9.7V @ 2.5A) for gimbal motor (3.89 Ohm)
-    state_m->vd = state_m->vd_int + Ierr_d * kp + (state_m->id_target * conf_now->foc_motor_r);
-    state_m->vq = state_m->vq_int + Ierr_q * kp + (state_m->iq_target * conf_now->foc_motor_r);
+    // Standard VESC Current PI: Kp = R inherently provides proportional voltage R*Ierr (9.72V @ 2.5A)
+    state_m->vd = state_m->vd_int + Ierr_d * kp;
+    state_m->vq = state_m->vq_int + Ierr_q * kp;
 
     utils_truncate_number_abs((float*)&state_m->vd, max_vd);
     utils_truncate_number_abs((float*)&state_m->vq, max_vq);
