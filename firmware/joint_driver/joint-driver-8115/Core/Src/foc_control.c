@@ -264,18 +264,19 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
         
         float actual_mech_rpm = RADPS2RPM_f(motor->m_speed_est_fast) / pole_pairs;
         
-        // 1. Back-EMF Feedforward: E = omega_e * lambda
-        // Tuyến tính chuẩn GB8115-4: 3.40V @ 100 RPM, 6.80V @ 200 RPM, 10.20V @ 300 RPM
-        float v_ff = s_ramped_mech_rpm * 0.0340f;
+        // 1. Back-EMF Feedforward: Luôn bám sát sức điện động thực tế E = omega_e * lambda
+        // Đảm bảo Vq luôn >= E thực tế -> Triệt tiêu 100% hiện tượng phanh hãm tái sinh (Regenerative Braking)
+        float e_bemf = motor->m_speed_est_fast * conf_now->foc_motor_flux_linkage;
         
-        // 2. Proportional Trim (êm ái 0.015 V/RPM error)
-        float v_p  = (s_ramped_mech_rpm - actual_mech_rpm) * 0.015f;
-        float v_total = v_ff + v_p;
+        // 2. Proportional Torque Voltage (Điện áp sinh mô-men kéo tăng/giảm tốc)
+        float v_p = (s_ramped_mech_rpm - actual_mech_rpm) * 0.020f;
+        utils_truncate_number_abs(&v_p, 2.5f); // Max 2.5V delta mô-men tránh giật áp
         
-        // 3. Giới hạn điện áp tối đa an toàn trên nguồn 24V (8.0V tương ứng 205 RPM cực đại của động cơ trên 24V)
-        // Tránh bão hòa inverter 100% khi yêu cầu tốc độ vượt quá giới hạn vật lý của nguồn 24V
-        float max_safe_vq = 8.0f;
-        utils_truncate_number_abs(&v_total, max_safe_vq);
+        float v_total = e_bemf + v_p;
+        
+        // 3. Dynamic SVPWM Linear Ceiling = Vbus / sqrt(3) (~14.0V @ 24.3V Bus)
+        float max_linear_vq = ONE_BY_SQRT3 * conf_now->l_max_duty * state_m->v_bus;
+        utils_truncate_number_abs(&v_total, max_linear_vq);
         
         state_m->vd = 0.0f;
         state_m->vq = v_total;
