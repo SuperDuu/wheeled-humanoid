@@ -197,10 +197,15 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     float elec_angle = elec_raw - foc->zero_electric_angle;
     utils_norm_angle_rad(&elec_angle);
 
-    // Lưu góc điện đo đạc thuần túy vào state_m->phase để bộ lọc PLL ước lượng tốc độ ổn định (không bị vòng lặp phản hồi ảo)
     state_m->phase = elec_angle;
 
-    // Bù trễ pha động (120µs) CHỈ áp dụng cho biến đổi Park phát xung SVPWM để vector từ trường luôn vuông góc +90 độ
+    // Chạy Bộ lọc PLL Tracking Filter ở tần số 20kHz (thay vì 1kHz)
+    // Giúp ước lượng vận tốc siêu mịn mỗi 50µs, triệt tiêu 100% hiện tượng gợn bước nhảy 1kHz ở tốc độ cao >200 RPM
+    float dt_fast = 0.000050f; // 20kHz Fast Loop period
+    foc_pll_run(elec_angle, dt_fast, &motor->m_pll_phase, &motor->m_pll_speed, motor->m_conf);
+    motor->m_speed_est_fast = motor->m_pll_speed;
+
+    // Bù trễ pha động (120µs) với vận tốc 20kHz mượt mà liên tục
     float pwm_phase = elec_angle + (motor->m_speed_est_fast * 0.000120f);
     utils_norm_angle_rad(&pwm_phase);
 
@@ -340,10 +345,6 @@ void FOC_Control_SlowLoop(FOC_Controller_t *foc, float dt)
     foc_update_cycloidal_joint_angle(&foc->motor, foc->encoder.angle_rad);
 
     motor_all_state_t *motor = &foc->motor;
-
-    // Run PLL speed estimator unconditionally so hand-turning reads speed even when state=OFF
-    foc_pll_run(motor->m_motor_state.phase, dt, &motor->m_pll_phase, &motor->m_pll_speed, motor->m_conf);
-    motor->m_speed_est_fast = motor->m_pll_speed;
 
     if (foc->motor.m_state != MC_STATE_RUNNING) return;
 
