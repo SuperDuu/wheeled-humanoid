@@ -196,12 +196,10 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     AS5048A_ReadRadians(&foc->encoder, &raw_enc_rad);
     foc_update_cycloidal_joint_angle(motor, raw_enc_rad);
 
-    // 1b. Tính Góc Điện theo Chuẩn Công Nghiệp (SimpleFOC / ODrive / VESC)
-    // Trừ offset trong Miền Góc Điện (Electrical Domain) thay vì miền cơ học
-    // Đảm bảo chuyển tiếp 0..2PI siêu mượt, triệt tiêu 100% bước nhảy pha khi encoder wrap 2PI
+    // 1b. Tính Góc Điện theo Chuẩn VESC [-PI, +PI] (loại bỏ hoàn toàn hiện tượng nhảy 0 <-> 2PI ở vị trí 0)
     float elec_raw = (float)(conf_now->encoder_direction * conf_now->foc_motor_pole_pairs) * raw_enc_rad;
-    float elec_angle = fmodf(elec_raw - foc->zero_electric_angle, 2.0f * (float)M_PI);
-    if (elec_angle < 0.0f) elec_angle += 2.0f * (float)M_PI;
+    float elec_angle = elec_raw - foc->zero_electric_angle;
+    utils_norm_angle_rad(&elec_angle);
 
     state_m->phase = elec_angle;
     utils_fast_sincos(elec_angle, &state_m->phase_sin, &state_m->phase_cos);

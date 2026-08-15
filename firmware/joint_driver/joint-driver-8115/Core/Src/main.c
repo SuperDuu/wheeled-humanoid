@@ -472,12 +472,10 @@ void Run_EncoderAlignment(void)
   float enc_zero = 0.0f;
   AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_zero);
 
-  // Lưu Offset ở Miền Góc Điện (Electrical Domain) theo Chuẩn SimpleFOC / ODrive
+  // Lưu Offset ở Miền Góc Điện (Electrical Domain) theo Chuẩn VESC [-PI, +PI]
   float elec_offset = (float)(g_foc_controller.conf.encoder_direction * g_foc_controller.conf.foc_motor_pole_pairs) * enc_zero;
-  float zero_elec = fmodf(elec_offset, 2.0f * (float)M_PI);
-  if (zero_elec < 0.0f) zero_elec += 2.0f * (float)M_PI;
-
-  g_foc_controller.zero_electric_angle = zero_elec;
+  utils_norm_angle_rad(&elec_offset);
+  g_foc_controller.zero_electric_angle = elec_offset;
   g_foc_controller.aligned = true;
 
   // Log debug
