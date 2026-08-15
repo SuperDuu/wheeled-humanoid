@@ -169,6 +169,14 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         motor->m_state = MC_STATE_OFF;
         motor->m_iq_set = 0.0f;
         motor->m_speed_command_rpm = 0.0f;
+        motor->m_speed_pid_set_rpm = 0.0f;
+        motor->m_speed_i_term = 0.0f;
+        motor->m_motor_state.duty_now = 0.0f;
+        motor->m_motor_state.vd = 0.0f;
+        motor->m_motor_state.vq = 0.0f;
+        foc->fault = MC_FAULT_NONE;
+        speed_target_dbg = 0.0f;
+        iq_target_dbg = 0.0f;
         run_foc_mode = 0;
         run_open_loop = 0;
     }
@@ -176,6 +184,7 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         extern volatile int run_alignment;
         run_alignment = 1;
         run_open_loop = 0;
+        run_foc_mode = 0;
     }
     else if (strncmp(cmd, "OPENLOOP", 8) == 0 || strncmp(cmd, "TEST", 4) == 0 || strncmp(cmd, "RUN", 3) == 0) {
         float rpm = 100.0f;
@@ -190,18 +199,26 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         open_loop_current_rpm = 0.0f;
         run_open_loop = 1;
         motor->m_state = MC_STATE_RUNNING;
+        foc->fault = MC_FAULT_NONE;
         TIM1_EnsureMoeEnabled();
     }
     else if (strncmp(cmd, "MODE ", 5) == 0) {
         int m = atoi(&cmd[5]);
         run_open_loop = 0;
+        foc->fault = MC_FAULT_NONE;
         if (m == 0) {
             motor->m_state = MC_STATE_OFF;
             motor->m_iq_set = 0.0f;
             motor->m_speed_command_rpm = 0.0f;
+            motor->m_speed_pid_set_rpm = 0.0f;
+            motor->m_speed_i_term = 0.0f;
+            motor->m_motor_state.duty_now = 0.0f;
+            speed_target_dbg = 0.0f;
+            iq_target_dbg = 0.0f;
             run_foc_mode = 0;
         } else if (m >= 1 && m <= 5) {
             motor->m_state = MC_STATE_RUNNING;
+            TIM1_EnsureMoeEnabled();
             if (m == 1) { motor->m_control_mode = CONTROL_MODE_CURRENT; run_foc_mode = 1; }
             else if (m == 2) { motor->m_control_mode = CONTROL_MODE_CURRENT_BRAKE; run_foc_mode = 1; }
             else if (m == 3) { motor->m_control_mode = CONTROL_MODE_SPEED; run_foc_mode = 3; }
@@ -213,6 +230,7 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         float mech_rpm = atof(&cmd[6]);
         float pole_pairs = (motor->m_conf != NULL) ? (float)motor->m_conf->foc_motor_pole_pairs : 21.0f;
         speed_target_dbg = mech_rpm;
+        foc->fault = MC_FAULT_NONE;
         if (run_open_loop == 1) {
             open_loop_target_rpm = mech_rpm;
         } else {
@@ -220,6 +238,7 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
             motor->m_control_mode = CONTROL_MODE_SPEED;
             motor->m_state = MC_STATE_RUNNING;
             run_foc_mode = 3;
+            TIM1_EnsureMoeEnabled();
         }
     }
     else if (strncmp(cmd, "IQ ", 3) == 0 || strncmp(cmd, "CURRENT ", 8) == 0) {
@@ -229,6 +248,8 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         motor->m_control_mode = CONTROL_MODE_CURRENT;
         motor->m_state = MC_STATE_RUNNING;
         run_foc_mode = 1;
+        foc->fault = MC_FAULT_NONE;
+        TIM1_EnsureMoeEnabled();
     }
     else if (strncmp(cmd, "VQ ", 3) == 0 || strncmp(cmd, "VOLT ", 5) == 0) {
         float vq = atof((strncmp(cmd, "VQ ", 3) == 0) ? &cmd[3] : &cmd[5]);
@@ -238,6 +259,7 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         motor->m_control_mode = CONTROL_MODE_DUTY;
         motor->m_state = MC_STATE_RUNNING;
         run_foc_mode = 4;
+        foc->fault = MC_FAULT_NONE;
         TIM1_EnsureMoeEnabled();
     }
     else if (strncmp(cmd, "POS ", 4) == 0) {
@@ -247,6 +269,8 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         motor->m_control_mode = CONTROL_MODE_POS;
         motor->m_state = MC_STATE_RUNNING;
         run_foc_mode = 2;
+        foc->fault = MC_FAULT_NONE;
+        TIM1_EnsureMoeEnabled();
     }
 }
 
