@@ -743,7 +743,7 @@ int main(void)
     TIM1_EnsureMoeEnabled();
 
     /* 0c. Chế độ điều khiển FOC Closed-Loop (Đồng bộ giữa Live Expressions và USB App) */
-    if (run_foc_mode == 1 || run_foc_mode == 2 || run_foc_mode == 3) {
+    if (run_foc_mode == 1 || run_foc_mode == 2 || run_foc_mode == 3 || run_foc_mode == 4) {
       // Tự động Căn chỉnh Góc Encoder (Align) Lần đầu nếu chưa được căn chỉnh
       if (!g_foc_controller.aligned && run_alignment != 1) {
         run_alignment = 1;
@@ -766,6 +766,9 @@ int main(void)
         g_foc_controller.motor.m_control_mode = CONTROL_MODE_SPEED;
         g_foc_controller.motor.m_speed_command_rpm = speed_target_dbg * (float)g_foc_controller.conf.foc_motor_pole_pairs;
         g_foc_controller.motor.m_motor_state.id_target = id_target_dbg;
+      } else if (run_foc_mode == 4) { // Direct Voltage Vq Mode
+        g_foc_controller.motor.m_state = MC_STATE_RUNNING;
+        g_foc_controller.motor.m_control_mode = CONTROL_MODE_DUTY;
       }
     } else if (run_direction_test != 1 && run_alignment != 1) {
       // Khi run_foc_mode == 0, chỉ tắt động cơ nếu USB App cũng không yêu cầu chạy
