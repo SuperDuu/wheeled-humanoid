@@ -112,7 +112,13 @@ bool Comm_Telemetry_Send(FOC_Controller_t *foc)
     packet.control_mode = (uint8_t)motor->m_control_mode;
     packet.motor_state = (uint8_t)motor->m_state;
     packet.fault_code = (uint8_t)foc->fault;
-    packet.reserved = 0;
+    packet.encoder_dir = (int8_t)conf->encoder_direction;
+
+    // FOC Diagnostic Fields
+    packet.vd = state_m->vd;
+    packet.vq = state_m->vq;
+    packet.zero_elec_angle = foc->zero_electric_angle;
+    packet.id_target = state_m->id_target;
 
     // Calculate Checksum over payload (excluding magic & checksum itself)
     uint8_t *raw_buf = (uint8_t*)&packet;
