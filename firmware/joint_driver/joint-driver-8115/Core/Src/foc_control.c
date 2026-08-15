@@ -195,14 +195,16 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     // 1b. Tính Góc Điện theo Chuẩn VESC [-PI, +PI] với Dynamic Lead-Angle Delay Compensation (120µs)
     float elec_raw = (float)(conf_now->encoder_direction * conf_now->foc_motor_pole_pairs) * raw_enc_rad;
     float elec_angle = elec_raw - foc->zero_electric_angle;
-    
-    // Bù trễ góc pha động (Bù trễ 120µs của bộ lọc AS5048A CORDIC và thanh ghi nạp đệm PWM)
-    float lead_comp = motor->m_speed_est_fast * 0.000120f;
-    elec_angle += lead_comp;
     utils_norm_angle_rad(&elec_angle);
 
+    // Lưu góc điện đo đạc thuần túy vào state_m->phase để bộ lọc PLL ước lượng tốc độ ổn định (không bị vòng lặp phản hồi ảo)
     state_m->phase = elec_angle;
-    utils_fast_sincos(elec_angle, &state_m->phase_sin, &state_m->phase_cos);
+
+    // Bù trễ pha động (120µs) CHỈ áp dụng cho biến đổi Park phát xung SVPWM để vector từ trường luôn vuông góc +90 độ
+    float pwm_phase = elec_angle + (motor->m_speed_est_fast * 0.000120f);
+    utils_norm_angle_rad(&pwm_phase);
+
+    utils_fast_sincos(pwm_phase, &state_m->phase_sin, &state_m->phase_cos);
 
     // 2. Clarke Transform: (Ia, Ib) -> (Ialpha, Ibeta)
     state_m->i_alpha = current_a;
