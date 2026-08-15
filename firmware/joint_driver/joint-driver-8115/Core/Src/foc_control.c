@@ -262,24 +262,24 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
         
         float actual_mech_rpm = RADPS2RPM_f(motor->m_speed_est_fast) / pole_pairs;
         
-        // 1. Back-EMF Feedforward: E = omega_e * lambda = (Pp * RPM * 2*PI/60) * lambda
-        // Sử dụng hằng số thực tế GB8115-4: 3.40V @ 100 RPM (tỷ lệ 0.034 V/RPM)
+        // 1. Back-EMF Feedforward: E = omega_e * lambda
+        // Tuyến tính chuẩn GB8115-4: 3.40V @ 100 RPM, 6.80V @ 200 RPM, 10.20V @ 300 RPM
         float v_ff = s_ramped_mech_rpm * 0.0340f;
         
-        // 2. Proportional Trim
-        float v_p  = (s_ramped_mech_rpm - actual_mech_rpm) * 0.025f;
+        // 2. Proportional Trim (êm ái 0.015 V/RPM error)
+        float v_p  = (s_ramped_mech_rpm - actual_mech_rpm) * 0.015f;
         float v_total = v_ff + v_p;
         
         // 3. Dynamic SVPWM Linear Ceiling = Vbus / sqrt(3) (~14.0V @ 24.3V Bus)
         float max_linear_vq = ONE_BY_SQRT3 * conf_now->l_max_duty * state_m->v_bus;
         utils_truncate_number_abs(&v_total, max_linear_vq);
         
-        // 4. Automatic Field Weakening (khi Vq chạm trần để mở rộng dải tốc độ lên 500 RPM)
+        // 4. Giữ Vd = 0V trong toàn bộ dải vận hành bình thường (tránh khử từ sớm gây mất moment ở 200 RPM)
         float vd_fw = 0.0f;
-        if (fabsf(v_total) >= (max_linear_vq - 0.5f) && fabsf(s_ramped_mech_rpm) > 250.0f) {
+        if (fabsf(actual_mech_rpm) > 260.0f && fabsf(v_total) >= (max_linear_vq - 0.5f)) {
             float v_excess = fabsf(v_total) - (max_linear_vq - 0.5f);
-            vd_fw = -SIGN(s_ramped_mech_rpm) * v_excess * 1.5f;
-            utils_truncate_number_abs(&vd_fw, 4.0f); // Max 4.0V FW in d-axis
+            vd_fw = -SIGN(s_ramped_mech_rpm) * v_excess * 0.8f;
+            utils_truncate_number_abs(&vd_fw, 3.0f);
         }
         
         state_m->vd = vd_fw;
