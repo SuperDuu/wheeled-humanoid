@@ -233,6 +233,9 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         else if (strncmp(cmd, "CLOSE_LOOP ", 11) == 0) rpm = atof(&cmd[11]);
         speed_target_dbg = rpm;
         motor->m_speed_command_rpm = rpm * 21.0f;
+        motor->m_speed_i_term = 0.0f;
+        motor->m_speed_prev_error = 0.0f;
+        motor->m_speed_d_filter = 0.0f;
         motor->m_control_mode = CONTROL_MODE_SPEED;
         motor->m_state = MC_STATE_RUNNING;
         run_foc_mode = 3;
@@ -248,6 +251,9 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
             open_loop_target_rpm = mech_rpm;
         } else {
             motor->m_speed_command_rpm = mech_rpm * pole_pairs;
+            motor->m_speed_i_term = 0.0f;
+            motor->m_speed_prev_error = 0.0f;
+            motor->m_speed_d_filter = 0.0f;
             motor->m_control_mode = CONTROL_MODE_SPEED;
             motor->m_state = MC_STATE_RUNNING;
             run_foc_mode = 3;
