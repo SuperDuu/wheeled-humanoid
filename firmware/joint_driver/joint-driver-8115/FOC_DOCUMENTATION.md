@@ -284,4 +284,21 @@ graph TD
 * Khi gặp glitch chẵn lẻ do dòng điện lớn từ bàn tay ghì trục, giữ nguyên góc hợp lệ cuối cùng $\theta_{last}$ trong 1 chu kỳ $50\mu\text{s}$, tránh cho góc điện bị nhảy về `0x0000` làm mất đồng bộ cực từ (Pole Slip). Động cơ giữ lực ghì chắc chắn không bị trượt bước.
 
 ---
+
+### 6.6 Điều Khiển Vị Trí (Position Control), Ghim Góc (Hold) & Ghim Lực (Torque Holding)
+Firmware hỗ trợ đầy đủ 4 chế độ vận hành toàn diện:
+
+1. **Điều Khiển Góc Khớp (`POS <độ>`)**:
+   * Cú pháp CLI: `POS 0`, `POS 45`, `POS 90`, `POS 180`, `POS -90` (nhập trực tiếp bằng độ hoặc radian).
+   * Thuật toán: Bộ điều khiển Position PID (`foc_run_pid_control_pos`) tính toán sai số góc $\Delta \theta = \theta_{target} - \theta_{joint}$ và sinh điện áp phục hồi $V_q = K_p \cdot \Delta \theta + K_i \int \Delta \theta dt + K_d \frac{d\theta}{dt}$ đưa trục quay êm ái đến đúng góc đích.
+2. **Ghim Khóa Góc Tức Thì (`HOLD` / `LOCK`)**:
+   * Cú pháp CLI: `HOLD` hoặc `LOCK`.
+   * Tác vụ: Bắt ngay lập tức góc hiện tại của động cơ và chuyển sang `CONTROL_MODE_POS`, tạo mô-men ghì chống xoay (Holding Torque $\sim 1.5 - 2.0\text{ N.m}$). Nếu dùng tay bẻ trục lệch đi, motor tự động sinh lực đẩy ngược lại để giữ nguyên góc ban đầu.
+3. **Ghim Lực / Điều Khiển Mô-men (`IQ <ampe>` / `TORQUE <Nm>`)**:
+   * Cú pháp CLI: `IQ 0.5`, `IQ 1.0`, `IQ -0.5` hoặc `TORQUE 0.5` ($0.5\text{ N.m}$).
+   * Tác vụ: Chuyển sang `CONTROL_MODE_CURRENT`, bơm dòng điện mô-men không đổi vuông góc $90^\circ$ với rotor. Trục động cơ sinh một lực kéo hoặc giữ lực cản cố định, cho phép ứng dụng vào chế độ tạ ảo, kháng lực, hoặc hỗ trợ lực thông minh (Force/Impedance Control).
+4. **Nhả Lực Tự Do (`FREE` / `RELEASE`)**:
+   * Cú pháp CLI: `FREE` hoặc `RELEASE` $\implies$ Tắt PWM ngắt lực, trục xoay tay trơn tru không có lực cản.
+
+---
 *Báo cáo phân tích kỹ thuật này phản ánh đúng kiến trúc điều khiển FOC thực chiến được tích hợp trong dự án Joint Driver 8115.*
