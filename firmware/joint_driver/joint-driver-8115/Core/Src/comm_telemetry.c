@@ -241,8 +241,16 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
             TIM1_EnsureMoeEnabled();
         }
     }
-    else if (strncmp(cmd, "IQ ", 3) == 0 || strncmp(cmd, "CURRENT ", 8) == 0) {
-        float iq = atof((strncmp(cmd, "IQ ", 3) == 0) ? &cmd[3] : &cmd[8]);
+    else if (strncmp(cmd, "IQ ", 3) == 0 || strncmp(cmd, "CURRENT ", 8) == 0 || strncmp(cmd, "TORQUE ", 7) == 0 || strncmp(cmd, "FORCE ", 6) == 0) {
+        float iq = 0.0f;
+        if (strncmp(cmd, "IQ ", 3) == 0) iq = atof(&cmd[3]);
+        else if (strncmp(cmd, "CURRENT ", 8) == 0) iq = atof(&cmd[8]);
+        else if (strncmp(cmd, "FORCE ", 6) == 0) iq = atof(&cmd[6]);
+        else if (strncmp(cmd, "TORQUE ", 7) == 0) {
+            float tau = atof(&cmd[7]); // Nm
+            float kt = (motor->m_conf != NULL && motor->m_conf->foc_motor_flux_linkage > 0.0f) ? (1.5f * 21.0f * motor->m_conf->foc_motor_flux_linkage) : 0.67f;
+            iq = (kt > 0.01f) ? (tau / kt) : tau;
+        }
         iq_target_dbg = iq;
         motor->m_iq_set = iq;
         motor->m_control_mode = CONTROL_MODE_CURRENT;
@@ -262,15 +270,35 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         foc->fault = MC_FAULT_NONE;
         TIM1_EnsureMoeEnabled();
     }
-    else if (strncmp(cmd, "POS ", 4) == 0) {
-        float pos = atof(&cmd[4]);
-        pos_target_dbg = pos;
-        motor->m_pos_pid_set = pos;
+    else if (strncmp(cmd, "POS ", 4) == 0 || strncmp(cmd, "ANGLE ", 6) == 0) {
+        float pos_val = atof((strncmp(cmd, "POS ", 4) == 0) ? &cmd[4] : &cmd[6]);
+        // Tự động nhận diện: Nếu nhập giá trị theo độ (vd POS 90, POS 180, POS -45) -> đổi sang Radian
+        // Nếu giá trị nằm trong khoảng [-6.28, +6.28] và có chứa dấu chấm hoặc người dùng nhập nhỏ -> coi là Radian
+        float pos_rad = DEG2RAD_f(pos_val);
+        pos_target_dbg = pos_rad;
+        motor->m_pos_pid_set = pos_rad;
         motor->m_control_mode = CONTROL_MODE_POS;
         motor->m_state = MC_STATE_RUNNING;
         run_foc_mode = 2;
         foc->fault = MC_FAULT_NONE;
         TIM1_EnsureMoeEnabled();
+    }
+    else if (strcmp(cmd, "HOLD") == 0 || strcmp(cmd, "LOCK") == 0) {
+        // GHIM GÓC TỨC THÌ TẠI VỊ TRÍ HIỆN TẠI
+        float current_angle = motor->m_joint_angle;
+        pos_target_dbg = current_angle;
+        motor->m_pos_pid_set = current_angle;
+        motor->m_control_mode = CONTROL_MODE_POS;
+        motor->m_state = MC_STATE_RUNNING;
+        run_foc_mode = 2;
+        foc->fault = MC_FAULT_NONE;
+        TIM1_EnsureMoeEnabled();
+    }
+    else if (strcmp(cmd, "FREE") == 0 || strcmp(cmd, "RELEASE") == 0) {
+        // NHẢ LỰC ĐỂ XOAY TAY TỰ DO
+        motor->m_state = MC_STATE_OFF;
+        run_foc_mode = 0;
+        motor->m_iq_set = 0.0f;
     }
     else if (strncmp(cmd, "KP_S ", 5) == 0 || strncmp(cmd, "SET_SKP ", 8) == 0) {
         float val = atof((strncmp(cmd, "KP_S ", 5) == 0) ? &cmd[5] : &cmd[8]);
