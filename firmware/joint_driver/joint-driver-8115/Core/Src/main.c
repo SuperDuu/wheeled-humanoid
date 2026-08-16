@@ -407,8 +407,8 @@ void Run_EncoderAlignment(void)
     uint32_t ta, tb, tc, sector;
     foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tc * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tb * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
     HAL_Delay(5);
   }
   HAL_Delay(800); // Chờ rotor ổn định tuyệt đối tại góc 0 điện
@@ -428,8 +428,8 @@ void Run_EncoderAlignment(void)
     uint32_t ta, tb, tc, sector;
     foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tc * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tb * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
     HAL_Delay(5);
   }
   HAL_Delay(600); // Chờ rotor ổn định tại góc kết thúc 4*PI điện
@@ -469,8 +469,8 @@ void Run_EncoderAlignment(void)
     uint32_t ta, tb, tc, sector;
     foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tc * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tb * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
     HAL_Delay(5);
   }
   HAL_Delay(800); // Chờ rotor settle chính xác tuyệt đối ở góc 0 điện
@@ -497,8 +497,8 @@ void Run_EncoderAlignment(void)
     uint32_t ta, tb, tc, sector;
     foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tc * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tb * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
     HAL_Delay(5);
   }
 
