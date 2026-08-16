@@ -102,12 +102,12 @@ HAL_StatusTypeDef AS5048A_ReadRawAngle(AS5048A_t *enc, uint16_t *raw_angle)
                 enc->angle_deg = ((float)angleData / 16384.0f) * 360.0f;
                 enc->error_flag = 0;
             } else {
-                // Error Flag bit 14 was set: clear error in AS5048A for next frame
+                // Error flag set on AS5048A: Keep last valid angle to prevent pole jump
                 enc->error_flag = 1;
-                AS5048A_ClearError(enc);
             }
         } else {
-            enc->error_flag = 1; // Parity mismatch
+            // Parity mismatch due to EMI: Retain last valid angle to prevent pole slip
+            enc->error_flag = 1;
         }
     } else {
         // Clear SPI state on error to prevent latchup
