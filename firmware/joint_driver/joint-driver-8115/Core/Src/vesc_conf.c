@@ -42,12 +42,12 @@ void vesc_conf_set_defaults(mc_configuration *conf)
 
     // Speed Controller (PID) - Voltage-Mode FOC for GB8115 Gimbal Motor
     // (Kt = 0.67 Nm/A, J = 2574 g.cm², R = 3.89Ω, Direct Drive)
-    conf->s_pid_kp = 0.0060f;              // Proportional gain cao, đáp ứng mô-men tức thời cực mạnh
-    conf->s_pid_ki = 0.0250f;              // Integral gain mạnh mẽ, triệt tiêu sai số trong 0.05s
-    conf->s_pid_kd = 0.0001f;              // Damping chống rung
+    conf->s_pid_kp = 0.0020f;              // Proportional gain chuẩn, không gây vọt lố
+    conf->s_pid_ki = 0.0030f;              // Integral gain tối ưu, triệt tiêu 100% hiện tượng dao động hình sin
+    conf->s_pid_kd = 0.0003f;              // Damping giảm chấn chủ động, giữ tốc độ phẳng lì
     conf->s_pid_kd_filter = 0.2f;
     conf->s_pid_min_erpm = 5.0f;           // 5 ERPM deadband (~0.24 RPM)
-    conf->s_pid_ramp_erpms_s = 0.0f;       // Bơm trực tiếp 100% công suất tức thì lúc khởi động (Zero Ramp)
+    conf->s_pid_ramp_erpms_s = 4000.0f;    // Ramp gia tốc 4000 ERPM/s (~190 RPM/s)
 
     // Position Controller (PID + Process D) - Voltage-Mode FOC (Direct Drive)
     conf->p_pid_kp = 4.0f;                 // Smooth proportional gain (holding torque)
