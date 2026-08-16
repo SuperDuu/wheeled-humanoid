@@ -38,7 +38,7 @@ void FOC_Control_Init(FOC_Controller_t *foc, SPI_HandleTypeDef *hspi1_drv, SPI_H
     foc->aligned = false;
 
     foc->duty_a = foc->duty_b = foc->duty_c = 0.5f;
-    foc->phase_swap_bc = true; // Swap Phase B <-> Phase C for forward clockwise commutation
+    foc->phase_swap_bc = false; // Pure 1:1 forward phase sequence (A->B->C)
 
     // Precalculate Inductances & Frequencies
     foc_precalc_values(&foc->motor);
