@@ -411,16 +411,29 @@ class FOCOscilloscopeStudio {
 
     // 🚀 Smart Trajectory Move & Hold Console Button
     const btnSmartExecute = document.getElementById('btn-smart-execute');
+    const executeSmartMove = () => {
+      const deg = parseFloat(document.getElementById('smart-deg')?.value || '90');
+      const time = parseFloat(document.getElementById('smart-time')?.value || '3.0');
+      const force = parseFloat(document.getElementById('smart-force')?.value || '3.0');
+      const cmd = `MOVE ${deg} ${time} ${force}`;
+      this.sendCommand(cmd);
+      this.appendLog(`🚀 Quỹ đạo: Quay tới ${deg}° trong ${time}s (Lực ghim ${force}A)`, 'success');
+    };
+
     if (btnSmartExecute) {
-      btnSmartExecute.addEventListener('click', () => {
-        const deg = parseFloat(document.getElementById('smart-deg')?.value || '90');
-        const time = parseFloat(document.getElementById('smart-time')?.value || '3.0');
-        const force = parseFloat(document.getElementById('smart-force')?.value || '3.0');
-        const cmd = `${deg} ${time} ${force}`;
-        this.sendCommand(cmd);
-        this.appendLog(`🚀 Lệnh quỹ đạo: Quay tới ${deg}° trong ${time}s (Lực ghim max ${force}A)`, 'success');
-      });
+      btnSmartExecute.addEventListener('click', executeSmartMove);
     }
+    ['smart-deg', 'smart-time', 'smart-force'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            executeSmartMove();
+          }
+        });
+      }
+    });
 
     // CLI Direct Command Input Handlers
     const inputCli = document.getElementById('input-cli');

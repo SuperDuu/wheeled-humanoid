@@ -229,7 +229,7 @@ void foc_start_trajectory(motor_all_state_t *motor, float target_angle_rad, floa
 }
 
 /**
-  * @brief  VESC Position Controller Loop (S-Curve Trajectory + High-Stiffness Servo PID + Breakaway Assist)
+  * @brief  VESC Position Controller Loop (Silky Smooth S-Curve Trajectory + Velocity Feedforward + PID)
   */
 void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *motor) {
 	mc_configuration *conf_now = motor->m_conf;
@@ -246,21 +246,32 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 		return;
 	}
 
-	// 1. S-Curve Trajectory Interpolation (Quintic Minimum-Jerk Polynomial)
+	float target_vel_rad_s = 0.0f;
+
+	// 1. Silky Smooth Quintic Minimum-Jerk S-Curve (C2-continuous position, velocity, and acceleration)
 	if (motor->m_traj_active) {
 		motor->m_traj_time += dt;
 		if (motor->m_traj_time >= motor->m_traj_duration) {
 			motor->m_traj_time = motor->m_traj_duration;
-			motor->m_traj_active = false; // Đến đích -> Khóa cứng vị trí (Rigid Hold)
+			motor->m_traj_active = false; // Đến đích -> Ghim cứng vị trí đích
 			motor->m_pos_pid_set = motor->m_traj_target_angle;
+			target_vel_rad_s = 0.0f;
 		} else {
-			// Polynomial: s(tau) = 10*tau^3 - 15*tau^4 + 6*tau^5
+			// Minimum-Jerk Polynomial: s(tau) = 10*tau^3 - 15*tau^4 + 6*tau^5
 			float tau = motor->m_traj_time / motor->m_traj_duration;
-			float tau3 = tau * tau * tau;
+			if (tau > 1.0f) tau = 1.0f;
+			float tau2 = tau * tau;
+			float tau3 = tau2 * tau;
 			float tau4 = tau3 * tau;
 			float tau5 = tau4 * tau;
 			float s = 10.0f * tau3 - 15.0f * tau4 + 6.0f * tau5;
-			motor->m_pos_pid_set = motor->m_traj_start_angle + s * (motor->m_traj_target_angle - motor->m_traj_start_angle);
+			
+			// Derivative: ds/dtau = 30*tau^2 - 60*tau^3 + 30*tau^4
+			float ds_dtau = 30.0f * tau2 - 60.0f * tau3 + 30.0f * tau4;
+			float delta_angle = motor->m_traj_target_angle - motor->m_traj_start_angle;
+
+			motor->m_pos_pid_set = motor->m_traj_start_angle + s * delta_angle;
+			target_vel_rad_s = (ds_dtau / motor->m_traj_duration) * delta_angle;
 		}
 	}
 
@@ -271,26 +282,33 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 
 	float error = angle_set - angle_now;
 
-	// 2. High-Performance Servo Position PID (Kp = 8.0 V/rad, Ki = 1.0, Kd = 0.04)
-	float p_term = error * 8.0f;
-	motor->m_pos_i_term += error * (1.0f * dt);
-	utils_truncate_number_abs((float*)&motor->m_pos_i_term, 4.0f); // Anti-windup 4V
+	// 2. Velocity Feedforward: Cung cấp điện áp đón đầu mượt mà theo vận tốc mong muốn
+	float pole_pairs = (float)conf_now->foc_motor_pole_pairs;
+	float bemf_ff = target_vel_rad_s * pole_pairs * conf_now->foc_motor_flux_linkage;
+	float friction_ff = target_vel_rad_s * 0.8f; // Friction/damping feedforward (0.8V/(rad/s))
+	float v_ff = bemf_ff + friction_ff;
 
-	// D-term calculation on measurement to prevent derivative kick
-	float d_term = -(motor->m_speed_est_fast / (float)conf_now->foc_motor_pole_pairs) * 0.04f;
-
-	// 3. Breakaway Boost: Bơm tối thiểu 2.5V khi có sai số góc > 0.03 rad (~1.7 độ) để phá lực cản rãnh từ
-	float v_boost = 0.0f;
-	if (fabsf(error) > 0.03f) {
-		v_boost = (error > 0.0f) ? 2.5f : -2.5f;
+	// 3. High-Stiffness Feedback Servo PID (Kp = 12.0 V/rad, Ki = 1.5, Kd = 0.08)
+	float p_term = error * 12.0f;
+	
+	// Anti-windup conditional integration
+	if (fabsf(error) < 0.5f) { // Chỉ tích phân khi gần đích để tránh vọt lố (overshoot)
+		motor->m_pos_i_term += error * (1.5f * dt);
+		utils_truncate_number_abs((float*)&motor->m_pos_i_term, 4.0f);
+	} else {
+		motor->m_pos_i_term = 0.0f;
 	}
 
-	float output_v = p_term + motor->m_pos_i_term + d_term + v_boost;
+	// D-term tính trên vận tốc thực tế của rotor để giảm chấn dao động
+	float mech_vel_rad_s = motor->m_speed_est_fast / pole_pairs;
+	float d_term = -mech_vel_rad_s * 0.08f;
 
-	// Holding limit clamp
+	float output_v = v_ff + p_term + motor->m_pos_i_term + d_term;
+
+	// 4. Holding & Drive Torque Voltage Clamping based on user limit
 	float hold_limit_a = (motor->m_pos_holding_current_limit > 0.1f) ? motor->m_pos_holding_current_limit : 3.0f;
 	float max_hold_v = hold_limit_a * conf_now->foc_motor_r;
-	if (max_hold_v > 12.0f) max_hold_v = 12.0f;
+	if (max_hold_v > 16.0f) max_hold_v = 16.0f;
 	if (max_hold_v < 2.5f) max_hold_v = 2.5f;
 
 	utils_truncate_number_abs(&output_v, max_hold_v);

@@ -205,16 +205,16 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     foc_pll_run(elec_angle, dt_fast, &motor->m_pll_phase, &motor->m_pll_speed, motor->m_conf);
     motor->m_speed_est_fast = motor->m_pll_speed;
 
-    // Automatic Open-to-Closed Loop Startup Handover
-    // Khi đứng yên (0 RPM), tự động tạo dốc quay khởi động nhẹ (từ 0 RPM tăng lên trong 30ms) để bứt phá rãnh từ.
-    // Ngay khi rotor chuyển động (> 15 RPM), lập tức khóa 100% vào AS5048A Closed-Loop FOC.
+    // Automatic Open-to-Closed Loop Startup Handover (for Speed Mode only)
+    // Khi chạy ở Speed Mode, tự động tạo dốc quay khởi động nhẹ từ 0 để bứt phá rãnh từ.
+    // Ở Position Mode, luôn dùng 100% góc tuyệt đối AS5048A Closed-Loop để chuyển động mượt mà không khực.
     static float startup_phase = 0.0f;
     static float startup_speed_erpm = 0.0f;
     static bool startup_in_progress = false;
 
     float pwm_phase = elec_angle;
 
-    if ((motor->m_control_mode == CONTROL_MODE_SPEED || motor->m_control_mode == CONTROL_MODE_POS) && motor->m_state == MC_STATE_RUNNING) {
+    if (motor->m_control_mode == CONTROL_MODE_SPEED && motor->m_state == MC_STATE_RUNNING) {
         float speed_rpm = RADPS2RPM_f(motor->m_speed_est_fast) / 21.0f;
         float target_rpm = motor->m_speed_command_rpm / 21.0f;
 
