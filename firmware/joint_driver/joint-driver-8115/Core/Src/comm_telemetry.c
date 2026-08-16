@@ -354,6 +354,20 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         run_foc_mode = 0;
         motor->m_iq_set = 0.0f;
     }
+    else if (strcmp(cmd, "RESET") == 0 || strcmp(cmd, "REBOOT") == 0) {
+        // RESET VI ĐIỀU KHIỂN & DRIVER
+        motor->m_state = MC_STATE_OFF;
+        run_foc_mode = 0;
+        motor->m_iq_set = 0.0f;
+        foc->fault = MC_FAULT_NONE;
+        NVIC_SystemReset();
+    }
+    else if (strcmp(cmd, "CLEAR") == 0 || strcmp(cmd, "CLEAR_FAULT") == 0) {
+        foc->fault = MC_FAULT_NONE;
+        motor->m_state = MC_STATE_OFF;
+        run_foc_mode = 0;
+        TIM1_EnsureMoeEnabled();
+    }
     else if (strncmp(cmd, "KP_S ", 5) == 0 || strncmp(cmd, "SET_SKP ", 8) == 0) {
         float val = atof((strncmp(cmd, "KP_S ", 5) == 0) ? &cmd[5] : &cmd[8]);
         foc->conf.s_pid_kp = val;
