@@ -314,7 +314,7 @@
           <!-- 1-Line Smart Trajectory Console: <Góc> <Thời Gian> <Lực Giới Hạn> -->
           <div style="background: rgba(0, 0, 0, 0.25); padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(52, 211, 153, 0.2); margin-bottom: 8px;">
             <div style="font-size: 0.74rem; font-weight: bold; color: #34d399; margin-bottom: 4px;">
-              🚀 ĐIỀU KHIỂN GÓC SIÊU TỐC (0 = MAX SPEED):
+              🚀 QUỸ ĐẠO CHUYỂN GÓC MƯỢT (S-CURVE RAMP):
             </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 6px; align-items: end;">
               <div>
@@ -322,28 +322,28 @@
                 <input type="number" id="smart-deg" value="90" step="5" min="-360" max="360" style="width: 100%; padding: 5px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 4px; font-weight: bold; text-align: center; font-size: 0.82rem;">
               </div>
               <div>
-                <label style="font-size: 0.68rem; color: #94a3b8;">Thời Gian (s, 0=Max):</label>
-                <input type="number" id="smart-time" value="0" step="0.5" min="0" max="60.0" style="width: 100%; padding: 5px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 4px; font-weight: bold; text-align: center; font-size: 0.82rem;">
+                <label style="font-size: 0.68rem; color: #94a3b8;">Thời Gian (s):</label>
+                <input type="number" id="smart-time" value="1.5" step="0.5" min="0.1" max="60.0" style="width: 100%; padding: 5px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 4px; font-weight: bold; text-align: center; font-size: 0.82rem;">
               </div>
               <div>
                 <label style="font-size: 0.68rem; color: #94a3b8;">Lực Ghim (A):</label>
                 <input type="number" id="smart-force" value="3.5" step="0.5" min="0.5" max="10.0" style="width: 100%; padding: 5px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 4px; font-weight: bold; text-align: center; font-size: 0.82rem;">
               </div>
               <button id="btn-smart-execute" class="btn" style="background: #059669; color: #fff; font-weight: bold; padding: 5px 12px; height: 32px; font-size: 0.78rem;">
-                🚀 BẮN TỚI GÓC
+                🚀 QUAY & GHIM
               </button>
             </div>
           </div>
 
           <!-- Quick Angle Presets Bar -->
           <div style="margin-bottom: 8px;">
-            <div style="font-size: 0.70rem; color: #94a3b8; font-weight: bold; margin-bottom: 4px;">GÓC NHANH:</div>
+            <div style="font-size: 0.70rem; color: #94a3b8; font-weight: bold; margin-bottom: 4px;">GÓC NHANH (MƯỢT):</div>
             <div class="quick-cli-chips" style="gap: 4px;">
-              <button class="btn-cli-chip" data-cmd="POS 0" style="background: #4f46e5; color: #fff; font-weight: bold;">0°</button>
-              <button class="btn-cli-chip" data-cmd="POS 45" style="background: #4f46e5; color: #fff; font-weight: bold;">45°</button>
-              <button class="btn-cli-chip" data-cmd="POS 90" style="background: #4f46e5; color: #fff; font-weight: bold;">90°</button>
-              <button class="btn-cli-chip" data-cmd="POS 180" style="background: #4f46e5; color: #fff; font-weight: bold;">180°</button>
-              <button class="btn-cli-chip" data-cmd="POS -90" style="background: #4f46e5; color: #fff; font-weight: bold;">-90°</button>
+              <button class="btn-cli-chip" data-cmd="90 1.5 3.5" style="background: #4f46e5; color: #fff; font-weight: bold;">90° (1.5s)</button>
+              <button class="btn-cli-chip" data-cmd="180 2.0 3.5" style="background: #4f46e5; color: #fff; font-weight: bold;">180° (2s)</button>
+              <button class="btn-cli-chip" data-cmd="45 1.0 3.5" style="background: #4f46e5; color: #fff; font-weight: bold;">45° (1s)</button>
+              <button class="btn-cli-chip" data-cmd="0 1.0 3.5" style="background: #4f46e5; color: #fff; font-weight: bold;">0° (1s)</button>
+              <button class="btn-cli-chip" data-cmd="-90 1.5 3.5" style="background: #4f46e5; color: #fff; font-weight: bold;">-90° (1.5s)</button>
               <button class="btn-cli-chip" data-cmd="HOLD" style="background: #ec4899; color: #fff; font-weight: bold;">🔒 GHIM GÓC</button>
               <button class="btn-cli-chip" data-cmd="FREE" style="background: #475569; color: #fff; font-weight: bold;">🆓 THẢ TỰ DO</button>
             </div>

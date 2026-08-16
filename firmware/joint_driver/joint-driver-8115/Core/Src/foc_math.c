@@ -212,37 +212,31 @@ void foc_set_home_position(motor_all_state_t *motor) {
   * @param  max_current_a: Maximum current limit for movement & holding (Amperes)
   */
 /**
-  * @brief  Start a direct, maximum-speed position move for the robot joint
+  * @brief  Start a smooth S-Curve trajectory move for the robot joint
   * @param  target_angle_rad: Target joint angle in Radians
-  * @param  duration_s: 0 for instant maximum-speed step, or time in seconds
+  * @param  duration_s: Move duration in seconds (defaults to 1.2s if <= 0.05s)
   * @param  max_current_a: Maximum current limit for movement & holding (Amperes)
   */
 void foc_start_trajectory(motor_all_state_t *motor, float target_angle_rad, float duration_s, float max_current_a) {
 	if (motor == NULL || motor->m_conf == NULL) return;
+	if (duration_s < 0.1f) duration_s = 1.2f; // Mặc định chuyển động dốc 1.2 giây siêu mượt
 	if (max_current_a < 0.5f) max_current_a = 0.5f;
 	if (max_current_a > 10.0f) max_current_a = 10.0f; // Max 10A safety limit
 
 	motor->m_traj_start_angle = motor->m_joint_angle;
 	motor->m_traj_target_angle = target_angle_rad;
+	motor->m_traj_duration = duration_s;
+	motor->m_traj_time = 0.0f;
 	motor->m_pos_holding_current_limit = max_current_a;
-
-	// Nếu duration_s <= 0.05s hoặc không yêu cầu nội suy: Đặt trực tiếp góc đích để đạt tốc độ tối đa tức thì
-	if (duration_s <= 0.05f) {
-		motor->m_traj_active = false;
-		motor->m_pos_pid_set = target_angle_rad;
-	} else {
-		motor->m_traj_duration = duration_s;
-		motor->m_traj_time = 0.0f;
-		motor->m_traj_active = true;
-		motor->m_pos_pid_set = motor->m_joint_angle;
-	}
+	motor->m_traj_active = true;
+	motor->m_pos_pid_set = motor->m_joint_angle;
 
 	motor->m_control_mode = CONTROL_MODE_POS;
 	motor->m_state = MC_STATE_RUNNING;
 }
 
 /**
-  * @brief  VESC High-Speed Direct Position Servo Loop (Maximum Acceleration + Active Damping + Rigid Holding)
+  * @brief  VESC Smooth S-Curve Trajectory Servo Loop (Quintic Minimum-Jerk + Velocity Feedforward + PID)
   */
 void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *motor) {
 	mc_configuration *conf_now = motor->m_conf;
@@ -259,21 +253,32 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 		return;
 	}
 
-	// 1. Nếu có kích hoạt Trajectory thời gian dài
+	float target_vel_rad_s = 0.0f;
+
+	// 1. Quintic Minimum-Jerk S-Curve Trajectory (C2-continuous position, velocity, and acceleration)
 	if (motor->m_traj_active) {
 		motor->m_traj_time += dt;
 		if (motor->m_traj_time >= motor->m_traj_duration) {
 			motor->m_traj_time = motor->m_traj_duration;
-			motor->m_traj_active = false;
+			motor->m_traj_active = false; // Đến đích -> Khóa cứng vị trí (Rigid Hold)
 			motor->m_pos_pid_set = motor->m_traj_target_angle;
+			target_vel_rad_s = 0.0f;
 		} else {
+			// Minimum-Jerk Polynomial: s(tau) = 10*tau^3 - 15*tau^4 + 6*tau^5
 			float tau = motor->m_traj_time / motor->m_traj_duration;
 			if (tau > 1.0f) tau = 1.0f;
-			float tau3 = tau * tau * tau;
+			float tau2 = tau * tau;
+			float tau3 = tau2 * tau;
 			float tau4 = tau3 * tau;
 			float tau5 = tau4 * tau;
 			float s = 10.0f * tau3 - 15.0f * tau4 + 6.0f * tau5;
-			motor->m_pos_pid_set = motor->m_traj_start_angle + s * (motor->m_traj_target_angle - motor->m_traj_start_angle);
+			
+			// Derivative: ds/dtau = 30*tau^2 - 60*tau^3 + 30*tau^4
+			float ds_dtau = 30.0f * tau2 - 60.0f * tau3 + 30.0f * tau4;
+			float delta_angle = motor->m_traj_target_angle - motor->m_traj_start_angle;
+
+			motor->m_pos_pid_set = motor->m_traj_start_angle + s * delta_angle;
+			target_vel_rad_s = (ds_dtau / motor->m_traj_duration) * delta_angle;
 		}
 	}
 
@@ -285,28 +290,33 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 	float error = angle_set - angle_now;
 	float pole_pairs = (float)conf_now->foc_motor_pole_pairs;
 
-	// 2. High-Performance Servo Position Control (Kp = 20.0 V/rad để đạt gia tốc cực đại tức thì)
-	float p_term = error * 20.0f;
+	// 2. Velocity Feedforward: Cung cấp điện áp đón đầu mượt mà theo vận tốc mong muốn
+	float bemf_ff = target_vel_rad_s * pole_pairs * conf_now->foc_motor_flux_linkage;
+	float friction_ff = target_vel_rad_s * 0.6f; // Friction/damping feedforward (0.6V/(rad/s))
+	float v_ff = bemf_ff + friction_ff;
+
+	// 3. High-Stiffness Feedback Servo PID (Kp = 15.0 V/rad, Ki = 1.5, Kd = 0.08)
+	float p_term = error * 15.0f;
 	
-	// Anti-windup conditional integration khi gần đích (< 0.2 rad ~ 11 độ)
-	if (fabsf(error) < 0.2f) {
-		motor->m_pos_i_term += error * (3.0f * dt);
-		utils_truncate_number_abs((float*)&motor->m_pos_i_term, 6.0f);
+	// Anti-windup conditional integration
+	if (fabsf(error) < 0.4f) {
+		motor->m_pos_i_term += error * (1.5f * dt);
+		utils_truncate_number_abs((float*)&motor->m_pos_i_term, 4.0f);
 	} else {
 		motor->m_pos_i_term = 0.0f;
 	}
 
-	// D-term tính trên vận tốc thực tế của rotor để hãm dứt khoát, chống giật lố (overshoot)
+	// D-term tính trên vận tốc thực tế của rotor để giảm chấn dao động
 	float mech_vel_rad_s = motor->m_speed_est_fast / pole_pairs;
-	float d_term = -mech_vel_rad_s * 0.12f;
+	float d_term = -mech_vel_rad_s * 0.08f;
 
-	float output_v = p_term + motor->m_pos_i_term + d_term;
+	float output_v = v_ff + p_term + motor->m_pos_i_term + d_term;
 
-	// 3. Holding & Drive Torque Voltage Clamping based on user current limit (Max 20V)
+	// 4. Holding & Drive Torque Voltage Clamping based on user limit
 	float hold_limit_a = (motor->m_pos_holding_current_limit > 0.1f) ? motor->m_pos_holding_current_limit : 3.5f;
 	float max_hold_v = hold_limit_a * conf_now->foc_motor_r;
-	if (max_hold_v > 20.0f) max_hold_v = 20.0f;
-	if (max_hold_v < 4.0f) max_hold_v = 4.0f;
+	if (max_hold_v > 16.0f) max_hold_v = 16.0f;
+	if (max_hold_v < 2.5f) max_hold_v = 2.5f;
 
 	utils_truncate_number_abs(&output_v, max_hold_v);
 	motor->m_iq_set = output_v;
