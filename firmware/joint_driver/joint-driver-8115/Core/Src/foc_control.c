@@ -38,7 +38,7 @@ void FOC_Control_Init(FOC_Controller_t *foc, SPI_HandleTypeDef *hspi1_drv, SPI_H
     foc->aligned = false;
 
     foc->duty_a = foc->duty_b = foc->duty_c = 0.5f;
-    foc->phase_swap_bc = true; // Default hardware mapping (will be confirmed by ALIGN)
+    foc->phase_swap_bc = false; // Standard A->B->C phase mapping
 
     // Precalculate Inductances & Frequencies
     foc_precalc_values(&foc->motor);
