@@ -275,11 +275,7 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		utils_truncate_number(&motor->m_speed_pid_set_rpm, conf_now->l_min_erpm, conf_now->l_max_erpm);
 	}
 
-	float erpm_raw = RADPS2RPM_f(motor->m_speed_est_fast);
-	static float erpm_filtered = 0.0f;
-	UTILS_LP_FAST(erpm_filtered, erpm_raw, 0.20f);
-	float erpm = erpm_filtered;
-
+	float erpm = RADPS2RPM_f(motor->m_speed_est_fast);
 	float target_erpm = (conf_now->s_pid_ramp_erpms_s > 0.0f) ? motor->m_speed_pid_set_rpm : motor->m_speed_command_rpm; // Ramped ERPM target
 	float error = target_erpm - erpm;
 
