@@ -295,34 +295,35 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 	float friction_ff = target_vel_rad_s * 0.6f; // Friction/damping feedforward (0.6V/(rad/s))
 	float v_ff = bemf_ff + friction_ff;
 
-	// 3. Servo Position PID -> Target Iq Current (Amperes)
-	float p_term = error * 4.0f; // 4.0 A/rad holding stiffness
+	// 3. High-Stiffness Servo Position PID -> Voltage Vq (Volts)
+	float p_term = error * 20.0f; // 20.0 V/rad stiffness
 	
 	// Anti-windup conditional integration
 	if (fabsf(error) < 0.25f) {
-		motor->m_pos_i_term += error * (1.5f * dt);
-		utils_truncate_number_abs((float*)&motor->m_pos_i_term, 2.0f); // Max 2.0A integral
+		motor->m_pos_i_term += error * (4.0f * dt);
+		utils_truncate_number_abs((float*)&motor->m_pos_i_term, 5.0f); // Max 5.0V integral
 	} else {
 		motor->m_pos_i_term = 0.0f;
 	}
 
 	// D-term damping on velocity
 	float mech_vel_rad_s = motor->m_speed_est_fast / pole_pairs;
-	float d_term = -mech_vel_rad_s * 0.05f;
+	float d_term = -mech_vel_rad_s * 0.10f;
 
-	float output_iq = p_term + motor->m_pos_i_term + d_term;
+	float output_v = v_ff + p_term + motor->m_pos_i_term + d_term;
 
-	// 4. Holding Current Clamping
+	// 4. Holding Voltage Clamping based on user limit
 	float hold_limit_a = (motor->m_pos_holding_current_limit > 0.1f) ? motor->m_pos_holding_current_limit : 3.5f;
-	if (hold_limit_a > 5.0f) hold_limit_a = 5.0f;
-	if (hold_limit_a < 0.5f) hold_limit_a = 0.5f;
+	float max_hold_v = hold_limit_a * conf_now->foc_motor_r;
+	if (max_hold_v > 16.0f) max_hold_v = 16.0f;
+	if (max_hold_v < 3.0f) max_hold_v = 3.0f;
 
-	utils_truncate_number_abs(&output_iq, hold_limit_a);
-	motor->m_iq_set = output_iq;
+	utils_truncate_number_abs(&output_v, max_hold_v);
+	motor->m_iq_set = output_v;
 }
 
 /**
-  * @brief  VESC Speed Controller Loop (Cascaded Speed PI -> Target Iq Current in Amperes)
+  * @brief  VESC Speed Controller Loop (Silent, Smooth, Dead-Flat Voltage-Mode PI)
   */
 void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *motor) {
 	mc_configuration *conf_now = motor->m_conf;
@@ -345,26 +346,23 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		return;
 	}
 
-	// 1. Proportional Gain: Kp = 0.00040 A/ERPM (4200 ERPM @ 200 RPM -> max initial 1.68A acceleration)
-	float p_term = error * 0.00040f;
+	// 1. Proportional Drive (Kp = 0.00080 V/ERPM)
+	float p_term = error * 0.00080f;
 
-	// 2. Integral Gain: Ki = 0.00080 A/(ERPM*s) with Anti-Windup
-	motor->m_speed_i_term += error * (0.00080f * dt);
-	utils_truncate_number_abs(&motor->m_speed_i_term, 2.5f); // Max 2.5A integral holding current
+	// 2. Integral Action (Ki = 0.00040 V/(ERPM*s)) with Anti-Windup
+	motor->m_speed_i_term += error * (0.00040f * dt);
+	utils_truncate_number_abs(&motor->m_speed_i_term, 4.0f); // Max ±4.0V integral authority
 
-	// 3. Active Damping: Kd
-	float d_speed_erpm = (erpm - motor->m_speed_prev_error) / dt;
-	motor->m_speed_prev_error = erpm;
-	float d_term = -d_speed_erpm * 0.000010f;
-	utils_truncate_number_abs(&d_term, 1.0f);
+	// 3. Accurate Back-EMF Feedforward for GB8115 (Kv ~ 40 RPM/V, lambda ~ 0.0065 Wb)
+	float vq_ff = (target_erpm * 0.104719755f) * 0.0065f;
 
-	float output_iq = p_term + motor->m_speed_i_term + d_term;
+	float vq_out = vq_ff + p_term + motor->m_speed_i_term;
 
-	// Safe Current Clamp (Max 4.0A)
-	float max_i = conf_now->l_current_max;
-	if (max_i > 4.0f) max_i = 4.0f;
-	utils_truncate_number_abs(&output_iq, max_i);
-	motor->m_iq_set = output_iq;
+	// Safe Maximum Voltage Ceiling
+	float max_v = ONE_BY_SQRT3 * conf_now->l_max_duty * motor->m_motor_state.v_bus;
+	if (max_v < 2.0f) max_v = 12.0f;
+	utils_truncate_number_abs(&vq_out, max_v);
+	motor->m_iq_set = vq_out;
 }
 
 /**
