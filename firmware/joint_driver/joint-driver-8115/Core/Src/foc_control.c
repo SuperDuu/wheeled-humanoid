@@ -64,16 +64,15 @@ bool FOC_Control_CheckSafety(FOC_Controller_t *foc, float current_a, float curre
         if (overcurrent_count > 0) overcurrent_count--;
     }
 
-    // Thermal Safety Timeout Protection (8.0A continuous for > 5.0s = 100,000 ISR cycles @ 20kHz)
-    // Nới lỏng theo đúng chuẩn Datasheet GB8115-4 (Dòng kẹt cực đại 6.6A)
+    // Thermal Safety Timeout Protection (10.0A continuous for > 5.0s = 100,000 ISR cycles @ 20kHz)
     static uint32_t thermal_timeout_count = 0;
-    if (current_mag > 8.0f) {
+    if (current_mag > 10.0f) {
         thermal_timeout_count++;
         if (thermal_timeout_count >= 100000) {
             foc->fault |= MC_FAULT_OVER_CURRENT;
         }
     } else {
-        if (thermal_timeout_count > 0) thermal_timeout_count -= 2;
+        thermal_timeout_count = 0;
     }
 
     // Overvoltage Check (50V max OVP)

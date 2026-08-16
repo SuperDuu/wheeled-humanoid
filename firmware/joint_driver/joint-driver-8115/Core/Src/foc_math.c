@@ -310,11 +310,15 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	// Back-EMF Feedforward: Vq_ff = omega_e * lambda
 	float vq_ff = motor->m_speed_est_fast * conf_now->foc_motor_flux_linkage;
 
-	// Minimum breakaway boost voltage (5.0V) to overcome 42-pole cogging torque immediately
-	float v_boost = (target_erpm > 5.0f) ? 5.0f : ((target_erpm < -5.0f) ? -5.0f : 0.0f);
+	// Smooth Dynamic Breakaway Boost: Chỉ kích hoạt lúc đứng yên (|erpm| < 400), tự động giảm dần về 0 khi động cơ đã quay
+	float v_boost = 0.0f;
+	if (fabsf(erpm) < 400.0f) {
+		float fade = 1.0f - (fabsf(erpm) / 400.0f);
+		v_boost = (target_erpm > 0.0f) ? (2.5f * fade) : (-2.5f * fade);
+	}
 
 	// Speed PID calculates Vq voltage output (Volts)
-	float vq_out = v_boost + (output * (max_v - 5.0f)) + vq_ff;
+	float vq_out = v_boost + (output * max_v) + vq_ff;
 	utils_truncate_number_abs(&vq_out, max_v);
 	motor->m_iq_set = vq_out;
 }
