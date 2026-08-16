@@ -288,6 +288,26 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         foc_set_home_position(motor);
         pos_target_dbg = 0.0f;
     }
+    else if (strcmp(cmd, "RESETERR") == 0 || strcmp(cmd, "RESET_ERR") == 0 || strcmp(cmd, "CLEAR_ERR") == 0 || strcmp(cmd, "RESET_PID") == 0 || strcmp(cmd, "CLEAR") == 0) {
+        // RESET TOÀN BỘ SAI SỐ VÀ TÍCH PHÂN PID VỀ 0
+        motor->m_speed_i_term = 0.0f;
+        motor->m_speed_prev_error = 0.0f;
+        motor->m_speed_d_filter = 0.0f;
+        motor->m_pos_i_term = 0.0f;
+        motor->m_pos_prev_error = 0.0f;
+        motor->m_pos_d_filter = 0.0f;
+        motor->m_motor_state.vd_int = 0.0f;
+        motor->m_motor_state.vq_int = 0.0f;
+        motor->m_motor_state.vd = 0.0f;
+        motor->m_motor_state.vq = 0.0f;
+        motor->m_iq_set = 0.0f;
+        foc->fault = MC_FAULT_NONE;
+        if (motor->m_control_mode == CONTROL_MODE_POS) {
+            motor->m_pos_pid_set = motor->m_joint_angle;
+            motor->m_traj_active = false;
+            pos_target_dbg = motor->m_joint_angle;
+        }
+    }
     else if (strncmp(cmd, "GOHOME", 6) == 0 || strncmp(cmd, "HOME", 4) == 0) {
         // QUAY VỀ VỊ TRÍ HOME (0.0 ĐỘ)
         float duration_s = 1.0f;
