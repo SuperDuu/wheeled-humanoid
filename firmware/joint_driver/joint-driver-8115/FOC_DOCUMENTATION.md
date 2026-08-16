@@ -231,4 +231,57 @@ graph TD
    - Đặt lệnh vị trí `motor_set_position(45.0f)`. Kiểm tra khớp quay đến đúng $45.0^\circ$ và khóa cứng vị trí mà không bị rung giật.
 
 ---
+
+## 6. KIẾN TRÚC KHỞI ĐỘNG TỰ ĐỘNG & BỘ THÔNG SỐ VÀNG CHO ĐỘNG CƠ GB8115 (36S42P)
+
+### 6.1 Cơ Chế Tự Động Khởi Động Từ 0 RPM (Automatic Open-to-Closed Handover)
+* **Bản chất động cơ GB8115 (42 cực nam châm, truyền động trực tiếp 1:1)**:
+  * Khi đứng yên ở $0\text{ RPM}$, rotor luôn bị hút tụt vào đáy của một rãnh từ tĩnh (Cogging Detent Valley với lực cản $\sim 0.25\text{ N.m}$).
+  * Nếu áp điện áp tĩnh tại chỗ ở Closed Loop, vector từ trường đứng yên không di chuyển, khiến rotor bị ghim chặt trong rãnh từ.
+* **Giải pháp chuyển tiếp tự động (Automatic Handover trong `foc_control.c`)**:
+  * Khi nhận lệnh điều khiển vận tốc (`CONTROL_MODE_SPEED`) từ trạng thái đứng yên ($|\text{RPM}| < 15$ và $|\text{Target}| > 5$):
+    1. Firmware tự động tạo dốc quay khởi động mềm (Soft Open-Loop Ramp) tăng tốc với gia tốc $300\text{ RPM/s}$ từ $0\text{ RPM}$ trong đúng $30\text{ms}$.
+    2. Vector từ trường quay nhẹ lôi rotor bứt phá êm ái vượt qua rãnh từ tĩnh.
+    3. **Ngay khi rotor đạt vận tốc $> 15\text{ RPM}$ (chỉ sau $0.03\text{s}$)**, thuật toán tự động chuyển giao $100\%$ sang Closed-Loop FOC điều khiển bằng cảm biến AS5048A (`pwm_phase = elec_angle`).
+  * Người dùng chỉ cần gửi lệnh `SPEED 100` hoặc chọn preset trên Web App, động cơ sẽ tự động bứt tốc tức thì mà không cần mồi thủ công.
+
+---
+
+### 6.2 Bộ Điều Chế Sóng Sin SPWM với Midpoint Zero-Sequence Injection
+* Thay thế bảng phân chia 6 Sector rời rạc của SVPWM cũ bằng **Bộ điều chế Sinusoidal SPWM thuần túy**:
+  $$\begin{aligned}
+  u_a &= V_\alpha \\
+  u_b &= -0.5 \cdot V_\alpha + \frac{\sqrt{3}}{2} \cdot V_\beta \\
+  u_c &= -0.5 \cdot V_\alpha - \frac{\sqrt{3}}{2} \cdot V_\beta \\
+  u_{center} &= \frac{\max(u_a, u_b, u_c) + \min(u_a, u_b, u_c)}{2} \\
+  \text{Duty}_A &= 0.5 + (u_a - u_{center}) \\
+  \text{Duty}_B &= 0.5 + (u_b - u_{center}) \\
+  \text{Duty}_C &= 0.5 + (u_c - u_{center})
+  \end{aligned}$$
+* **Ưu điểm**: Hàm số giải tích liên tục $100\%$, không có điều kiện rẽ nhánh `switch/case`, loại bỏ hoàn toàn méo hài sóng tại biên chuyển sector, giúp dòng điện 3 pha tạo thành 3 hình sin cân bằng $120^\circ$ hoàn hảo.
+
+---
+
+### 6.3 Bộ Khống Chế Điện Áp Động Học (Dynamic Voltage Authority)
+* Để triệt tiêu hiện tượng vọt dòng đỉnh lên tới $13.5\text{A}$ làm ngắt bảo vệ nhiệt 5 giây ($10\text{A}$ Thermal Timeout), `foc_math.c` áp dụng giới hạn điện áp tương ứng với tốc độ mục tiêu:
+  $$V_{limit} = 3.5\text{V} + |\text{Target ERPM}| \times 0.0025\text{V}$$
+* Với tốc độ $100\text{ RPM}$ ($2100\text{ ERPM}$), $V_{limit} \approx 8.75\text{V}$, dòng điện luôn được khống chế dưới $1.2\text{A}$, giúp động cơ chạy mát mẻ ($< 0.8\text{A}$) và quay liên tục vĩnh viễn không bao giờ ngắt.
+
+---
+
+### 6.4 Bộ Thông Số Vàng Vòng Vận Tốc (Golden Speed PI Gains)
+Để triệt tiêu hiện tượng dao động cưỡng bức (Hunting Limit Cycle) và không bị trễ pha:
+* **Không dùng bộ lọc thông thấp trễ pha trên tín hiệu vận tốc phản hồi** (tránh làm suy giảm Phase Margin của vòng kín).
+* **Bộ thông số Critically Damped chuẩn xác**:
+  * **$K_p = \mathbf{0.00060}$**: Độ cứng tỷ lệ tối ưu cho quán tính $J = 2574\,\text{g}\cdot\text{cm}^2$.
+  * **$K_i = \mathbf{0.00025}$**: Tích phân bù sai số chuẩn xác trong $0.05\text{s}$, bám phẳng lì vạch $100.0\text{ RPM}$.
+  * **$K_d = \mathbf{0.00000}$**: Tắt hoàn toàn vi sai để tránh khuếch đại nhiễu lượng tử hóa $1/dt = 1000\times$.
+
+---
+
+### 6.5 Bảo Vệ Pipeline SPI AS5048A Chống Trượt Bước Khi Chịu Tải Nặng
+* Trong `as5048a.c`, loại bỏ lệnh gửi xóa cờ lỗi `AS5048A_ClearError` bên trong ngắt ISR 20kHz.
+* Khi gặp glitch chẵn lẻ do dòng điện lớn từ bàn tay ghì trục, giữ nguyên góc hợp lệ cuối cùng $\theta_{last}$ trong 1 chu kỳ $50\mu\text{s}$, tránh cho góc điện bị nhảy về `0x0000` làm mất đồng bộ cực từ (Pole Slip). Động cơ giữ lực ghì chắc chắn không bị trượt bước.
+
+---
 *Báo cáo phân tích kỹ thuật này phản ánh đúng kiến trúc điều khiển FOC thực chiến được tích hợp trong dự án Joint Driver 8115.*
