@@ -359,15 +359,13 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	// 3. Target Back-EMF Feedforward: Vq_ff = omega_target_rad_s * lambda
 	float vq_ff = (target_erpm * 0.104719755f) * conf_now->foc_motor_flux_linkage;
 
-	// 4. Maximum voltage & Dynamic Voltage Authority
+	// 4. Safe Drive Torque Authority (Max 3.5V ~ 0.9A torque assist, prevents overvoltage stalls)
+	float v_torque_auth = 3.5f;
+	float vq_out = vq_ff + (output * v_torque_auth);
+
 	float max_v = ONE_BY_SQRT3 * conf_now->l_max_duty * motor->m_motor_state.v_bus;
 	if (max_v < 2.0f) max_v = 12.0f;
-
-	float v_limit = 4.0f + (fabsf(target_erpm) * 0.0025f);
-	if (v_limit > max_v) v_limit = max_v;
-
-	float vq_out = (output * v_limit) + vq_ff;
-	utils_truncate_number_abs(&vq_out, v_limit);
+	utils_truncate_number_abs(&vq_out, max_v);
 	motor->m_iq_set = vq_out;
 }
 
