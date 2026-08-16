@@ -519,8 +519,8 @@ void Run_EncoderAlignment(void)
     float sin_e, cos_e;
     utils_fast_sincos(ea, &sin_e, &cos_e);
     float vq_test = 4.5f;
-    float valpha = (vq_test / vbus) * (-sin_e);
-    float vbeta  = (vq_test / vbus) * (+cos_e);
+    float valpha = (vq_test / vbus) * (+sin_e);
+    float vbeta  = (vq_test / vbus) * (-cos_e);
     uint32_t ta, tb, tc, sector;
     foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
@@ -552,8 +552,8 @@ void Run_EncoderAlignment(void)
       float sin_e, cos_e;
       utils_fast_sincos(ea, &sin_e, &cos_e);
       float vq_test = 4.5f;
-      float valpha = (vq_test / vbus) * (-sin_e);
-      float vbeta  = (vq_test / vbus) * (+cos_e);
+      float valpha = (vq_test / vbus) * (+sin_e);
+      float vbeta  = (vq_test / vbus) * (-cos_e);
       uint32_t ta, tb, tc, sector;
       foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
       __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
