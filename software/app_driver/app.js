@@ -314,8 +314,8 @@ class FOCOscilloscopeStudio {
       const rad = deg * Math.PI / 180.0;
       if (inputPos) inputPos.value = deg;
       if (posDisplay) posDisplay.innerText = `${deg.toFixed(1)}° (${rad.toFixed(2)} rad)`;
-      this.sendCommand(`MODE 4`);
-      this.sendCommand(`POS ${rad.toFixed(4)}`);
+      this.sendCommand(`POS ${deg}`);
+      this.appendLog(`🎯 Đặt góc mục tiêu: ${deg}°`, 'success');
       document.querySelectorAll('.btn-mode').forEach(b => b.classList.remove('active'));
       const posBtn = document.querySelector('.btn-mode[data-mode="4"]');
       if (posBtn) posBtn.classList.add('active');
