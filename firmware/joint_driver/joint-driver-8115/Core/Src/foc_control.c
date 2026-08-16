@@ -328,18 +328,43 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     state_m->mod_alpha_raw = c * state_m->mod_d - s * state_m->mod_q;
     state_m->mod_beta_raw  = c * state_m->mod_q + s * state_m->mod_d;
 
-    // 9. VESC 6-Sector Space Vector Modulation (SVM)
-    uint32_t ta, tb, tc, sector;
-    foc_svm(state_m->mod_alpha_raw, state_m->mod_beta_raw, conf_now->l_max_duty, 1000, &ta, &tb, &tc, &sector);
+    // 9. Pure Sinusoidal SPWM Modulation with Center Midpoint Shifting
+    // Inverse Clarke: (alpha, beta) -> (Va, Vb, Vc)
+    const float sqrt3_by_2 = 0.86602540378f;
+    float u_a = state_m->mod_alpha_raw;
+    float u_b = -0.5f * state_m->mod_alpha_raw + (sqrt3_by_2 * state_m->mod_beta_raw);
+    float u_c = -0.5f * state_m->mod_alpha_raw - (sqrt3_by_2 * state_m->mod_beta_raw);
+
+    // Midpoint Center Shifting (Zero-Sequence Injection for 100% Linear Voltage Range)
+    float u_min = u_a;
+    if (u_b < u_min) u_min = u_b;
+    if (u_c < u_min) u_min = u_c;
+
+    float u_max = u_a;
+    if (u_b > u_max) u_max = u_b;
+    if (u_c > u_max) u_max = u_c;
+
+    float u_center = (u_max + u_min) * 0.5f;
+
+    // Center-Aligned 3-Phase Duty Cycles (0.0 to 1.0)
+    float duty_a = 0.5f + (u_a - u_center);
+    float duty_b = 0.5f + (u_b - u_center);
+    float duty_c = 0.5f + (u_c - u_center);
+
+    float max_duty = conf_now->l_max_duty;
+    float min_duty = conf_now->l_min_duty;
+    utils_truncate_number(&duty_a, min_duty, max_duty);
+    utils_truncate_number(&duty_b, min_duty, max_duty);
+    utils_truncate_number(&duty_c, min_duty, max_duty);
 
     // Stator Phase Mapping: Apply auto-detected Phase B <-> Phase C swap
-    foc->duty_a = (float)ta / 1000.0f;
+    foc->duty_a = duty_a;
     if (foc->phase_swap_bc) {
-        foc->duty_b = (float)tc / 1000.0f;
-        foc->duty_c = (float)tb / 1000.0f;
+        foc->duty_b = duty_c;
+        foc->duty_c = duty_b;
     } else {
-        foc->duty_b = (float)tb / 1000.0f;
-        foc->duty_c = (float)tc / 1000.0f;
+        foc->duty_b = duty_b;
+        foc->duty_c = duty_c;
     }
 }
 
