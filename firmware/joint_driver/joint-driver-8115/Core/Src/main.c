@@ -505,21 +505,74 @@ void Run_EncoderAlignment(void)
   g_dbg_align.encoder_rad = enc_zero;
   g_dbg_align.aligned = 1;
 
-  // STEP 5: Smooth ramp down to 0V
-  for (int i = 40; i >= 0; i--) {
-    float vd = vd_align * (float)i / 40.0f;
+  // STEP 5: Closed-Loop Verification & Self-Correction Test
+  // Áp dụng Vq = 4.5V ở chế độ FOC kín trực tiếp trong 500ms để kiểm tra xem rotor có quay tròn trơn tru không
+  float test_start_rad = 0.0f, test_end_rad = 0.0f;
+  AS5048A_ReadRadians(&g_foc_controller.encoder, &test_start_rad);
+  AS5048A_ReadRadians(&g_foc_controller.encoder, &test_start_rad);
+
+  for (int step = 0; step < 100; step++) {
+    float raw_rad = 0.0f;
+    AS5048A_ReadRadians(&g_foc_controller.encoder, &raw_rad);
+    float ea = (float)(g_foc_controller.conf.encoder_direction * g_foc_controller.conf.foc_motor_pole_pairs) * raw_rad - g_foc_controller.zero_electric_angle;
+    utils_norm_angle_rad(&ea);
+    float sin_e, cos_e;
+    utils_fast_sincos(ea, &sin_e, &cos_e);
+    float vq_test = 4.5f;
+    float valpha = (vq_test / vbus) * (-sin_e);
+    float vbeta  = (vq_test / vbus) * (+cos_e);
+    uint32_t ta, tb, tc, sector;
+    foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
+    HAL_Delay(5);
+  }
+  AS5048A_ReadRadians(&g_foc_controller.encoder, &test_end_rad);
+  AS5048A_ReadRadians(&g_foc_controller.encoder, &test_end_rad);
+
+  float test_delta = test_end_rad - test_start_rad;
+  while (test_delta > 3.14159265f) test_delta -= 2.0f * 3.14159265f;
+  while (test_delta < -3.14159265f) test_delta += 2.0f * 3.14159265f;
+
+  // Nếu rotor không quay hoặc quay ngược, tự động đảo chiều encoder_direction và hiệu chỉnh lại
+  if (fabsf(test_delta) < 0.05f) {
+    // Thử đảo chiều encoder
+    g_foc_controller.conf.encoder_direction = -g_foc_controller.conf.encoder_direction;
+    float new_offset = (float)(g_foc_controller.conf.encoder_direction * g_foc_controller.conf.foc_motor_pole_pairs) * enc_zero;
+    utils_norm_angle_rad(&new_offset);
+    g_foc_controller.zero_electric_angle = new_offset;
+
+    // Chạy lại test với hướng mới
+    for (int step = 0; step < 100; step++) {
+      float raw_rad = 0.0f;
+      AS5048A_ReadRadians(&g_foc_controller.encoder, &raw_rad);
+      float ea = (float)(g_foc_controller.conf.encoder_direction * g_foc_controller.conf.foc_motor_pole_pairs) * raw_rad - g_foc_controller.zero_electric_angle;
+      utils_norm_angle_rad(&ea);
+      float sin_e, cos_e;
+      utils_fast_sincos(ea, &sin_e, &cos_e);
+      float vq_test = 4.5f;
+      float valpha = (vq_test / vbus) * (-sin_e);
+      float vbeta  = (vq_test / vbus) * (+cos_e);
+      uint32_t ta, tb, tc, sector;
+      foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
+      HAL_Delay(5);
+    }
+  }
+
+  // STEP 6: Smooth ramp down to 0V
+  for (int i = 30; i >= 0; i--) {
+    float vd = (4.5f * (float)i / 30.0f);
     float valpha = vd / vbus, vbeta = 0.0f;
     uint32_t ta, tb, tc, sector;
     foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
-    if (g_foc_controller.phase_swap_bc) {
-      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tc * period) / 1000);
-      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tb * period) / 1000);
-    } else {
-      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
-      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
-    }
-    HAL_Delay(5);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
+    HAL_Delay(4);
   }
 
   // Safe state
@@ -528,13 +581,8 @@ void Run_EncoderAlignment(void)
   __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, period / 2);
   g_foc_controller.duty_a = g_foc_controller.duty_b = g_foc_controller.duty_c = 0.5f;
 
-  // Chờ 50ms để dòng điện cảm ứng (flyback current) do cắt điện đột ngột tiêu tán hết,
-  // Tránh việc ISR 20kHz bật lên lập tức đo thấy dòng lớn -> Trip lỗi Overcurrent (FAULT=1)
   HAL_Delay(50);
-  
-  // Xóa mọi lỗi ảo (hoặc thật) phát sinh trong quá trình alignment
   g_foc_controller.fault = MC_FAULT_NONE;
-
   g_foc_controller.motor.m_state = old_state;
   align_result = 2; // OK
   run_alignment = 0;
