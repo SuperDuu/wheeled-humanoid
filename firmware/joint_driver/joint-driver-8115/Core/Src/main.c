@@ -1671,25 +1671,19 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
     /* Cập nhật PLL speed cho telemetry hiển thị RPM */
     g_foc_controller.motor.m_speed_est_fast = elec_rad_s;
 
-    /* === 3. TÍNH ĐIỆN ÁP V/f & BÙ TRỄ PHA CẢM KHÁNG L/R ===
-     * Ở tốc độ cao (>200 RPM), cảm kháng X_L = omega_e * L làm dòng điện bị trễ sau điện áp.
-     * Bù góc Phase Advance: phi = atan2(omega*L, R) để dòng điện luôn đồng pha sinh mô-men. */
-    float L_phase = g_foc_controller.conf.foc_motor_l; /* 3.14 mH */
-    float R_phase = g_foc_controller.conf.foc_motor_r; /* 3.89 Ohm */
-    float phase_lead = atan2f(fabsf(elec_rad_s) * L_phase, R_phase);
-    float open_loop_v_angle = open_loop_angle + (elec_rad_s >= 0.0f ? phase_lead : -phase_lead);
-
-    float v_boost = 2.0f;
+    /* === 3. TÍNH ĐIỆN ÁP V/f CHUẨN (Mô-men Giữ Đồng Bộ Vững) ===
+     * Duy trì V_boost = 2.5V (~0.64A) ổn định kết hợp bù sức điện động BEMF. */
+    float v_boost = 2.5f;
     float v_bemf  = g_foc_controller.conf.foc_motor_flux_linkage * fabsf(elec_rad_s);
     float v_open  = v_boost + v_bemf;
 
-    /* Tận dụng Overmodulation (1.10x) để mở rộng headroom điện áp lên ~15.2V */
-    float v_max = ONE_BY_SQRT3 * 1.10f * vbus;
+    /* Clamp tổng điện áp ≤ Vbus/√3 × max_duty */
+    float v_max = ONE_BY_SQRT3 * g_foc_controller.conf.l_max_duty * vbus;
     if (v_open > v_max) v_open = v_max;
 
     /* === 4. SINH SÓNG SIN CHUẨN → SVPWM === */
     float sin_val, cos_val;
-    utils_fast_sincos(open_loop_v_angle, &sin_val, &cos_val);
+    utils_fast_sincos(open_loop_angle, &sin_val, &cos_val);
 
     float valpha = (v_open / vbus) * cos_val;
     float vbeta  = (v_open / vbus) * sin_val;
