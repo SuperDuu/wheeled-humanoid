@@ -307,19 +307,23 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	float max_v = ONE_BY_SQRT3 * conf_now->l_max_duty * motor->m_motor_state.v_bus;
 	if (max_v < 1.0f) max_v = 12.0f;
 
-	// Smooth Zero-Speed Breakaway Boost (3.5V ~ 0.9A): Bơm đủ lực thắng ma sát tĩnh lúc đứng yên, tự động giảm về 0 khi có trớn
+	// Smooth Zero-Speed Breakaway Boost (2.5V ~ 0.64A): Bơm đủ lực kéo nhẹ lúc đứng yên, tự động giảm về 0 khi có trớn
 	float v_boost = 0.0f;
-	if (fabsf(erpm) < 400.0f) {
-		float fade = 1.0f - (fabsf(erpm) / 400.0f);
-		v_boost = (target_erpm > 0.0f) ? (3.5f * fade) : (-3.5f * fade);
+	if (fabsf(erpm) < 300.0f) {
+		float fade = 1.0f - (fabsf(erpm) / 300.0f);
+		v_boost = (target_erpm > 0.0f) ? (2.5f * fade) : (-2.5f * fade);
 	}
 
 	// Back-EMF Feedforward: Vq_ff = omega_e * lambda
 	float vq_ff = motor->m_speed_est_fast * conf_now->foc_motor_flux_linkage;
 
+	// Dynamic Voltage Authority: Khóa điện áp tương ứng với dải tốc độ, chống vọt dòng quá tải nhiệt 5s
+	float v_limit = 3.5f + (fabsf(target_erpm) * 0.0025f);
+	if (v_limit > max_v) v_limit = max_v;
+
 	// Speed PID calculates Vq voltage output (Volts)
-	float vq_out = v_boost + (output * max_v) + vq_ff;
-	utils_truncate_number_abs(&vq_out, max_v);
+	float vq_out = v_boost + (output * v_limit) + vq_ff;
+	utils_truncate_number_abs(&vq_out, v_limit);
 	motor->m_iq_set = vq_out;
 }
 
