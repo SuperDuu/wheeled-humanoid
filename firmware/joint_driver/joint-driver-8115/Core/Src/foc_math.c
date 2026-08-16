@@ -295,28 +295,28 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 	float friction_ff = target_vel_rad_s * 0.6f; // Friction/damping feedforward (0.6V/(rad/s))
 	float v_ff = bemf_ff + friction_ff;
 
-	// 3. High-Stiffness Feedback Servo PID (Kp = 15.0 V/rad, Ki = 1.5, Kd = 0.08)
-	float p_term = error * 15.0f;
+	// 3. High-Stiffness & Zero Steady-State Error Servo PID (Kp = 25.0 V/rad, Ki = 8.0, Kd = 0.12)
+	float p_term = error * 25.0f;
 	
-	// Anti-windup conditional integration
-	if (fabsf(error) < 0.4f) {
-		motor->m_pos_i_term += error * (1.5f * dt);
-		utils_truncate_number_abs((float*)&motor->m_pos_i_term, 4.0f);
+	// Anti-windup conditional integration: Tăng tốc độ bù tích phân khi vào gần đích để đạt đúng 100% góc đặt
+	if (fabsf(error) < 0.25f) { // Khi sai số < 14 độ
+		motor->m_pos_i_term += error * (8.0f * dt);
+		utils_truncate_number_abs((float*)&motor->m_pos_i_term, 6.0f); // Kẹp max 6V tích phân
 	} else {
 		motor->m_pos_i_term = 0.0f;
 	}
 
 	// D-term tính trên vận tốc thực tế của rotor để giảm chấn dao động
 	float mech_vel_rad_s = motor->m_speed_est_fast / pole_pairs;
-	float d_term = -mech_vel_rad_s * 0.08f;
+	float d_term = -mech_vel_rad_s * 0.12f;
 
 	float output_v = v_ff + p_term + motor->m_pos_i_term + d_term;
 
 	// 4. Holding & Drive Torque Voltage Clamping based on user limit
 	float hold_limit_a = (motor->m_pos_holding_current_limit > 0.1f) ? motor->m_pos_holding_current_limit : 3.5f;
 	float max_hold_v = hold_limit_a * conf_now->foc_motor_r;
-	if (max_hold_v > 16.0f) max_hold_v = 16.0f;
-	if (max_hold_v < 2.5f) max_hold_v = 2.5f;
+	if (max_hold_v > 18.0f) max_hold_v = 18.0f;
+	if (max_hold_v < 3.0f) max_hold_v = 3.0f;
 
 	utils_truncate_number_abs(&output_v, max_hold_v);
 	motor->m_iq_set = output_v;
