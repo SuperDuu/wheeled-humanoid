@@ -314,7 +314,7 @@
           <!-- 1-Line Smart Trajectory Console: <Góc> <Thời Gian> <Lực Giới Hạn> -->
           <div style="background: rgba(0, 0, 0, 0.25); padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(52, 211, 153, 0.2); margin-bottom: 8px;">
             <div style="font-size: 0.74rem; font-weight: bold; color: #34d399; margin-bottom: 4px;">
-              🚀 LỆNH QUỸ ĐẠO: &lt;Góc_Độ&gt; &lt;Thời_Gian_s&gt; &lt;Lực_Ghim_A&gt;
+              🚀 ĐIỀU KHIỂN GÓC SIÊU TỐC (0 = MAX SPEED):
             </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 6px; align-items: end;">
               <div>
@@ -322,15 +322,15 @@
                 <input type="number" id="smart-deg" value="90" step="5" min="-360" max="360" style="width: 100%; padding: 5px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 4px; font-weight: bold; text-align: center; font-size: 0.82rem;">
               </div>
               <div>
-                <label style="font-size: 0.68rem; color: #94a3b8;">Thời Gian (s):</label>
-                <input type="number" id="smart-time" value="3.0" step="0.5" min="0.1" max="60.0" style="width: 100%; padding: 5px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 4px; font-weight: bold; text-align: center; font-size: 0.82rem;">
+                <label style="font-size: 0.68rem; color: #94a3b8;">Thời Gian (s, 0=Max):</label>
+                <input type="number" id="smart-time" value="0" step="0.5" min="0" max="60.0" style="width: 100%; padding: 5px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 4px; font-weight: bold; text-align: center; font-size: 0.82rem;">
               </div>
               <div>
                 <label style="font-size: 0.68rem; color: #94a3b8;">Lực Ghim (A):</label>
-                <input type="number" id="smart-force" value="3.0" step="0.5" min="0.5" max="10.0" style="width: 100%; padding: 5px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 4px; font-weight: bold; text-align: center; font-size: 0.82rem;">
+                <input type="number" id="smart-force" value="3.5" step="0.5" min="0.5" max="10.0" style="width: 100%; padding: 5px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 4px; font-weight: bold; text-align: center; font-size: 0.82rem;">
               </div>
               <button id="btn-smart-execute" class="btn" style="background: #059669; color: #fff; font-weight: bold; padding: 5px 12px; height: 32px; font-size: 0.78rem;">
-                🚀 CHẠY & GHIM
+                🚀 BẮN TỚI GÓC
               </button>
             </div>
           </div>
