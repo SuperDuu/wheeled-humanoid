@@ -1676,7 +1676,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
      * Để không bị trượt bước (Step-out) gây giật ở 200 RPM, duy trì V_boost = 2.5V (~0.64A)
      * kết hợp bù sức điện động BEMF để tạo mô-men giữ đồng bộ liên tục. */
     float v_boost = 2.5f;
-    float v_bemf  = g_foc_controller.conf.foc_motor_flux_linkage * abs_elec_rad_s;
+    float v_bemf  = g_foc_controller.conf.foc_motor_flux_linkage * fabsf(elec_rad_s);
     float v_open  = v_boost + v_bemf;
 
     /* Clamp tổng điện áp ≤ Vbus/√3 × max_duty */
