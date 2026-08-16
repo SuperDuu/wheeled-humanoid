@@ -42,9 +42,9 @@ void vesc_conf_set_defaults(mc_configuration *conf)
 
     // Speed Controller (PI) - Analytically Tuned for GB8115 Direct Drive (Dead-Flat Speed Tracking)
     // (Kt = 0.67 Nm/A, J = 2574 g.cm², R = 3.89Ω, Direct Drive)
-    conf->s_pid_kp = 0.00180f;             // Tăng độ cứng PI để khử sạch hoàn toàn sóng lệch tâm nam châm 1.66Hz
-    conf->s_pid_ki = 0.00080f;             // Tích phân phản hồi nhanh, kéo phẳng lì đường vận tốc
-    conf->s_pid_kd = 0.0f;                 // Zero D-term for pure smooth PI
+    conf->s_pid_kp = 0.00060f;             // Mức Kp tối ưu ổn định tuyệt đối, không bị hunting giật cục
+    conf->s_pid_ki = 0.00015f;             // Tích phân êm ái, bám sát vạch 100 RPM
+    conf->s_pid_kd = 0.00002f;             // Damping vi sai nhẹ để dập tắt dao động sóng 1.66Hz
     conf->s_pid_kd_filter = 0.2f;
     conf->s_pid_min_erpm = 5.0f;           // 5 ERPM deadband (~0.24 RPM)
     conf->s_pid_ramp_erpms_s = 0.0f;       // Zero Ramp (Instant Step Response)
