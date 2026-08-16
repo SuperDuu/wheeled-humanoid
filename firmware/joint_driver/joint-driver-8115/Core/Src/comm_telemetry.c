@@ -15,6 +15,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
 
 /* USB Device Handle */
 extern USBD_HandleTypeDef hUsbDeviceFS;
@@ -270,24 +271,53 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         foc->fault = MC_FAULT_NONE;
         TIM1_EnsureMoeEnabled();
     }
-    else if (strncmp(cmd, "MOVE ", 5) == 0) {
-        // Cú pháp: MOVE <góc_độ> <thời_gian_ms> (Vd: MOVE 90 1000 = quay 90 độ trong 1.0 giây rồi ghim cứng)
-        float target_deg = 0.0f;
-        float duration_ms = 800.0f; // Mặc định 800ms nếu không nhập thời gian
-        sscanf(&cmd[5], "%f %f", &target_deg, &duration_ms);
-        if (duration_ms < 50.0f) duration_ms = 50.0f;
-
-        float target_rad = DEG2RAD_f(target_deg);
-        foc_start_trajectory(motor, target_rad, duration_ms / 1000.0f);
-        pos_target_dbg = target_rad;
+    else if (strncmp(cmd, "SETHOME", 7) == 0 || strncmp(cmd, "SET_HOME", 8) == 0 || strncmp(cmd, "ZERO", 4) == 0) {
+        // CĂN CHỈNH VỊ TRÍ HIỆN TẠI LÀM HOME (0.0 ĐỘ)
+        foc_set_home_position(motor);
+        pos_target_dbg = 0.0f;
+    }
+    else if (strncmp(cmd, "GOHOME", 6) == 0 || strncmp(cmd, "HOME", 4) == 0) {
+        // QUAY VỀ VỊ TRÍ HOME (0.0 ĐỘ)
+        float duration_s = 1.0f;
+        if (strncmp(cmd, "GOHOME ", 7) == 0) duration_s = atof(&cmd[7]);
+        foc_start_trajectory(motor, 0.0f, duration_s, 3.0f);
+        pos_target_dbg = 0.0f;
         run_foc_mode = 2;
         foc->fault = MC_FAULT_NONE;
         TIM1_EnsureMoeEnabled();
     }
+    else if (strncmp(cmd, "MOVE ", 5) == 0 || (isdigit((unsigned char)cmd[0]) || (cmd[0] == '-' && isdigit((unsigned char)cmd[1])))) {
+        // KHUNG TRUYỀN TOÀN DIỆN CHO CÁNH TAY ROBOT:
+        // Cú pháp 1: MOVE <Góc_Target_Độ> <Thời_Gian_s> [Lực_Ghim_A_hoặc_Nm] (Vd: MOVE 90 5 3.0)
+        // Cú pháp 2: <Góc_Target_Độ> <Thời_Gian_s> [Lực_Ghim_A_hoặc_Nm]     (Vd: 90 5 150 hoặc 90 5 3.0)
+        const char *p = (strncmp(cmd, "MOVE ", 5) == 0) ? &cmd[5] : cmd;
+        float target_deg = 0.0f;
+        float duration_s = 1.0f;       // Mặc định 1.0 giây
+        float hold_limit = 3.0f;       // Mặc định 3.0A
+        int count = sscanf(p, "%f %f %f", &target_deg, &duration_s, &hold_limit);
+
+        if (count >= 1) {
+            // Nếu người dùng nhập lực dạng Nm lớn (> 15Nm) -> quy đổi sang dòng Ampe (I = Tau / (Kt * Gear))
+            float current_a = hold_limit;
+            if (hold_limit > 15.0f) {
+                // 150 Nm tại đầu ra hộp số 1:17 -> Mô-men động cơ = 150 / 17 = 8.8 Nm -> Dòng điện = 8.8 / 0.67 = 13.1A (kẹp an toàn 5.0A)
+                current_a = (hold_limit / 17.0f) / 0.67f;
+                if (current_a > 6.0f) current_a = 6.0f; // Kẹp dòng an toàn 6A
+            }
+            if (duration_s < 0.05f) duration_s = 0.05f;
+
+            float target_rad = DEG2RAD_f(target_deg);
+            foc_start_trajectory(motor, target_rad, duration_s, current_a);
+            pos_target_dbg = target_rad;
+            run_foc_mode = 2;
+            foc->fault = MC_FAULT_NONE;
+            TIM1_EnsureMoeEnabled();
+        }
+    }
     else if (strncmp(cmd, "POS ", 4) == 0 || strncmp(cmd, "ANGLE ", 6) == 0) {
         float pos_deg = atof((strncmp(cmd, "POS ", 4) == 0) ? &cmd[4] : &cmd[6]);
         float pos_rad = DEG2RAD_f(pos_deg);
-        foc_start_trajectory(motor, pos_rad, 0.8f); // Dốc S-Curve mượt mà 800ms tới đích rồi ghim cứng
+        foc_start_trajectory(motor, pos_rad, 0.8f, 3.0f);
         pos_target_dbg = pos_rad;
         run_foc_mode = 2;
         foc->fault = MC_FAULT_NONE;
@@ -299,7 +329,7 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         if (slot >= 1 && slot <= 12) {
             float slot_angles_deg[12] = {0.0f, 30.0f, 60.0f, 90.0f, 120.0f, 150.0f, 180.0f, -150.0f, -120.0f, -90.0f, -60.0f, -30.0f};
             float target_rad = DEG2RAD_f(slot_angles_deg[slot - 1]);
-            foc_start_trajectory(motor, target_rad, 0.8f);
+            foc_start_trajectory(motor, target_rad, 0.8f, 3.0f);
             pos_target_dbg = target_rad;
             run_foc_mode = 2;
             foc->fault = MC_FAULT_NONE;

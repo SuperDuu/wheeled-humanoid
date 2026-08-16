@@ -191,18 +191,37 @@ void foc_svm(float alpha, float beta, float max_mod, uint32_t PWMFullDutyCycle,
 }
 
 /**
+  * @brief  Set Current Physical Position as Mechanical Home Zero (0.0 rad / 0.0 deg)
+  */
+void foc_set_home_position(motor_all_state_t *motor) {
+	if (motor == NULL) return;
+	motor->m_mech_home_offset = motor->m_mech_angle_single;
+	motor->m_home_calibrated = true;
+	motor->m_turn_count = 0;
+	motor->m_prev_mech_angle = motor->m_mech_angle_single;
+	motor->m_total_mech_angle = 0.0f;
+	motor->m_joint_angle = 0.0f;
+	motor->m_pos_pid_set = 0.0f;
+	motor->m_traj_active = false;
+}
+
+/**
   * @brief  Start a smooth S-Curve trajectory move for the robot joint
   * @param  target_angle_rad: Target joint angle in Radians
   * @param  duration_s: Time to move from current position to target in seconds
+  * @param  max_current_a: Maximum current limit for movement & holding (Amperes)
   */
-void foc_start_trajectory(motor_all_state_t *motor, float target_angle_rad, float duration_s) {
+void foc_start_trajectory(motor_all_state_t *motor, float target_angle_rad, float duration_s, float max_current_a) {
 	if (motor == NULL || motor->m_conf == NULL) return;
 	if (duration_s < 0.05f) duration_s = 0.05f; // Min 50ms to prevent infinite acceleration
+	if (max_current_a < 0.2f) max_current_a = 0.2f;
+	if (max_current_a > 10.0f) max_current_a = 10.0f; // Max 10A safety limit
 
 	motor->m_traj_start_angle = motor->m_joint_angle;
 	motor->m_traj_target_angle = target_angle_rad;
 	motor->m_traj_duration = duration_s;
 	motor->m_traj_time = 0.0f;
+	motor->m_pos_holding_current_limit = max_current_a;
 	motor->m_traj_active = true;
 	motor->m_pos_pid_set = motor->m_joint_angle;
 	motor->m_control_mode = CONTROL_MODE_POS;
@@ -292,7 +311,10 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 	utils_truncate_number(&output, -1.0f, 1.0f);
 
 	// Position PID calculates Vq voltage output (Volts) for Stiff Holding Torque
-	float max_pos_v = 12.0f; // Max 12V for position holding
+	float current_limit = (motor->m_pos_holding_current_limit > 0.1f) ? motor->m_pos_holding_current_limit : 3.0f;
+	float max_pos_v = current_limit * conf_now->foc_motor_r;
+	if (max_pos_v > 12.0f) max_pos_v = 12.0f;
+	if (max_pos_v < 2.0f) max_pos_v = 2.0f;
 	motor->m_iq_set = output * max_pos_v;
 }
 
@@ -375,57 +397,60 @@ void foc_run_fw(motor_all_state_t *motor, float dt) {
 
 	if (conf->foc_fw_current_max < 0.001f) return;
 
-	if (motor->m_state == MC_STATE_RUNNING &&
-			(motor->m_control_mode == CONTROL_MODE_CURRENT ||
-			 motor->m_control_mode == CONTROL_MODE_SPEED ||
-			 motor->m_control_mode == CONTROL_MODE_POS)) {
-		
-		float fw_current_now = 0.0f;
-		float duty_abs = fabsf(state_m->duty_now);
+	float current_max = conf->l_current_max * conf->l_current_max_scale;
+	float i_mag = NORM2_f(state_m->id, state_m->iq);
 
-		if (conf->foc_fw_duty_start < 0.99f && duty_abs > conf->foc_fw_duty_start * conf->l_max_duty) {
-			float i_fw_max = conf->foc_fw_current_max;
+	if (i_mag > current_max) {
+		motor->m_i_fw_set = 0.0f;
+		return;
+	}
 
-			if (conf->foc_fw_backoff > 0.001f) {
-				float i_err_backoff = SIGN(motor->m_speed_est_fast) * (state_m->iq - state_m->iq_target) / i_fw_max;
-				i_err_backoff *= conf->foc_fw_backoff;
-				utils_truncate_number(&i_err_backoff, 0.0f, 1.0f);
-				i_fw_max *= (1.0f - i_err_backoff);
-			}
+	float duty = state_m->duty_now;
+	float duty_target = conf->foc_fw_duty_start;
 
-			fw_current_now = utils_map(duty_abs,
-					conf->foc_fw_duty_start * conf->l_max_duty,
-					conf->l_max_duty,
-					0.0f, i_fw_max);
+	if (duty > duty_target) {
+		float duty_err = duty - duty_target;
+		motor->m_i_fw_set += duty_err * conf->foc_fw_current_max * dt * 2.0f;
+		if (motor->m_i_fw_set > conf->foc_fw_current_max) {
+			motor->m_i_fw_set = conf->foc_fw_current_max;
 		}
-
-		utils_step_towards((float*)&motor->m_i_fw_set, fw_current_now,
-				(dt / conf->foc_fw_ramp_time) * conf->foc_fw_current_max);
+	} else {
+		motor->m_i_fw_set -= (duty_target - duty) * conf->foc_fw_current_max * dt * 4.0f;
+		if (motor->m_i_fw_set < 0.0f) {
+			motor->m_i_fw_set = 0.0f;
+		}
 	}
 }
 
 /**
-  * @brief  Precalculate inductance & voltage norms
+  * @brief  Pre-calculate frequent FOC constants from configuration
   */
 void foc_precalc_values(motor_all_state_t *motor) {
-	const mc_configuration *conf_now = motor->m_conf;
-	motor->p_lq = conf_now->foc_motor_l + conf_now->foc_motor_ld_lq_diff * 0.5f;
-	motor->p_ld = conf_now->foc_motor_l - conf_now->foc_motor_ld_lq_diff * 0.5f;
-	motor->m_observer_state.lambda_est = conf_now->foc_motor_flux_linkage;
+	mc_configuration *conf_now = motor->m_conf;
+	motor->p_lq = conf_now->foc_motor_l;
+	motor->p_ld = conf_now->foc_motor_l;
 	motor->p_duty_norm = TWO_BY_SQRT3 / conf_now->foc_overmod_factor;
 	motor->p_fs = conf_now->foc_f_zv;
 	motor->p_dt = 1.0f / motor->p_fs;
 }
 
 /**
-  * @brief  Update Multi-turn Motor Shaft & 1:17 Cycloidal Joint Angle Accumulator
+  * @brief  Update Multi-turn Motor Shaft & 1:17 Cycloidal Joint Angle Accumulator from Home (0.0)
   */
 void foc_update_cycloidal_joint_angle(motor_all_state_t *motor, float raw_mech_angle_rad) {
 	if (motor == NULL || motor->m_conf == NULL) return;
 
+	// Lần đầu bật nguồn: Tự động ghi nhận góc bật nguồn làm Home 0.0 nếu chưa được Set Home thủ công
+	if (!motor->m_home_calibrated) {
+		motor->m_mech_home_offset = raw_mech_angle_rad;
+		motor->m_home_calibrated = true;
+		motor->m_prev_mech_angle = raw_mech_angle_rad;
+		motor->m_turn_count = 0;
+	}
+
 	motor->m_mech_angle_single = raw_mech_angle_rad;
 
-	// Detect 0 <-> 2PI boundary rollover
+	// Phát hiện tràn ranh giới 0 <-> 2PI
 	float d_angle = motor->m_mech_angle_single - motor->m_prev_mech_angle;
 
 	if (d_angle < -(float)M_PI) {
@@ -435,9 +460,12 @@ void foc_update_cycloidal_joint_angle(motor_all_state_t *motor, float raw_mech_a
 	}
 	motor->m_prev_mech_angle = motor->m_mech_angle_single;
 
-	// Total motor angle in Radians
-	motor->m_total_mech_angle = ((float)motor->m_turn_count * 2.0f * (float)M_PI) + motor->m_mech_angle_single;
+	// Góc cơ học thực tế tương đối so với vị trí Home
+	float angle_rel = motor->m_mech_angle_single - motor->m_mech_home_offset;
 
-	// Output Joint Angle after Cycloidal reduction (1:17 gear ratio)
+	// Tổng góc trục động cơ (Radians) tính từ vị trí Home
+	motor->m_total_mech_angle = ((float)motor->m_turn_count * 2.0f * (float)M_PI) + angle_rel;
+
+	// Góc đầu ra của khớp sau tỉ số truyền (mặc định 1:1 cho Direct Drive hoặc 1:17 cho hộp số)
 	motor->m_joint_angle = (motor->m_total_mech_angle / motor->m_conf->gear_ratio) * (float)motor->m_conf->encoder_direction;
 }
