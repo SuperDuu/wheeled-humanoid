@@ -205,8 +205,32 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     foc_pll_run(elec_angle, dt_fast, &motor->m_pll_phase, &motor->m_pll_speed, motor->m_conf);
     motor->m_speed_est_fast = motor->m_pll_speed;
 
-    // Bù trễ pha động (75µs = 1.5 chu kỳ PWM 20kHz) với vận tốc 20kHz mượt mà liên tục
-    float pwm_phase = elec_angle + (motor->m_speed_est_fast * 0.000075f);
+    // Open-Loop Startup Kick to Closed-Loop FOC Handover
+    // Khi khởi động từ 0 RPM, tự động kích từ trường quay nhẹ (trong ~50ms) để bứt trớn qua rãnh từ.
+    // Ngay khi rotor chuyển động (> 15 RPM), chuyển 100% sang Closed-Loop FOC cảm biến AS5048A.
+    static float startup_angle = 0.0f;
+    static bool startup_in_progress = false;
+
+    float pwm_phase = elec_angle;
+
+    if (motor->m_control_mode == CONTROL_MODE_SPEED && motor->m_state == MC_STATE_RUNNING) {
+        if (fabsf(motor->m_speed_est_fast) < 30.0f && fabsf(motor->m_speed_command_rpm) > 5.0f) {
+            if (!startup_in_progress) {
+                startup_angle = elec_angle;
+                startup_in_progress = true;
+            }
+            float dir_sign = (motor->m_speed_command_rpm > 0.0f) ? 1.0f : -1.0f;
+            startup_angle += dir_sign * 150.0f * dt_fast;
+            utils_norm_angle_rad(&startup_angle);
+            pwm_phase = startup_angle;
+        } else {
+            startup_in_progress = false;
+            pwm_phase = elec_angle + (motor->m_speed_est_fast * 0.000075f);
+        }
+    } else {
+        startup_in_progress = false;
+        pwm_phase = elec_angle + (motor->m_speed_est_fast * 0.000075f);
+    }
     utils_norm_angle_rad(&pwm_phase);
 
     utils_fast_sincos(pwm_phase, &state_m->phase_sin, &state_m->phase_cos);
