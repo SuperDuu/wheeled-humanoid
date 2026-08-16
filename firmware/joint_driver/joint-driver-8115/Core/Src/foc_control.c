@@ -248,21 +248,14 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     float max_vq = sqrtf(SQ(max_v_mag) - SQ(state_m->vd));
     UTILS_NAN_ZERO(max_vq);
 
-    // 5. High-Performance FOC Controller (Voltage-Mode with BEMF for Speed/Pos, Current-Mode for Torque)
+    // 5. High-Performance FOC Controller (Full 20kHz Cascaded Current Loop for Speed/Pos/Torque)
     if (motor->m_control_mode == CONTROL_MODE_DUTY) {
         state_m->vd = 0.0f;
         state_m->vq = state_m->duty_now * state_m->v_bus;
         state_m->vd_int = 0.0f;
         state_m->vq_int = 0.0f;
-    } else if (motor->m_control_mode == CONTROL_MODE_SPEED || motor->m_control_mode == CONTROL_MODE_POS) {
-        // Voltage-FOC: m_iq_set chứa trực tiếp điện áp Vq mục tiêu (Volts) từ Speed/Pos PID
-        state_m->vd = -motor->m_i_fw_set * conf_now->foc_motor_r;
-        state_m->vq = motor->m_iq_set;
-        utils_truncate_number_abs((float*)&state_m->vq, max_vq);
-        state_m->vd_int = state_m->vd;
-        state_m->vq_int = state_m->vq;
     } else {
-        // Current-Mode FOC for pure torque/current control
+        // Cascaded Current-Mode FOC: m_iq_set chứa dòng Iq mục tiêu (Amperes) từ Speed/Pos PID
         state_m->iq_target = motor->m_iq_set;
         float id_target = -motor->m_i_fw_set;
 
