@@ -343,15 +343,15 @@ class FOCOscilloscopeStudio {
     const btnFwd = document.getElementById('btn-openloop-fwd');
     if (btnFwd) {
       btnFwd.addEventListener('click', () => {
-        this.sendCommand('OPENLOOP 300');
-        this.appendLog('⚡ TEST RUN (+300 RPM) started.', 'success');
+        this.sendCommand('OPENLOOP 200');
+        this.appendLog('⚡ TEST RUN (+200 RPM) started.', 'success');
       });
     }
     const btnRev = document.getElementById('btn-openloop-rev');
     if (btnRev) {
       btnRev.addEventListener('click', () => {
-        this.sendCommand('OPENLOOP -300');
-        this.appendLog('🔄 TEST RUN (-300 RPM Reverse) started.', 'success');
+        this.sendCommand('OPENLOOP -200');
+        this.appendLog('🔄 TEST RUN (-200 RPM Reverse) started.', 'success');
       });
     }
 
@@ -375,12 +375,47 @@ class FOCOscilloscopeStudio {
         if (inputVq) inputVq.value = 0;
         if (vqDisplay) vqDisplay.innerText = '0.0 V';
         if (inputIq) inputIq.value = 0;
-        if (iqDisplay) iqDisplay.innerText = '0.0 A';
         document.querySelectorAll('.btn-mode').forEach(b => b.classList.remove('active'));
         const idleBtn = document.querySelector('.btn-mode[data-mode="0"]');
         if (idleBtn) idleBtn.classList.add('active');
       });
     }
+
+    // CLI Direct Command Input Handlers
+    const inputCli = document.getElementById('input-cli');
+    const btnSendCli = document.getElementById('btn-send-cli');
+    const handleCliSend = () => {
+      if (!inputCli) return;
+      const cmd = inputCli.value.trim();
+      if (!cmd) return;
+      this.sendCommand(cmd);
+      this.appendLog(`> ${cmd}`, 'success');
+      inputCli.value = '';
+    };
+
+    if (btnSendCli) {
+      btnSendCli.addEventListener('click', handleCliSend);
+    }
+    if (inputCli) {
+      inputCli.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleCliSend();
+        }
+      });
+    }
+
+    // Quick CLI Chip Buttons
+    document.querySelectorAll('.btn-cli-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const cmd = chip.getAttribute('data-cmd');
+        if (cmd) {
+          this.sendCommand(cmd);
+          this.appendLog(`> ${cmd}`, 'success');
+          if (inputCli) inputCli.value = '';
+        }
+      });
+    });
 
     // CSV Recording Controls
     const btnRecord = document.getElementById('btn-record-toggle');

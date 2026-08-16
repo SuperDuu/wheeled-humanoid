@@ -38,6 +38,7 @@ void FOC_Control_Init(FOC_Controller_t *foc, SPI_HandleTypeDef *hspi1_drv, SPI_H
     foc->aligned = false;
 
     foc->duty_a = foc->duty_b = foc->duty_c = 0.5f;
+    foc->phase_swap_bc = true; // Default hardware mapping (will be confirmed by ALIGN)
 
     // Precalculate Inductances & Frequencies
     foc_precalc_values(&foc->motor);
@@ -205,8 +206,8 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     foc_pll_run(elec_angle, dt_fast, &motor->m_pll_phase, &motor->m_pll_speed, motor->m_conf);
     motor->m_speed_est_fast = motor->m_pll_speed;
 
-    // Bù trễ pha động (120µs) với vận tốc 20kHz mượt mà liên tục
-    float pwm_phase = elec_angle + (motor->m_speed_est_fast * 0.000120f);
+    // Bù trễ pha động (75µs = 1.5 chu kỳ PWM 20kHz) với vận tốc 20kHz mượt mà liên tục
+    float pwm_phase = elec_angle + (motor->m_speed_est_fast * 0.000075f);
     utils_norm_angle_rad(&pwm_phase);
 
     utils_fast_sincos(pwm_phase, &state_m->phase_sin, &state_m->phase_cos);
@@ -248,57 +249,28 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     float max_vq = sqrtf(SQ(max_v_mag) - SQ(state_m->vd));
     UTILS_NAN_ZERO(max_vq);
 
-    // 5. Standard VESC Current PI Controller / Direct Voltage Modes
+    // 5. Current-Mode FOC Controller with Back-EMF Feedforward & Decoupling
     if (motor->m_control_mode == CONTROL_MODE_DUTY) {
         state_m->vd = 0.0f;
         state_m->vq = state_m->duty_now * state_m->v_bus;
         state_m->vd_int = 0.0f;
         state_m->vq_int = 0.0f;
-    } else if (motor->m_control_mode == CONTROL_MODE_SPEED) {
-        // Direct Voltage Velocity Control (Chuẩn Back-EMF Feedforward + Proportional Trim + Field Weakening)
-        float pole_pairs = (conf_now->foc_motor_pole_pairs > 0) ? (float)conf_now->foc_motor_pole_pairs : 21.0f;
-        float target_mech_rpm = motor->m_speed_command_rpm / pole_pairs;
-        
-        // Gia tốc mượt mà với tốc độ 150 RPM/s (lên 100 RPM trong 0.7s, lên 300 RPM trong 2s)
-        static float s_ramped_mech_rpm = 0.0f;
-        if (motor->m_state != MC_STATE_RUNNING) {
-            s_ramped_mech_rpm = 0.0f;
-        } else {
-            utils_step_towards(&s_ramped_mech_rpm, target_mech_rpm, 150.0f * dt);
-        }
-        
-        float actual_mech_rpm = RADPS2RPM_f(motor->m_speed_est_fast) / pole_pairs;
-        
-        // 1. Back-EMF Feedforward: Luôn bám sát sức điện động thực tế E = omega_e * lambda
-        // Đảm bảo Vq luôn >= E thực tế -> Triệt tiêu 100% hiện tượng phanh hãm tái sinh (Regenerative Braking)
-        float e_bemf = motor->m_speed_est_fast * conf_now->foc_motor_flux_linkage;
-        
-        // 2. Proportional Torque Voltage (Điện áp sinh mô-men kéo tăng/giảm tốc)
-        float v_p = (s_ramped_mech_rpm - actual_mech_rpm) * 0.020f;
-        utils_truncate_number_abs(&v_p, 2.5f); // Max 2.5V delta mô-men tránh giật áp
-        
-        float v_total = e_bemf + v_p;
-        
-        // 3. Dynamic SVPWM Linear Ceiling = Vbus / sqrt(3) (~14.0V @ 24.3V Bus)
-        float max_linear_vq = ONE_BY_SQRT3 * conf_now->l_max_duty * state_m->v_bus;
-        utils_truncate_number_abs(&v_total, max_linear_vq);
-        
-        state_m->vd = 0.0f;
-        state_m->vq = v_total;
-        state_m->vd_int = 0.0f;
-        state_m->vq_int = 0.0f;
     } else {
-        if (motor->m_control_mode != CONTROL_MODE_CURRENT) {
-            state_m->iq_target = motor->m_iq_set;
-        }
+        // Current-Mode FOC for Current (Torque), Speed, and Position control modes
+        state_m->iq_target = motor->m_iq_set;
+        float id_target = -motor->m_i_fw_set;
 
-        float Ierr_d = state_m->id_target - state_m->id;
+        float Ierr_d = id_target - state_m->id;
         float Ierr_q = state_m->iq_target - state_m->iq;
 
         float ki = conf_now->foc_current_ki;
         float kp = conf_now->foc_current_kp;
 
-        // Conditional Anti-Windup on Current Integrator: Pause integration during voltage saturation
+        // Feedforward terms (Back-EMF & inductive cross-coupling)
+        float vq_ff = motor->m_speed_est_fast * conf_now->foc_motor_flux_linkage;
+        float vd_ff = -motor->m_speed_est_fast * conf_now->foc_motor_l * state_m->iq;
+
+        // Anti-windup conditional integration
         if (!((state_m->vd >= max_vd && Ierr_d > 0.0f) || (state_m->vd <= -max_vd && Ierr_d < 0.0f))) {
             state_m->vd_int += Ierr_d * ki * dt;
             utils_truncate_number_abs((float*)&state_m->vd_int, max_vd);
@@ -308,12 +280,15 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
             utils_truncate_number_abs((float*)&state_m->vq_int, max_vq);
         }
 
-        // Standard VESC Current PI: Kp = R inherently provides proportional voltage R*Ierr (9.72V @ 2.5A)
-        state_m->vd = state_m->vd_int + Ierr_d * kp;
-        state_m->vq = state_m->vq_int + Ierr_q * kp;
+        state_m->vd = state_m->vd_int + (Ierr_d * kp) + vd_ff;
+        state_m->vq = state_m->vq_int + (Ierr_q * kp) + vq_ff;
 
-        utils_truncate_number_abs((float*)&state_m->vd, max_vd);
-        utils_truncate_number_abs((float*)&state_m->vq, max_vq);
+        float v_mag = sqrtf(state_m->vd * state_m->vd + state_m->vq * state_m->vq);
+        if (v_mag > max_v_mag && v_mag > 0.001f) {
+            float scale = max_v_mag / v_mag;
+            state_m->vd *= scale;
+            state_m->vq *= scale;
+        }
     }
 
     // Normalize voltages for Inverse Park & Modulation
@@ -329,9 +304,15 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     uint32_t ta, tb, tc, sector;
     foc_svm(state_m->mod_alpha_raw, state_m->mod_beta_raw, conf_now->l_max_duty, 1000, &ta, &tb, &tc, &sector);
 
+    // Stator Phase Mapping: Apply auto-detected Phase B <-> Phase C swap
     foc->duty_a = (float)ta / 1000.0f;
-    foc->duty_b = (float)tb / 1000.0f;
-    foc->duty_c = (float)tc / 1000.0f;
+    if (foc->phase_swap_bc) {
+        foc->duty_b = (float)tc / 1000.0f;
+        foc->duty_c = (float)tb / 1000.0f;
+    } else {
+        foc->duty_b = (float)tb / 1000.0f;
+        foc->duty_c = (float)tc / 1000.0f;
+    }
 }
 
 /**
@@ -340,9 +321,6 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
 void FOC_Control_SlowLoop(FOC_Controller_t *foc, float dt)
 {
     if (foc == NULL) return;
-
-    // Slow Loop 1kHz: Cập nhật joint angle accumulator & PLL Speed Estimator liên tục (kể cả khi OFF)
-    foc_update_cycloidal_joint_angle(&foc->motor, foc->encoder.angle_rad);
 
     motor_all_state_t *motor = &foc->motor;
 
@@ -353,7 +331,7 @@ void FOC_Control_SlowLoop(FOC_Controller_t *foc, float dt)
                         motor->m_motor_state.i_alpha, motor->m_motor_state.i_beta,
                         dt, &motor->m_observer_state, &motor->m_phase_now_observer, motor);
 
-    // 2. Run Position PID or Speed PID based on Control Mode
+    // 2. Run Position PID or Speed PID based on Control Mode (generates target Iq)
     if (motor->m_control_mode == CONTROL_MODE_POS) {
         foc_run_pid_control_pos(true, dt, motor);
     } else if (motor->m_control_mode == CONTROL_MODE_SPEED) {

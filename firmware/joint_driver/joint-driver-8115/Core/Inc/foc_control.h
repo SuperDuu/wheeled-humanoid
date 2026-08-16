@@ -34,6 +34,11 @@ typedef struct {
 	float zero_electric_angle;
 	bool  aligned;
 
+	// Phase Mapping: Auto-detected during alignment
+	// If true, swap Phase B ↔ C at PWM output and current sensing
+	// This compensates for PCB trace routing where SOB/SOC or PWM_B/PWM_C are swapped
+	bool  phase_swap_bc;
+
 	// Output Duty Cycles (0.0 to 1.0)
 	float duty_a, duty_b, duty_c;
 } FOC_Controller_t;
