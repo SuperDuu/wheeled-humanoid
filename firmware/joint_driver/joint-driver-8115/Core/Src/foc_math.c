@@ -314,6 +314,9 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		v_boost = (target_erpm > 0.0f) ? (3.5f * fade) : (-3.5f * fade);
 	}
 
+	// Back-EMF Feedforward: Vq_ff = omega_e * lambda
+	float vq_ff = motor->m_speed_est_fast * conf_now->foc_motor_flux_linkage;
+
 	// Speed PID calculates Vq voltage output (Volts)
 	float vq_out = v_boost + (output * max_v) + vq_ff;
 	utils_truncate_number_abs(&vq_out, max_v);
