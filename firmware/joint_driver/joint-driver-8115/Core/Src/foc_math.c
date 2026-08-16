@@ -309,8 +309,6 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		motor->m_speed_d_filter = 0.0f;
 		return;
 	}
-		return;
-	}
 
 	if (conf_now->s_pid_ramp_erpms_s > 0.0f) {
 		utils_step_towards((float*)&motor->m_speed_pid_set_rpm, motor->m_speed_command_rpm, conf_now->s_pid_ramp_erpms_s * dt);
