@@ -40,22 +40,20 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_current_filter_const = 0.1f;
     conf->foc_cc_decoupling = FOC_CC_DECOUPLING_DISABLED;
 
-    // Speed Controller (PID) - Current-Mode Output: Iq (Amps)
-    // Tuned for GB8115-4 (Kt=0.67 Nm/A, J=2574 g.cm², R=3.89Ω, direct drive)
-    // At 1000 ERPM error → output 1.0A; inner current PI handles voltage/back-EMF
-    conf->s_pid_kp = 0.001f;               // A/ERPM: 1000 ERPM err → 1A Iq
-    conf->s_pid_ki = 0.005f;               // Integral: steady-state error → 0 in ~0.5s
-    conf->s_pid_kd = 0.00002f;             // Light damping against speed oscillation
+    // Speed Controller (PID) - Voltage-Mode FOC for GB8115 Gimbal Motor
+    // (Kt = 0.67 Nm/A, J = 2574 g.cm², R = 3.89Ω, Direct Drive)
+    conf->s_pid_kp = 0.0012f;              // Proportional gain (đáp ứng mô-men nhanh, không rung)
+    conf->s_pid_ki = 0.0060f;              // Integral gain (triệt tiêu sai số xác lập trong 0.3s)
+    conf->s_pid_kd = 0.00002f;             // Damping chống dao động vi mô
     conf->s_pid_kd_filter = 0.2f;
-    conf->s_pid_min_erpm = 5.0f;           // 5 ERPM deadband (~0.24 RPM mechanical)
-    conf->s_pid_ramp_erpms_s = 3000.0f;    // Smooth acceleration ramp 3000 ERPM/s
+    conf->s_pid_min_erpm = 5.0f;           // 5 ERPM deadband (~0.24 RPM)
+    conf->s_pid_ramp_erpms_s = 4000.0f;    // Ramp gia tốc mượt 4000 ERPM/s (~190 RPM/s)
 
-    // Position Controller (PID + Process D) - Current-Mode Output: Iq (Amps)
-    // Direct drive (no gearbox): 0.5 rad error → ~1A → 0.67 Nm holding torque
-    conf->p_pid_kp = 2.0f;                 // A/rad: smooth proportional response
-    conf->p_pid_ki = 0.1f;                 // Slow integral to remove steady-state position error
-    conf->p_pid_kd = 0.05f;                // Damping gain against position oscillations
-    conf->p_pid_kd_proc = 0.08f;           // D-on-measurement to prevent derivative kick
+    // Position Controller (PID + Process D) - Voltage-Mode FOC (Direct Drive)
+    conf->p_pid_kp = 4.0f;                 // Smooth proportional gain (holding torque)
+    conf->p_pid_ki = 0.2f;                 // Low integral gain to remove steady-state error
+    conf->p_pid_kd = 0.08f;                // Damping gain against oscillations
+    conf->p_pid_kd_proc = 0.05f;           // Damping on measurement
     conf->p_pid_kd_filter = 0.2f;
     conf->p_pid_ang_div = 1.0f;
     conf->p_pid_gain_dec_angle = 0.0f;
