@@ -36,6 +36,7 @@ typedef struct {
 
 /* Function Prototypes */
 HAL_StatusTypeDef AS5048A_Init(AS5048A_t *enc, SPI_HandleTypeDef *hspi, GPIO_TypeDef *cs_port, uint16_t cs_pin);
+HAL_StatusTypeDef AS5048A_ClearError(AS5048A_t *enc);
 HAL_StatusTypeDef AS5048A_ReadRawAngle(AS5048A_t *enc, uint16_t *raw_angle);
 HAL_StatusTypeDef AS5048A_ReadRadians(AS5048A_t *enc, float *angle_rad);
 HAL_StatusTypeDef AS5048A_ReadDegrees(AS5048A_t *enc, float *angle_deg);

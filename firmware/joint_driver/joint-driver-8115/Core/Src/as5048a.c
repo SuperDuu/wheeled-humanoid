@@ -29,6 +29,19 @@ uint16_t AS5048A_CalculateEvenParity(uint16_t value)
     return value;
 }
 
+HAL_StatusTypeDef AS5048A_ClearError(AS5048A_t *enc)
+{
+    if (enc == NULL || enc->hspi == NULL) return HAL_ERROR;
+    uint16_t command = AS5048A_CalculateEvenParity((1 << 14) | AS5048A_CMD_CLEAR_ERROR);
+    uint16_t response = 0;
+    HAL_GPIO_WritePin(enc->cs_port, enc->cs_pin, GPIO_PIN_RESET);
+    for (volatile int i = 0; i < 6; i++) { __NOP(); }
+    HAL_StatusTypeDef status = HAL_SPI_TransmitReceive(enc->hspi, (uint8_t*)&command, (uint8_t*)&response, 1, 2);
+    for (volatile int i = 0; i < 3; i++) { __NOP(); }
+    HAL_GPIO_WritePin(enc->cs_port, enc->cs_pin, GPIO_PIN_SET);
+    return status;
+}
+
 /**
   * @brief  Initialize AS5048A instance
   */
@@ -47,7 +60,11 @@ HAL_StatusTypeDef AS5048A_Init(AS5048A_t *enc, SPI_HandleTypeDef *hspi, GPIO_Typ
     // Set CS high initially
     HAL_GPIO_WritePin(enc->cs_port, enc->cs_pin, GPIO_PIN_SET);
 
-    // Initial dummy read to clear status
+    // Clear any power-on error flag
+    AS5048A_ClearError(enc);
+    AS5048A_ClearError(enc);
+
+    // Initial read
     uint16_t dummy;
     return AS5048A_ReadRawAngle(enc, &dummy);
 }
@@ -66,7 +83,7 @@ HAL_StatusTypeDef AS5048A_ReadRawAngle(AS5048A_t *enc, uint16_t *raw_angle)
     HAL_GPIO_WritePin(enc->cs_port, enc->cs_pin, GPIO_PIN_RESET);
     for (volatile int i = 0; i < 6; i++) { __NOP(); } // CS setup time > 350ns
 
-    // Perform 16-bit SPI transfer (takes ~3.5µs at 5.3Mbps SPI clock)
+    // Perform 16-bit SPI transfer (takes ~3.0µs at 5.3Mbps SPI clock)
     HAL_StatusTypeDef status = HAL_SPI_TransmitReceive(enc->hspi, (uint8_t*)&command, (uint8_t*)&response, 1, 2);
 
     for (volatile int i = 0; i < 3; i++) { __NOP(); } // CS hold time > 50ns
@@ -74,16 +91,23 @@ HAL_StatusTypeDef AS5048A_ReadRawAngle(AS5048A_t *enc, uint16_t *raw_angle)
     HAL_GPIO_WritePin(enc->cs_port, enc->cs_pin, GPIO_PIN_SET);
 
     if (status == HAL_OK) {
-        // Verify Even Parity and ensure Error Flag (bit 14) is NOT set
+        // Verify Even Parity
         uint16_t expected_parity_frame = AS5048A_CalculateEvenParity(response & 0x7FFF);
-        if (response == expected_parity_frame && !(response & (1 << 14))) {
-            uint16_t angleData = response & 0x3FFF;
-            enc->raw_angle = angleData;
-            enc->angle_rad = ((float)angleData / 16384.0f) * (2.0f * (float)M_PI);
-            enc->angle_deg = ((float)angleData / 16384.0f) * 360.0f;
-            enc->error_flag = 0;
+        if (response == expected_parity_frame) {
+            if (!(response & (1 << 14))) {
+                // Valid frame without Error Flag
+                uint16_t angleData = response & 0x3FFF;
+                enc->raw_angle = angleData;
+                enc->angle_rad = ((float)angleData / 16384.0f) * (2.0f * (float)M_PI);
+                enc->angle_deg = ((float)angleData / 16384.0f) * 360.0f;
+                enc->error_flag = 0;
+            } else {
+                // Error Flag bit 14 was set: clear error in AS5048A for next frame
+                enc->error_flag = 1;
+                AS5048A_ClearError(enc);
+            }
         } else {
-            enc->error_flag = 1; // Glitch or error frame: silently keep previous valid angle
+            enc->error_flag = 1; // Parity mismatch
         }
     } else {
         // Clear SPI state on error to prevent latchup

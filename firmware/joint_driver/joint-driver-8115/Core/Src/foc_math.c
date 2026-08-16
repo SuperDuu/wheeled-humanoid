@@ -252,14 +252,12 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 	float output = p_term + motor->m_pos_i_term + d_term + d_term_proc;
 	utils_truncate_number(&output, -1.0f, 1.0f);
 
-	// Cap max position control current output to 3.0A max for bench safety
-	float max_pos_current = 3.0f; 
-	if (max_pos_current > conf_now->l_current_max) max_pos_current = conf_now->l_current_max;
-	motor->m_iq_set = output * max_pos_current;
+	// Position PID calculates target Iq current (Amperes)
+	motor->m_iq_set = output * conf_now->l_current_max;
 }
 
 /**
-  * @brief  VESC Speed Controller Loop (PID)
+  * @brief  VESC Speed Controller Loop (PID in Current-Mode FOC)
   */
 void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *motor) {
 	mc_configuration *conf_now = motor->m_conf;
@@ -304,6 +302,7 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		utils_truncate_number_abs(&motor->m_speed_i_term, 1.0f);
 	}
 
+	// Speed PID calculates target Iq current (Amperes) clamped to motor max current
 	motor->m_iq_set = output * conf_now->l_current_max;
 }
 

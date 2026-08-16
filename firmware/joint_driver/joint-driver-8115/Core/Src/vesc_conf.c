@@ -18,7 +18,7 @@ void vesc_conf_set_defaults(mc_configuration *conf)
 
     // Switching Frequency & Limits
     conf->foc_f_zv = 20000.0f;           // 20 kHz PWM Frequency
-    conf->l_max_duty = 0.92f;            // 92% max duty cycle
+    conf->l_max_duty = 0.95f;            // 95% max duty cycle (tăng từ 92% để mở rộng vùng tốc độ open-loop)
     conf->l_min_duty = 0.005f;           // 0.5% min duty cycle
 
     // Motor Parameters (GB8115-4 Gimbal/Actuator Motor - Official Datasheet)
@@ -30,7 +30,7 @@ void vesc_conf_set_defaults(mc_configuration *conf)
 
     // Direct Drive Mode (No Gearbox - 1:1 Direct Coupling, Unlimited Rotation)
     conf->gear_ratio = 1.0f;               // 1:1 Direct Drive (No reduction)
-    conf->encoder_direction = 1;           // Normal encoder direction
+    conf->encoder_direction = 1;           // Auto-detected during alignment
     conf->joint_pos_min = -1000000.0f;     // Unlimited continuous rotation
     conf->joint_pos_max =  1000000.0f;     // Unlimited continuous rotation
 
@@ -40,19 +40,22 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_current_filter_const = 0.1f;
     conf->foc_cc_decoupling = FOC_CC_DECOUPLING_DISABLED;
 
-    // Speed Controller (PID) - Tuned for GB8115-4 (Kt = 0.67 N.m/A, J = 2574 g.cm^2)
-    conf->s_pid_kp = 0.0004f;              // Proportional gain
-    conf->s_pid_ki = 0.0005f;              // Low integral gain to prevent runaway voltage drift
-    conf->s_pid_kd = 0.0f;                 // No derivative kick
+    // Speed Controller (PID) - Current-Mode Output: Iq (Amps)
+    // Tuned for GB8115-4 (Kt=0.67 Nm/A, J=2574 g.cm², R=3.89Ω, direct drive)
+    // At 1000 ERPM error → output 1.0A; inner current PI handles voltage/back-EMF
+    conf->s_pid_kp = 0.001f;               // A/ERPM: 1000 ERPM err → 1A Iq
+    conf->s_pid_ki = 0.005f;               // Integral: steady-state error → 0 in ~0.5s
+    conf->s_pid_kd = 0.00002f;             // Light damping against speed oscillation
     conf->s_pid_kd_filter = 0.2f;
-    conf->s_pid_min_erpm = 5.0f;          // 5 ERPM (~0.2 RPM)
-    conf->s_pid_ramp_erpms_s = 2000.0f;   // Ramp gia tốc mượt 2000 ERPM/s (~95 RPM/s)
+    conf->s_pid_min_erpm = 5.0f;           // 5 ERPM deadband (~0.24 RPM mechanical)
+    conf->s_pid_ramp_erpms_s = 3000.0f;    // Smooth acceleration ramp 3000 ERPM/s
 
-    // Position Controller (PID + Process D) - Tuned for 1:17 Cycloid Joint
-    conf->p_pid_kp = 3.5f;                 // Smooth proportional gain
-    conf->p_pid_ki = 0.2f;                 // Low integral gain to remove steady-state error
-    conf->p_pid_kd = 0.08f;                // Damping gain against oscillations
-    conf->p_pid_kd_proc = 0.05f;           // Damping on measurement
+    // Position Controller (PID + Process D) - Current-Mode Output: Iq (Amps)
+    // Direct drive (no gearbox): 0.5 rad error → ~1A → 0.67 Nm holding torque
+    conf->p_pid_kp = 2.0f;                 // A/rad: smooth proportional response
+    conf->p_pid_ki = 0.1f;                 // Slow integral to remove steady-state position error
+    conf->p_pid_kd = 0.05f;                // Damping gain against position oscillations
+    conf->p_pid_kd_proc = 0.08f;           // D-on-measurement to prevent derivative kick
     conf->p_pid_kd_filter = 0.2f;
     conf->p_pid_ang_div = 1.0f;
     conf->p_pid_gain_dec_angle = 0.0f;
@@ -60,8 +63,11 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     // Observer & Sensorless Configuration
     conf->foc_observer_type = FOC_OBSERVER_ORTEGA_ORIGINAL;
     conf->foc_observer_gain = 1000.0f;
-    conf->foc_pll_kp = 100.0f;
-    conf->foc_pll_ki = 1000.0f;
+    // PLL Speed Estimator: ωn=200 rad/s (~32Hz BW), ζ=1.0 critically damped
+    // Old values (Kp=2000, Ki=1000000) had 159Hz BW → amplified encoder quantization
+    // noise (±183 RPM) → speed PID oscillated violently → motor jerked
+    conf->foc_pll_kp = 400.0f;            // 2×ζ×ωn = 2×1.0×200 = 400
+    conf->foc_pll_ki = 40000.0f;          // ωn² = 200² = 40000
     conf->foc_sl_erpm = 2000.0f;
 
     // Field Weakening

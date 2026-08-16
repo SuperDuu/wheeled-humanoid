@@ -407,32 +407,36 @@ void Run_EncoderAlignment(void)
     uint32_t ta, tb, tc, sector;
     foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tc * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tb * period) / 1000);
     HAL_Delay(5);
   }
   HAL_Delay(800); // Chờ rotor ổn định tuyệt đối tại góc 0 điện
 
-  // Read starting encoder position
+  // Read starting encoder position (Đọc 2 lần liên tiếp để lấy giá trị mới nhất theo chuẩn SPI AS5048A)
   float enc_start = 0.0f;
+  AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_start);
   AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_start);
 
   // STEP 2: Rotate forward by 2 full electrical revolutions (theta_e = 0 -> 4*PI = 34.3 deg mech)
   for (int step = 0; step <= 150; step++) {
     float angle = (4.0f * 3.14159265f) * (float)step / 150.0f;
-    float valpha = (vd_align / vbus) * cosf(angle);
-    float vbeta  = (vd_align / vbus) * sinf(angle);
+    float sin_a, cos_a;
+    utils_fast_sincos(angle, &sin_a, &cos_a);
+    float valpha = (vd_align / vbus) * cos_a;
+    float vbeta  = (vd_align / vbus) * sin_a;
     uint32_t ta, tb, tc, sector;
     foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tc * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tb * period) / 1000);
     HAL_Delay(5);
   }
   HAL_Delay(600); // Chờ rotor ổn định tại góc kết thúc 4*PI điện
 
   // Read ending encoder position
   float enc_end = 0.0f;
+  AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_end);
   AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_end);
 
   // Calculate delta angle
@@ -458,18 +462,21 @@ void Run_EncoderAlignment(void)
   // STEP 4: Rotate smoothly back to Electrical Zero (theta_e = 0)
   for (int step = 0; step <= 150; step++) {
     float angle = (4.0f * 3.14159265f) * (1.0f - (float)step / 150.0f);
-    float valpha = (vd_align / vbus) * cosf(angle);
-    float vbeta  = (vd_align / vbus) * sinf(angle);
+    float sin_a, cos_a;
+    utils_fast_sincos(angle, &sin_a, &cos_a);
+    float valpha = (vd_align / vbus) * cos_a;
+    float vbeta  = (vd_align / vbus) * sin_a;
     uint32_t ta, tb, tc, sector;
     foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tc * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tb * period) / 1000);
     HAL_Delay(5);
   }
   HAL_Delay(800); // Chờ rotor settle chính xác tuyệt đối ở góc 0 điện
 
   float enc_zero = 0.0f;
+  AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_zero);
   AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_zero);
 
   // Lưu Offset ở Miền Góc Điện (Electrical Domain) theo Chuẩn VESC [-PI, +PI]
@@ -490,8 +497,8 @@ void Run_EncoderAlignment(void)
     uint32_t ta, tb, tc, sector;
     foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tc * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tb * period) / 1000);
     HAL_Delay(5);
   }
 
@@ -1609,9 +1616,15 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
     return; // Không chạy FOC khi đang calibrate
   }
 
-  // Chuyển đổi dòng điện 3 pha chuẩn (Channel 1 = Pha A, Channel 2 = Pha B, Channel 3 = Pha C)
-  float current_b = ((float)raw_ib - g_foc_controller.offset_ib) * ADC_TO_AMPS;
-  float current_c = ((float)raw_ic - g_foc_controller.offset_ia) * ADC_TO_AMPS;
+  // Chuyển đổi dòng điện 3 pha chuẩn (đồng bộ theo cờ phase_swap_bc)
+  float current_b, current_c;
+  if (g_foc_controller.phase_swap_bc) {
+    current_b = -((float)raw_ic - g_foc_controller.offset_ia) * ADC_TO_AMPS;
+    current_c = -((float)raw_ib - g_foc_controller.offset_ib) * ADC_TO_AMPS;
+  } else {
+    current_b = -((float)raw_ib - g_foc_controller.offset_ib) * ADC_TO_AMPS;
+    current_c = -((float)raw_ic - g_foc_controller.offset_ia) * ADC_TO_AMPS;
+  }
   float current_a = -(current_b + current_c); // Kirchhoff: Ia + Ib + Ic = 0
 
   // Debug: cập nhật dòng điện realtime cho monitoring
@@ -1632,38 +1645,69 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
   if (run_open_loop == 1) {
     TIM1_EnsureMoeEnabled();
 
-    // Smooth open-loop acceleration ramp (60 RPM / second to prevent pole slipping)
-    float ramp_step = 60.0f * dt;
-    if (open_loop_current_rpm < open_loop_target_rpm) {
-      open_loop_current_rpm += ramp_step;
-      if (open_loop_current_rpm > open_loop_target_rpm) open_loop_current_rpm = open_loop_target_rpm;
-    } else if (open_loop_current_rpm > open_loop_target_rpm) {
-      open_loop_current_rpm -= ramp_step;
-      if (open_loop_current_rpm < open_loop_target_rpm) open_loop_current_rpm = open_loop_target_rpm;
+    /* === 1. SMOOTH ACCELERATION RAMP (80 RPM/s) ===
+     * Hỗ trợ mượt mà cả chiều quay thuận (+) và nghịch (-).
+     * 100ms đầu giữ 0 RPM để rotor khóa êm vào góc 0 điện, sau đó tăng tốc từ từ. */
+    static uint32_t s_openloop_start_tick = 0;
+    if (fabsf(open_loop_target_rpm) > 0.1f) {
+      if (s_openloop_start_tick == 0) {
+        s_openloop_start_tick = g_adc_isr_counter;
+      }
+      /* Giữ 100ms (2000 chu kỳ 20kHz) lúc mới bắt đầu để rotor định hướng êm */
+      if ((g_adc_isr_counter - s_openloop_start_tick) >= 2000) {
+        utils_step_towards((float*)&open_loop_current_rpm, open_loop_target_rpm, 80.0f * dt);
+      }
+    } else {
+      s_openloop_start_tick = 0;
+      open_loop_current_rpm = 0.0f;
     }
 
-    float pole_pairs = (float)g_foc_controller.conf.foc_motor_pole_pairs;
+    /* === 2. TÍNH GÓC ĐIỆN (Electrical Angle) === */
+    float pole_pairs = (float)g_foc_controller.conf.foc_motor_pole_pairs; /* 21PP */
     float elec_rad_s = (open_loop_current_rpm * pole_pairs * 2.0f * 3.14159265f) / 60.0f;
     open_loop_angle += elec_rad_s * dt;
+    /* Wrap angle [-PI, +PI] mỗi ISR cycle để tránh drift/overflow float */
     utils_norm_angle_rad((float*)&open_loop_angle);
+    /* Cập nhật PLL speed cho telemetry hiển thị RPM */
     g_foc_controller.motor.m_speed_est_fast = elec_rad_s;
 
-    float abs_rpm = fabsf(open_loop_current_rpm);
-    float v_open = 7.0f + (abs_rpm / 300.0f) * 8.0f; // 7.0V tại 0RPM -> 15.0V tại 300RPM (giữ chắc khóa từ)
-    if (v_open > 16.0f) v_open = 16.0f;
-    float valpha = (v_open / vbus) * cosf(open_loop_angle);
-    float vbeta  = (v_open / vbus) * sinf(open_loop_angle);
+    /* === 3. TÍNH ĐIỆN ÁP V/f CHUẨN (Mô-men Giữ Đồng Bộ Cao) ===
+     * GB8115 có 21 cặp cực (42 nam châm) nên Cogging torque rất lớn (~0.2 N.m).
+     * Để không bị trượt bước (Step-out) gây giật ở 200 RPM, duy trì V_boost = 2.5V (~0.64A)
+     * kết hợp bù sức điện động BEMF để tạo mô-men giữ đồng bộ liên tục. */
+    float v_boost = 2.5f;
+    float v_bemf  = g_foc_controller.conf.foc_motor_flux_linkage * abs_elec_rad_s;
+    float v_open  = v_boost + v_bemf;
+
+    /* Clamp tổng điện áp ≤ Vbus/√3 × max_duty */
+    float v_max = ONE_BY_SQRT3 * g_foc_controller.conf.l_max_duty * vbus;
+    if (v_open > v_max) v_open = v_max;
+
+    /* === 4. SINH SÓNG SIN CHUẨN → SVPWM === */
+    float sin_val, cos_val;
+    utils_fast_sincos(open_loop_angle, &sin_val, &cos_val);
+
+    float valpha = (v_open / vbus) * cos_val;
+    float vbeta  = (v_open / vbus) * sin_val;
 
     uint32_t ta, tb, tc, sector;
     foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
 
+    /* === 5. GHI PWM TRỰC TIẾP VÀO TIMER (Đồng bộ theo phase_swap_bc) === */
     uint32_t period = htim1.Init.Period;
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
     g_foc_controller.duty_a = (float)ta / 1000.0f;
-    g_foc_controller.duty_b = (float)tb / 1000.0f;
-    g_foc_controller.duty_c = (float)tc / 1000.0f;
+    if (g_foc_controller.phase_swap_bc) {
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tc * period) / 1000);
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tb * period) / 1000);
+      g_foc_controller.duty_b = (float)tc / 1000.0f;
+      g_foc_controller.duty_c = (float)tb / 1000.0f;
+    } else {
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
+      g_foc_controller.duty_b = (float)tb / 1000.0f;
+      g_foc_controller.duty_c = (float)tc / 1000.0f;
+    }
     return;
   }
 
