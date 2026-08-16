@@ -313,6 +313,10 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         float d = atof(&cmd[5]);
         if (d > 0.05f && d <= 0.95f) foc->conf.l_max_duty = d;
     }
+    else if (strncmp(cmd, "RAMP ", 5) == 0 || strncmp(cmd, "SET_RAMP ", 9) == 0) {
+        float r = atof((strncmp(cmd, "RAMP ", 5) == 0) ? &cmd[5] : &cmd[9]);
+        if (r >= 0.0f) foc->conf.s_pid_ramp_erpms_s = r;
+    }
 }
 
 /**
