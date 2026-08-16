@@ -30,7 +30,7 @@ void vesc_conf_set_defaults(mc_configuration *conf)
 
     // Direct Drive Mode (No Gearbox - 1:1 Direct Coupling, Unlimited Rotation)
     conf->gear_ratio = 1.0f;               // 1:1 Direct Drive (No reduction)
-    conf->encoder_direction = 1;           // Auto-detected during alignment
+    conf->encoder_direction = -1;          // Physical AS5048A angle decreases during forward electrical rotation
     conf->joint_pos_min = -1000000.0f;     // Unlimited continuous rotation
     conf->joint_pos_max =  1000000.0f;     // Unlimited continuous rotation
 
