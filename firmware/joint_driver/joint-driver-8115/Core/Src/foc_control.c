@@ -205,8 +205,30 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     foc_pll_run(elec_angle, dt_fast, &motor->m_pll_phase, &motor->m_pll_speed, motor->m_conf);
     motor->m_speed_est_fast = motor->m_pll_speed;
 
-    // Pure Closed-Loop Commutation Angle directly from calibrated AS5048A
+    // Closed-Loop Commutation with Zero-RPM Breakaway Detent Assist
+    static float startup_angle = 0.0f;
+    static bool startup_active = false;
+
     float pwm_phase = elec_angle;
+
+    if (motor->m_control_mode == CONTROL_MODE_SPEED && motor->m_state == MC_STATE_RUNNING) {
+        if (fabsf(motor->m_speed_est_fast) < 25.0f && fabsf(motor->m_speed_command_rpm) > 5.0f) {
+            if (!startup_active) {
+                startup_angle = elec_angle;
+                startup_active = true;
+            }
+            float dir_sign = (motor->m_speed_command_rpm > 0.0f) ? 1.0f : -1.0f;
+            startup_angle += dir_sign * 120.0f * dt_fast;
+            utils_norm_angle_rad(&startup_angle);
+            pwm_phase = startup_angle;
+        } else {
+            startup_active = false;
+            pwm_phase = elec_angle;
+        }
+    } else {
+        startup_active = false;
+        pwm_phase = elec_angle;
+    }
     utils_norm_angle_rad(&pwm_phase);
 
     utils_fast_sincos(pwm_phase, &state_m->phase_sin, &state_m->phase_cos);
