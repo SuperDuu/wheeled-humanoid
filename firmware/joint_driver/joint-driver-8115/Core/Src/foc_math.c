@@ -344,6 +344,15 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	float target_erpm = (conf_now->s_pid_ramp_erpms_s > 0.0f) ? motor->m_speed_pid_set_rpm : motor->m_speed_command_rpm; // Target ERPM
 	float error = target_erpm - erpm;
 
+	// Mỗi khi thay đổi tốc độ mục tiêu: Tự động xóa sạch tích phân và sai số cũ (Setpoint Transition Reset)
+	static float prev_target_erpm = 0.0f;
+	if (fabsf(target_erpm - prev_target_erpm) > 10.0f) {
+		motor->m_speed_i_term = 0.0f;
+		motor->m_speed_prev_error = 0.0f;
+		motor->m_speed_d_filter = 0.0f;
+		prev_target_erpm = target_erpm;
+	}
+
 	if (fabsf(target_erpm) < conf_now->s_pid_min_erpm) {
 		motor->m_speed_i_term = 0.0f;
 		motor->m_speed_prev_error = error;
