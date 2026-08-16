@@ -285,35 +285,37 @@ graph TD
 
 ---
 
-### 6.6 Điều Khiển Khớp Cánh Tay Robot: Bộ Tạo Quỹ Đạo S-Curve (Trajectory Generator), Ghim Góc & 12 Vị Trí Ghim Đặt Sẵn
+### 6.6 Điều Khiển Khớp Cánh Tay Robot: Căn Chỉnh Vị Trí Home, Khung Lệnh 3 Tham Số & Ghim Khóa Vị Trí
 
-Dành riêng cho ứng dụng **Khớp Cánh Tay Robot (Robot Arm Joint Actuator)** đòi hỏi di chuyển mượt mà không rung giật và khóa cứng vị trí khi tới đích:
+Dành riêng cho ứng dụng **Khớp Cánh Tay Robot (Robot Arm Joint Actuator)**:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│ 🦾 ROBOT JOINT S-CURVE TRAJECTORY & RIGID HOLDING ARCHITECTURE         │
-├────────────────────────────────────────────────────────────────────────┤
-│ 1. Nhận Lệnh:  MOVE <Góc_Đích_Độ> <Thời_Gian_ms> (Vd: MOVE 90 1000)     │
-│ 2. Nội Suy:    Đa thức bậc 5 Quintic Minimum-Jerk s(t) mỗi 1ms:        │
-│                s(τ) = 10τ³ - 15τ⁴ + 6τ⁵  với τ = t / T                │
-│                → Gia tốc & Giật (Jerk) = 0 ở 2 đầu → Êm ái 100%        │
-│ 3. Đến Đích:   Tự động khóa cứng (Rigid Position Holding):            │
-│                Bộ Position PID liên tục bơm lực ghì Holding Torque    │
-│                để chống tải trọng cánh tay hoặc ngoại lực kéo lệch.    │
+│ 🦾 KHUNG TRUYỀN LỆNH KHỚP TAY ROBOT:                                  │
+│                                                                        │
+│   <Góc_Đích_Độ>  <Thời_Gian_s>  <Lực_Ghim_A_hoặc_Nm>                   │
+│                                                                        │
+│   • Ví dụ 1: 90 5 3.0   → Đi tới 90° trong 5.0 giây, ghim lực max 3A   │
+│   • Ví dụ 2: 180 3 5.0  → Đi tới 180° trong 3.0 giây, ghim lực max 5A │
+│   • Ví dụ 3: 0 2 3.0    → Về lại 0° trong 2.0 giây, ghim lực max 3A    │
+│   • Ví dụ 4: 90 5 150   → Đi tới 90° trong 5s, tải lực 150Nm (hộp số) │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-#### Các Cú Pháp Lệnh Khớp Robot:
-1. **Di chuyển theo thời gian (`MOVE <góc_độ> <thời_gian_ms>`)**:
-   * Ví dụ: `MOVE 90 1000` $\implies$ Khớp quay từ vị trí hiện tại đến đúng $90.0^\circ$ trong đúng $1.0\text{ giây}$, sau đó **ghim cứng vị trí $90^\circ$**.
-   * Ví dụ: `MOVE 0 500` $\implies$ Khớp quay về $0^\circ$ trong $0.5\text{ giây}$ rồi khóa cứng.
-2. **12 Vị Trí Ghim Khớp Cánh Tay Robot (`SLOT 1` $\dots$ `SLOT 12`)**:
-   * `SLOT 1`: $0^\circ$ | `SLOT 2`: $30^\circ$ | `SLOT 3`: $60^\circ$ | `SLOT 4`: $90^\circ$ | `SLOT 5`: $120^\circ$ | `SLOT 6`: $150^\circ$
-   * `SLOT 7`: $180^\circ$ | `SLOT 8`: $-150^\circ$ | `SLOT 9`: $-120^\circ$ | `SLOT 10`: $-90^\circ$ | `SLOT 11`: $-60^\circ$ | `SLOT 12`: $-30^\circ$
-3. **Ghim Góc Tức Thì Tại Chỗ (`HOLD` / `LOCK`)**:
-   * Giữ cứng góc hiện tại, chống ngoại lực bẻ khớp.
-4. **Nhả Lực Tự Do (`FREE` / `RELEASE`)**:
-   * Ngắt lực để dạy học bằng tay (Hand Teaching / Zero Torque).
+#### 1. Quy Trình Căn Chỉnh Vị Trí Gốc (Home Calibration):
+* **Căn vị trí Home hiện tại (`SETHOME` / `ZERO`)**:
+  * Khi đưa cánh tay robot về tư thế gốc mong muốn (Zero Position), gửi lệnh `SETHOME` hoặc bấm nút **`📍 SET HOME (0°)`**.
+  * Toàn bộ góc cơ học và góc đa vòng của AS5048A sẽ được trừ offset để ghim đúng **`0.0°`**.
+* **Quay về Home (`GOHOME [thời_gian_s]`)**:
+  * Gửi `GOHOME 2` $\implies$ Cánh tay robot tự động nội suy S-Curve quay êm về đúng $0.0^\circ$ trong $2.0\text{s}$ rồi khóa cứng vị trí Home.
+
+#### 2. Cơ Chế Nội Suy S-Curve & Khóa Cứng (Rigid Holding with Force Limit):
+* **Nội suy Đa thức bậc 5 (Quintic Minimum-Jerk)**:
+  $$s(\tau) = 10\tau^3 - 15\tau^4 + 6\tau^5 \quad (\tau = t / T)$$
+  * Vận tốc & Gia tốc bằng 0 ở 2 đầu $\implies$ Cánh tay robot di chuyển êm ru $100\%$, không có quán tính giật làm rung lắc robot.
+* **Đến Đích $\to$ Tự Động Khóa Cứng (Position Holding)**:
+  * Bộ Position PID liên tục kiểm soát sai số góc và bơm điện áp phục hồi $V_q = \text{output} \times (I_{limit} \times R)$.
+  * Dòng điện mô-men luôn được giới hạn chặt chẽ dưới mức $I_{limit}$ (vd $3.0\text{A}$ hoặc $5.0\text{A}$) đã truyền vào, vừa đảm bảo ghim cứng góc chống rơi cánh tay, vừa bảo vệ an toàn cho động cơ và môi trường xung quanh.
 
 ---
 *Báo cáo phân tích kỹ thuật này phản ánh đúng kiến trúc điều khiển FOC thực chiến được tích hợp trong dự án Joint Driver 8115.*
