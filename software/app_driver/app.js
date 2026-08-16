@@ -381,6 +381,47 @@ class FOCOscilloscopeStudio {
       });
     }
 
+    // 🔄 RESET DRIVER Button
+    const btnResetDriver = document.getElementById('btn-reset-driver');
+    if (btnResetDriver) {
+      btnResetDriver.addEventListener('click', () => {
+        if (confirm('Khởi động lại (REBOOT) Driver & Vi điều khiển?')) {
+          this.sendCommand('RESET');
+          this.appendLog('🔄 Đang gửi lệnh RESET vi điều khiển... Driver đang reboot.', 'warn');
+        }
+      });
+    }
+
+    // 📍 SET HOME & GO HOME Buttons
+    const btnQuickSetHome = document.getElementById('btn-quick-sethome');
+    if (btnQuickSetHome) {
+      btnQuickSetHome.addEventListener('click', () => {
+        this.sendCommand('SETHOME');
+        this.appendLog('📍 Đã căn chỉnh vị trí hiện tại làm HOME (0.0°)!', 'success');
+      });
+    }
+
+    const btnQuickGoHome = document.getElementById('btn-quick-gohome');
+    if (btnQuickGoHome) {
+      btnQuickGoHome.addEventListener('click', () => {
+        this.sendCommand('GOHOME 2.0');
+        this.appendLog('🏠 Đang quay về vị trí HOME trong 2.0s...', 'success');
+      });
+    }
+
+    // 🚀 Smart Trajectory Move & Hold Console Button
+    const btnSmartExecute = document.getElementById('btn-smart-execute');
+    if (btnSmartExecute) {
+      btnSmartExecute.addEventListener('click', () => {
+        const deg = parseFloat(document.getElementById('smart-deg')?.value || '90');
+        const time = parseFloat(document.getElementById('smart-time')?.value || '3.0');
+        const force = parseFloat(document.getElementById('smart-force')?.value || '3.0');
+        const cmd = `${deg} ${time} ${force}`;
+        this.sendCommand(cmd);
+        this.appendLog(`🚀 Lệnh quỹ đạo: Quay tới ${deg}° trong ${time}s (Lực ghim max ${force}A)`, 'success');
+      });
+    }
+
     // CLI Direct Command Input Handlers
     const inputCli = document.getElementById('input-cli');
     const btnSendCli = document.getElementById('btn-send-cli');
@@ -813,6 +854,14 @@ class FOCOscilloscopeStudio {
     setTxt('val-mech', `${pkt.mech_angle.toFixed(2)} rad`);
     setTxt('val-joint', `${pkt.joint_angle.toFixed(2)} rad`);
 
+    // 📍 Update Hero Robot Joint Angle Readouts
+    const jointDeg = (pkt.joint_angle * 180.0 / Math.PI);
+    const mechDeg = (pkt.mech_angle * 180.0 / Math.PI);
+    setTxt('val-joint-deg', `${jointDeg >= 0 ? '+' : ''}${jointDeg.toFixed(1)}°`);
+    setTxt('val-joint-rad', `${pkt.joint_angle.toFixed(3)} rad (Shaft ${mechDeg.toFixed(1)}°)`);
+    setTxt('val-rpm-disp', pkt.speed_rpm.toFixed(1));
+    setTxt('val-iq-disp', pkt.i_q.toFixed(2));
+
     setTxt('val-rpm', `${pkt.speed_rpm.toFixed(1)} RPM`);
     setTxt('val-rpm-tgt', `${pkt.speed_target_rpm.toFixed(1)} RPM`);
     const err = pkt.speed_target_rpm - pkt.speed_rpm;
@@ -823,6 +872,19 @@ class FOCOscilloscopeStudio {
 
     const modeNames = ["IDLE (0)", "CURRENT (1)", "BRAKE (2)", "SPEED (3)", "POS (4)", "VOLTAGE (5)"];
     setTxt('val-mode', modeNames[pkt.control_mode] || `MODE ${pkt.control_mode}`);
+
+    if (pkt.fault_code !== undefined) {
+      const faultEl = document.getElementById('val-fault');
+      if (faultEl) {
+        if (pkt.fault_code === 0) {
+          faultEl.innerText = 'NO FAULT';
+          faultEl.className = 'hud-badge status-good';
+        } else {
+          faultEl.innerText = `FAULT ${pkt.fault_code}`;
+          faultEl.className = 'hud-badge status-warn';
+        }
+      }
+    }
 
     if (pkt.encoder_dir !== undefined) {
       setTxt('display-dir', pkt.encoder_dir > 0 ? '+1' : '-1');
