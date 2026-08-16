@@ -221,7 +221,7 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
 
     // 3. Park Transform: Stator -> Rotor reference frame (Id, Iq)
     state_m->id = c * state_m->i_alpha + s * state_m->i_beta;
-    state_m->iq = -(c * state_m->i_beta - s * state_m->i_alpha);
+    state_m->iq = c * state_m->i_beta  - s * state_m->i_alpha;
 
     // Low-pass filter currents for telemetry
     UTILS_LP_FAST(state_m->id_filter, state_m->id, conf_now->foc_current_filter_const);
@@ -303,9 +303,9 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     state_m->mod_d = state_m->vd * voltage_normalize;
     state_m->mod_q = state_m->vq * voltage_normalize;
 
-    // 8. Inverse Park Transform: Rotor -> Stator frame (Aligned for positive forward torque)
-    state_m->mod_alpha_raw = c * state_m->mod_d + s * state_m->mod_q;
-    state_m->mod_beta_raw  = -c * state_m->mod_q + s * state_m->mod_d;
+    // 8. Inverse Park Transform: Rotor -> Stator frame
+    state_m->mod_alpha_raw = c * state_m->mod_d - s * state_m->mod_q;
+    state_m->mod_beta_raw  = c * state_m->mod_q + s * state_m->mod_d;
 
     // 9. VESC 6-Sector Space Vector Modulation (SVM)
     uint32_t ta, tb, tc, sector;
