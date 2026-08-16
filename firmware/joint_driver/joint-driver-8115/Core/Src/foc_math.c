@@ -229,7 +229,7 @@ void foc_start_trajectory(motor_all_state_t *motor, float target_angle_rad, floa
 }
 
 /**
-  * @brief  VESC Position Controller Loop (Cascaded Position -> Velocity -> Voltage FOC)
+  * @brief  VESC Position Controller Loop (S-Curve Trajectory + High-Stiffness Servo PID + Breakaway Assist)
   */
 void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *motor) {
 	mc_configuration *conf_now = motor->m_conf;
@@ -266,35 +266,35 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 
 	float angle_set = motor->m_pos_pid_set;
 
-	// Clamp target within software joint limits (-PI to +PI rad = -180 to +180 deg)
+	// Clamp target within software joint limits
 	utils_truncate_number(&angle_set, conf_now->joint_pos_min, conf_now->joint_pos_max);
 
 	float error = angle_set - angle_now;
 
-	// 2. Cascaded Velocity Demand: Sinh tốc độ quay mượt mà (Max 120 RPM) kéo rotor tới đích
-	float target_rpm = error * 40.0f; // 40 RPM per radian of error
-	utils_truncate_number(&target_rpm, -120.0f, 120.0f);
+	// 2. High-Performance Servo Position PID (Kp = 8.0 V/rad, Ki = 1.0, Kd = 0.04)
+	float p_term = error * 8.0f;
+	motor->m_pos_i_term += error * (1.0f * dt);
+	utils_truncate_number_abs((float*)&motor->m_pos_i_term, 4.0f); // Anti-windup 4V
 
-	if (fabsf(error) < 0.015f) { // Nếu sai số < ~0.8 độ, cho target_rpm = 0
-		target_rpm = 0.0f;
+	// D-term calculation on measurement to prevent derivative kick
+	float d_term = -(motor->m_speed_est_fast / (float)conf_now->foc_motor_pole_pairs) * 0.04f;
+
+	// 3. Breakaway Boost: Bơm tối thiểu 2.5V khi có sai số góc > 0.03 rad (~1.7 độ) để phá lực cản rãnh từ
+	float v_boost = 0.0f;
+	if (fabsf(error) > 0.03f) {
+		v_boost = (error > 0.0f) ? 2.5f : -2.5f;
 	}
 
-	motor->m_speed_command_rpm = target_rpm * (float)conf_now->foc_motor_pole_pairs;
+	float output_v = p_term + motor->m_pos_i_term + d_term + v_boost;
 
-	// Chạy bộ điều khiển Vận tốc đã có tính năng mồi 0-RPM tự động
-	foc_run_pid_control_speed(index_found, dt, motor);
-
-	// 3. Stiff Holding Torque: Bơm thêm mô-men phục hồi vị trí trực tiếp để ghim cứng tại chỗ
+	// Holding limit clamp
 	float hold_limit_a = (motor->m_pos_holding_current_limit > 0.1f) ? motor->m_pos_holding_current_limit : 3.0f;
 	float max_hold_v = hold_limit_a * conf_now->foc_motor_r;
 	if (max_hold_v > 12.0f) max_hold_v = 12.0f;
-	if (max_hold_v < 2.0f) max_hold_v = 2.0f;
+	if (max_hold_v < 2.5f) max_hold_v = 2.5f;
 
-	float hold_v = error * 15.0f; // Độ cứng ghì trục 15V/rad
-	utils_truncate_number_abs(&hold_v, max_hold_v);
-
-	motor->m_iq_set += hold_v;
-	utils_truncate_number_abs(&motor->m_iq_set, max_hold_v);
+	utils_truncate_number_abs(&output_v, max_hold_v);
+	motor->m_iq_set = output_v;
 }
 
 /**
@@ -303,7 +303,7 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *motor) {
 	mc_configuration *conf_now = motor->m_conf;
 
-	if (motor->m_control_mode != CONTROL_MODE_SPEED && motor->m_control_mode != CONTROL_MODE_POS) {
+	if (motor->m_control_mode != CONTROL_MODE_SPEED) {
 		motor->m_speed_i_term = 0.0f;
 		motor->m_speed_prev_error = 0.0f;
 		motor->m_speed_d_filter = 0.0f;

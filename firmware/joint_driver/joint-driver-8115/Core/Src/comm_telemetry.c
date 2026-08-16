@@ -227,6 +227,18 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
             else if (m == 5) { motor->m_control_mode = CONTROL_MODE_DUTY; run_foc_mode = 4; }
         }
     }
+    else if (strncmp(cmd, "CLOSELOOP", 9) == 0 || strncmp(cmd, "CLOSE_LOOP", 10) == 0 || strcmp(cmd, "START") == 0) {
+        float rpm = 100.0f;
+        if (strncmp(cmd, "CLOSELOOP ", 10) == 0) rpm = atof(&cmd[10]);
+        else if (strncmp(cmd, "CLOSE_LOOP ", 11) == 0) rpm = atof(&cmd[11]);
+        speed_target_dbg = rpm;
+        motor->m_speed_command_rpm = rpm * 21.0f;
+        motor->m_control_mode = CONTROL_MODE_SPEED;
+        motor->m_state = MC_STATE_RUNNING;
+        run_foc_mode = 3;
+        foc->fault = MC_FAULT_NONE;
+        TIM1_EnsureMoeEnabled();
+    }
     else if (strncmp(cmd, "SPEED ", 6) == 0) {
         float mech_rpm = atof(&cmd[6]);
         float pole_pairs = (motor->m_conf != NULL) ? (float)motor->m_conf->foc_motor_pole_pairs : 21.0f;
