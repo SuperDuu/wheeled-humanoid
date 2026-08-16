@@ -323,7 +323,7 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 }
 
 /**
-  * @brief  VESC Speed Controller Loop (PID in Voltage-Mode FOC with Back-EMF Feedforward)
+  * @brief  VESC Speed Controller Loop (Analytic Linear PI + Target Back-EMF Feedforward)
   */
 void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *motor) {
 	mc_configuration *conf_now = motor->m_conf;
@@ -341,7 +341,7 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	}
 
 	float erpm = RADPS2RPM_f(motor->m_speed_est_fast);
-	float target_erpm = (conf_now->s_pid_ramp_erpms_s > 0.0f) ? motor->m_speed_pid_set_rpm : motor->m_speed_command_rpm; // Ramped ERPM target
+	float target_erpm = (conf_now->s_pid_ramp_erpms_s > 0.0f) ? motor->m_speed_pid_set_rpm : motor->m_speed_command_rpm; // Target ERPM
 	float error = target_erpm - erpm;
 
 	if (fabsf(target_erpm) < conf_now->s_pid_min_erpm) {
@@ -351,44 +351,24 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		return;
 	}
 
-	float p_term = error * conf_now->s_pid_kp;
-	float d_term = (error - motor->m_speed_prev_error) * (conf_now->s_pid_kd / dt);
+	// 1. Linear Proportional Drive (Kp = 0.0020 V/ERPM)
+	float kp = (conf_now->s_pid_kp > 0.00001f) ? (conf_now->s_pid_kp * 4.0f) : 0.0020f;
+	float p_term = error * kp;
 
-	UTILS_LP_FAST(motor->m_speed_d_filter, d_term, conf_now->s_pid_kd_filter);
-	d_term = motor->m_speed_d_filter;
+	// 2. Linear Integral Accumulation (Ki = 0.0040 V/(ERPM*s))
+	float ki = (conf_now->s_pid_ki > 0.00001f) ? (conf_now->s_pid_ki * 16.0f) : 0.0040f;
+	motor->m_speed_i_term += error * (ki * dt);
+	utils_truncate_number_abs(&motor->m_speed_i_term, 8.0f); // Max 8V integral authority
 
-	motor->m_speed_prev_error = error;
+	// 3. Target Back-EMF Feedforward: Vq_ff = omega_target_rad_s * lambda
+	float vq_ff = (target_erpm * 0.104719755f) * conf_now->foc_motor_flux_linkage;
 
-	float output = p_term + motor->m_speed_i_term + d_term;
-	utils_truncate_number_abs(&output, 1.0f);
-
-	// Conditional Integration Anti-Windup: Pause integral accumulation during output saturation
-	if (!((output >= 1.0f && error > 0.0f) || (output <= -1.0f && error < 0.0f))) {
-		motor->m_speed_i_term += error * conf_now->s_pid_ki * dt;
-		utils_truncate_number_abs(&motor->m_speed_i_term, 1.0f);
-	}
-
-	// Maximum voltage available: Vmax = Vbus / sqrt(3) * l_max_duty
+	// 4. Maximum voltage clamp
 	float max_v = ONE_BY_SQRT3 * conf_now->l_max_duty * motor->m_motor_state.v_bus;
-	if (max_v < 1.0f) max_v = 12.0f;
+	if (max_v < 2.0f) max_v = 12.0f;
 
-	// Smooth Zero-Speed Breakaway Boost (2.5V ~ 0.64A): Bơm đủ lực kéo nhẹ lúc đứng yên, tự động giảm về 0 khi có trớn
-	float v_boost = 0.0f;
-	if (fabsf(erpm) < 300.0f) {
-		float fade = 1.0f - (fabsf(erpm) / 300.0f);
-		v_boost = (target_erpm > 0.0f) ? (2.5f * fade) : (-2.5f * fade);
-	}
-
-	// Back-EMF Feedforward: Vq_ff = omega_e * lambda
-	float vq_ff = motor->m_speed_est_fast * conf_now->foc_motor_flux_linkage;
-
-	// Dynamic Voltage Authority: Khóa điện áp tương ứng với dải tốc độ, chống vọt dòng quá tải nhiệt 5s
-	float v_limit = 3.5f + (fabsf(target_erpm) * 0.0025f);
-	if (v_limit > max_v) v_limit = max_v;
-
-	// Speed PID calculates Vq voltage output (Volts)
-	float vq_out = v_boost + (output * v_limit) + vq_ff;
-	utils_truncate_number_abs(&vq_out, v_limit);
+	float vq_out = p_term + motor->m_speed_i_term + vq_ff;
+	utils_truncate_number_abs(&vq_out, max_v);
 	motor->m_iq_set = vq_out;
 }
 
