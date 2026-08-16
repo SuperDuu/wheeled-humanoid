@@ -448,6 +448,77 @@ class FOCOscilloscopeStudio {
       });
     }
 
+    // 🎛️ Real-Time FOC & PID Parameter Tuning Event Listeners
+    this.currentOffset = 0.0;
+    this.currentDir = 1;
+    this.currentSwap = false;
+
+    // Apply Speed PID
+    const btnApplySpeedPID = document.getElementById('btn-apply-speed-pid');
+    if (btnApplySpeedPID) {
+      btnApplySpeedPID.addEventListener('click', () => {
+        const kp = parseFloat(document.getElementById('tune-skp')?.value || '0.0060');
+        const ki = parseFloat(document.getElementById('tune-ski')?.value || '0.0250');
+        const kd = parseFloat(document.getElementById('tune-skd')?.value || '0.0001');
+        this.sendCommand(`KP_S ${kp}`);
+        this.sendCommand(`KI_S ${ki}`);
+        this.sendCommand(`KD_S ${kd}`);
+        this.appendLog(`⚙️ Speed PID Updated: Kp=${kp}, Ki=${ki}, Kd=${kd}`, 'success');
+      });
+    }
+
+    // Apply Position PID
+    const btnApplyPosPID = document.getElementById('btn-apply-pos-pid');
+    if (btnApplyPosPID) {
+      btnApplyPosPID.addEventListener('click', () => {
+        const kp = parseFloat(document.getElementById('tune-pkp')?.value || '4.0');
+        const ki = parseFloat(document.getElementById('tune-pki')?.value || '0.2');
+        const kd = parseFloat(document.getElementById('tune-pkd')?.value || '0.08');
+        this.sendCommand(`KP_P ${kp}`);
+        this.sendCommand(`KI_P ${ki}`);
+        this.sendCommand(`KD_P ${kd}`);
+        this.appendLog(`⚙️ Position PID Updated: Kp=${kp}, Ki=${ki}, Kd=${kd}`, 'success');
+      });
+    }
+
+    // Toggle Encoder Direction (+1 / -1)
+    const btnToggleDir = document.getElementById('btn-toggle-dir');
+    if (btnToggleDir) {
+      btnToggleDir.addEventListener('click', () => {
+        this.currentDir = (this.currentDir === 1) ? -1 : 1;
+        this.sendCommand(`DIR ${this.currentDir}`);
+        const disp = document.getElementById('display-dir');
+        if (disp) disp.innerText = (this.currentDir > 0) ? '+1' : '-1';
+        this.appendLog(`🔄 Encoder Direction toggled: ${this.currentDir > 0 ? '+1' : '-1'}`, 'warn');
+      });
+    }
+
+    // Toggle Phase Swap (B <-> C)
+    const btnToggleSwap = document.getElementById('btn-toggle-swap');
+    if (btnToggleSwap) {
+      btnToggleSwap.addEventListener('click', () => {
+        this.currentSwap = !this.currentSwap;
+        this.sendCommand(`SWAP ${this.currentSwap ? 1 : 0}`);
+        const disp = document.getElementById('display-swap');
+        if (disp) disp.innerText = this.currentSwap ? 'ON (B<->C)' : 'OFF (1:1)';
+        this.appendLog(`🔀 Phase Swap toggled: ${this.currentSwap ? 'ON' : 'OFF'}`, 'warn');
+      });
+    }
+
+    // Zero Electric Offset Nudge Buttons
+    document.querySelectorAll('.btn-offset-nudge').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const nudge = parseFloat(btn.getAttribute('data-nudge') || '0.0');
+        this.currentOffset += nudge;
+        while (this.currentOffset > Math.PI) this.currentOffset -= 2 * Math.PI;
+        while (this.currentOffset < -Math.PI) this.currentOffset += 2 * Math.PI;
+        this.sendCommand(`OFFSET ${this.currentOffset.toFixed(3)}`);
+        const disp = document.getElementById('display-offset');
+        if (disp) disp.innerText = `${this.currentOffset.toFixed(2)} rad (${(this.currentOffset * 180 / Math.PI).toFixed(0)}°)`;
+        this.appendLog(`📐 Zero Offset Nudged: ${this.currentOffset.toFixed(3)} rad`, 'success');
+      });
+    });
+
     // Log actions
     const btnCopyLog = document.getElementById('btn-copy-log');
     if (btnCopyLog) {
@@ -737,8 +808,17 @@ class FOCOscilloscopeStudio {
     setTxt('val-vbus', pkt.v_bus.toFixed(1));
     setTxt('val-temp', pkt.temp_fet.toFixed(1));
 
-    const modeNames = ["IDLE (0)", "CURRENT (1)", "BRAKE (2)", "SPEED (3)", "POS (4)"];
+    const modeNames = ["IDLE (0)", "CURRENT (1)", "BRAKE (2)", "SPEED (3)", "POS (4)", "VOLTAGE (5)"];
     setTxt('val-mode', modeNames[pkt.control_mode] || `MODE ${pkt.control_mode}`);
+
+    if (pkt.encoder_dir !== undefined) {
+      setTxt('display-dir', pkt.encoder_dir > 0 ? '+1' : '-1');
+      this.currentDir = pkt.encoder_dir;
+    }
+    if (pkt.zero_electric_angle !== undefined) {
+      setTxt('display-offset', `${pkt.zero_electric_angle.toFixed(2)} rad (${(pkt.zero_electric_angle * 180 / Math.PI).toFixed(0)}°)`);
+      this.currentOffset = pkt.zero_electric_angle;
+    }
   }
 
   async sendCommand(cmd) {

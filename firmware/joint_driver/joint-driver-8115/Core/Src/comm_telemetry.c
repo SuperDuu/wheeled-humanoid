@@ -272,6 +272,47 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         foc->fault = MC_FAULT_NONE;
         TIM1_EnsureMoeEnabled();
     }
+    else if (strncmp(cmd, "KP_S ", 5) == 0 || strncmp(cmd, "SET_SKP ", 8) == 0) {
+        float val = atof((strncmp(cmd, "KP_S ", 5) == 0) ? &cmd[5] : &cmd[8]);
+        foc->conf.s_pid_kp = val;
+    }
+    else if (strncmp(cmd, "KI_S ", 5) == 0 || strncmp(cmd, "SET_SKI ", 8) == 0) {
+        float val = atof((strncmp(cmd, "KI_S ", 5) == 0) ? &cmd[5] : &cmd[8]);
+        foc->conf.s_pid_ki = val;
+    }
+    else if (strncmp(cmd, "KD_S ", 5) == 0 || strncmp(cmd, "SET_SKD ", 8) == 0) {
+        float val = atof((strncmp(cmd, "KD_S ", 5) == 0) ? &cmd[5] : &cmd[8]);
+        foc->conf.s_pid_kd = val;
+    }
+    else if (strncmp(cmd, "KP_P ", 5) == 0 || strncmp(cmd, "SET_PKP ", 8) == 0) {
+        float val = atof((strncmp(cmd, "KP_P ", 5) == 0) ? &cmd[5] : &cmd[8]);
+        foc->conf.p_pid_kp = val;
+    }
+    else if (strncmp(cmd, "KI_P ", 5) == 0 || strncmp(cmd, "SET_PKI ", 8) == 0) {
+        float val = atof((strncmp(cmd, "KI_P ", 5) == 0) ? &cmd[5] : &cmd[8]);
+        foc->conf.p_pid_ki = val;
+    }
+    else if (strncmp(cmd, "KD_P ", 5) == 0 || strncmp(cmd, "SET_PKD ", 8) == 0) {
+        float val = atof((strncmp(cmd, "KD_P ", 5) == 0) ? &cmd[5] : &cmd[8]);
+        foc->conf.p_pid_kd = val;
+    }
+    else if (strncmp(cmd, "DIR ", 4) == 0) {
+        int d = atoi(&cmd[4]);
+        if (d == 1 || d == -1) foc->conf.encoder_direction = d;
+    }
+    else if (strncmp(cmd, "SWAP ", 5) == 0) {
+        int s = atoi(&cmd[5]);
+        foc->phase_swap_bc = (s != 0);
+    }
+    else if (strncmp(cmd, "OFFSET ", 7) == 0) {
+        float off = atof(&cmd[7]);
+        foc->zero_electric_angle = off;
+        foc->aligned = true;
+    }
+    else if (strncmp(cmd, "DUTY ", 5) == 0) {
+        float d = atof(&cmd[5]);
+        if (d > 0.05f && d <= 0.95f) foc->conf.l_max_duty = d;
+    }
 }
 
 /**
