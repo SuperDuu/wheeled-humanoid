@@ -335,23 +335,9 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		return;
 	}
 
-	if (conf_now->s_pid_ramp_erpms_s > 0.0f) {
-		utils_step_towards((float*)&motor->m_speed_pid_set_rpm, motor->m_speed_command_rpm, conf_now->s_pid_ramp_erpms_s * dt);
-		utils_truncate_number(&motor->m_speed_pid_set_rpm, conf_now->l_min_erpm, conf_now->l_max_erpm);
-	}
-
 	float erpm = RADPS2RPM_f(motor->m_speed_est_fast);
-	float target_erpm = (conf_now->s_pid_ramp_erpms_s > 0.0f) ? motor->m_speed_pid_set_rpm : motor->m_speed_command_rpm; // Target ERPM
+	float target_erpm = motor->m_speed_command_rpm; // Target ERPM
 	float error = target_erpm - erpm;
-
-	// Mỗi khi thay đổi tốc độ mục tiêu: Tự động xóa sạch tích phân và sai số cũ (Setpoint Transition Reset)
-	static float prev_target_erpm = 0.0f;
-	if (fabsf(target_erpm - prev_target_erpm) > 10.0f) {
-		motor->m_speed_i_term = 0.0f;
-		motor->m_speed_prev_error = 0.0f;
-		motor->m_speed_d_filter = 0.0f;
-		prev_target_erpm = target_erpm;
-	}
 
 	if (fabsf(target_erpm) < conf_now->s_pid_min_erpm) {
 		motor->m_speed_i_term = 0.0f;
@@ -363,31 +349,24 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	// 1. Proportional Gain (Kp = 0.00060)
 	float p_term = error * conf_now->s_pid_kp;
 
-	// 2. Integral Gain (Ki = 0.00025)
-	motor->m_speed_i_term += error * conf_now->s_pid_ki * dt;
-	utils_truncate_number_abs(&motor->m_speed_i_term, 1.0f); // Anti-windup in normalized domain
+	// 2. Continuous Integral Accumulation (Ki = 0.00025) with Anti-Windup
+	motor->m_speed_i_term += error * (conf_now->s_pid_ki * dt);
+	utils_truncate_number_abs(&motor->m_speed_i_term, 1.0f);
 
 	float output = p_term + motor->m_speed_i_term;
 	utils_truncate_number_abs(&output, 1.0f);
 
-	// 3. Back-EMF Feedforward: Vq_ff = omega_e * lambda
-	float vq_ff = motor->m_speed_est_fast * conf_now->foc_motor_flux_linkage;
+	// 3. Target Back-EMF Feedforward: Vq_ff = omega_target_rad_s * lambda
+	float vq_ff = (target_erpm * 0.104719755f) * conf_now->foc_motor_flux_linkage;
 
 	// 4. Maximum voltage & Dynamic Voltage Authority
 	float max_v = ONE_BY_SQRT3 * conf_now->l_max_duty * motor->m_motor_state.v_bus;
 	if (max_v < 2.0f) max_v = 12.0f;
 
-	float v_limit = 3.5f + (fabsf(target_erpm) * 0.0025f);
+	float v_limit = 4.0f + (fabsf(target_erpm) * 0.0025f);
 	if (v_limit > max_v) v_limit = max_v;
 
-	// Breakaway assist below 15 RPM
-	float v_boost = 0.0f;
-	if (fabsf(erpm) < 250.0f) {
-		float fade = 1.0f - (fabsf(erpm) / 250.0f);
-		v_boost = (target_erpm > 0.0f) ? (1.5f * fade) : (-1.5f * fade);
-	}
-
-	float vq_out = v_boost + (output * v_limit) + vq_ff;
+	float vq_out = (output * v_limit) + vq_ff;
 	utils_truncate_number_abs(&vq_out, v_limit);
 	motor->m_iq_set = vq_out;
 }
