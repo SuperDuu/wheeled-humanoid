@@ -205,42 +205,8 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     foc_pll_run(elec_angle, dt_fast, &motor->m_pll_phase, &motor->m_pll_speed, motor->m_conf);
     motor->m_speed_est_fast = motor->m_pll_speed;
 
-    // Automatic Open-to-Closed Loop Startup Handover (for Speed Mode only)
-    // Khi chạy ở Speed Mode, tự động tạo dốc quay khởi động nhẹ từ 0 để bứt phá rãnh từ.
-    // Ở Position Mode, luôn dùng 100% góc tuyệt đối AS5048A Closed-Loop để chuyển động mượt mà không khực.
-    static float startup_phase = 0.0f;
-    static float startup_speed_erpm = 0.0f;
-    static bool startup_in_progress = false;
-
+    // 100% Pure Synchronous Closed-Loop FOC Commutation via AS5048A Magnetic Encoder
     float pwm_phase = elec_angle;
-
-    if (motor->m_control_mode == CONTROL_MODE_SPEED && motor->m_state == MC_STATE_RUNNING) {
-        float speed_rpm = RADPS2RPM_f(motor->m_speed_est_fast) / 21.0f;
-        float target_rpm = motor->m_speed_command_rpm / 21.0f;
-
-        if (fabsf(speed_rpm) < 15.0f && fabsf(target_rpm) > 5.0f) {
-            if (!startup_in_progress) {
-                startup_phase = elec_angle;
-                startup_speed_erpm = 0.0f;
-                startup_in_progress = true;
-            }
-            float dir = (target_rpm > 0.0f) ? 1.0f : -1.0f;
-            startup_speed_erpm += dir * (300.0f * 21.0f) * dt_fast; // Gia tốc dốc 300 RPM/s từ 0
-            float max_startup_erpm = 800.0f; // Giới hạn tốc độ dốc ~38 RPM
-            utils_truncate_number_abs(&startup_speed_erpm, max_startup_erpm);
-
-            float d_angle = (startup_speed_erpm * 0.104719755f) * dt_fast;
-            startup_phase += d_angle;
-            utils_norm_angle_rad(&startup_phase);
-            pwm_phase = startup_phase;
-        } else {
-            startup_in_progress = false;
-            pwm_phase = elec_angle;
-        }
-    } else {
-        startup_in_progress = false;
-        pwm_phase = elec_angle;
-    }
     utils_norm_angle_rad(&pwm_phase);
 
     utils_fast_sincos(pwm_phase, &state_m->phase_sin, &state_m->phase_cos);
