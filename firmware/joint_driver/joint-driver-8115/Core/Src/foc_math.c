@@ -310,11 +310,11 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	// Back-EMF Feedforward: Vq_ff = omega_e * lambda
 	float vq_ff = motor->m_speed_est_fast * conf_now->foc_motor_flux_linkage;
 
-	// Minimum breakaway boost voltage (2.0V) to overcome 42-pole cogging torque immediately
-	float v_boost = (target_erpm > 5.0f) ? 2.0f : ((target_erpm < -5.0f) ? -2.0f : 0.0f);
+	// Minimum breakaway boost voltage (5.0V) to overcome 42-pole cogging torque immediately
+	float v_boost = (target_erpm > 5.0f) ? 5.0f : ((target_erpm < -5.0f) ? -5.0f : 0.0f);
 
 	// Speed PID calculates Vq voltage output (Volts)
-	float vq_out = v_boost + (output * (max_v - 2.0f)) + vq_ff;
+	float vq_out = v_boost + (output * (max_v - 5.0f)) + vq_ff;
 	utils_truncate_number_abs(&vq_out, max_v);
 	motor->m_iq_set = vq_out;
 }
