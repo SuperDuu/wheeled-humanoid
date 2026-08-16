@@ -778,7 +778,9 @@ int main(void)
       } else if (run_foc_mode == 2) { // Position Control Mode từ Live Expressions
         g_foc_controller.motor.m_state = MC_STATE_RUNNING;
         g_foc_controller.motor.m_control_mode = CONTROL_MODE_POS;
-        utils_step_towards(&g_foc_controller.motor.m_pos_pid_set, pos_target_dbg, 2.5f * 0.05f);
+        if (!g_foc_controller.motor.m_traj_active) {
+          g_foc_controller.motor.m_pos_pid_set = pos_target_dbg;
+        }
         g_foc_controller.motor.m_motor_state.id_target = id_target_dbg;
       } else if (run_foc_mode == 3) { // Speed/Velocity Control Mode từ Live Expressions / Web App
         g_foc_controller.motor.m_state = MC_STATE_RUNNING;

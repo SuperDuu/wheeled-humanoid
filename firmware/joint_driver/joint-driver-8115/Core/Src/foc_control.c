@@ -214,7 +214,7 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
 
     float pwm_phase = elec_angle;
 
-    if (motor->m_control_mode == CONTROL_MODE_SPEED && motor->m_state == MC_STATE_RUNNING) {
+    if ((motor->m_control_mode == CONTROL_MODE_SPEED || motor->m_control_mode == CONTROL_MODE_POS) && motor->m_state == MC_STATE_RUNNING) {
         float speed_rpm = RADPS2RPM_f(motor->m_speed_est_fast) / 21.0f;
         float target_rpm = motor->m_speed_command_rpm / 21.0f;
 
