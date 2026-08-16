@@ -323,7 +323,7 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 }
 
 /**
-  * @brief  VESC Speed Controller Loop (Closed-Loop PI with Dynamic Voltage Ceiling)
+  * @brief  VESC Speed Controller Loop (Direct Volts PI + Back-EMF Baseline + D-Damping)
   */
 void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *motor) {
 	mc_configuration *conf_now = motor->m_conf;
@@ -346,24 +346,29 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		return;
 	}
 
-	// 1. Proportional Gain (Kp = 0.00060)
-	float p_term = error * conf_now->s_pid_kp;
+	// 1. Nominal Back-EMF & Friction Baseline Voltage (GB8115 Kv ~ 40 RPM/V)
+	float target_mech_rpm = target_erpm / 21.0f;
+	float v_base = target_mech_rpm * 0.015f; // ~3.75V baseline at 250 RPM
 
-	// 2. Continuous Integral Accumulation (Ki = 0.00030) with Anti-Windup
-	motor->m_speed_i_term += error * (conf_now->s_pid_ki * dt);
-	utils_truncate_number_abs(&motor->m_speed_i_term, 1.0f);
+	// 2. Direct Volts Proportional Drive (Kp = 0.0006 V/ERPM -> gentle 0.12V correction per 10 RPM error)
+	float p_term_v = error * 0.0006f;
 
-	float output = p_term + motor->m_speed_i_term;
-	utils_truncate_number_abs(&output, 1.0f);
+	// 3. Integral Correction (Ki = 0.0015 V/(ERPM*s)) with Anti-Windup
+	motor->m_speed_i_term += error * (0.0015f * dt);
+	utils_truncate_number_abs(&motor->m_speed_i_term, 2.5f); // Max ±2.5V integral trim
 
-	// 3. Dynamic Voltage Ceiling based on Target Speed (Prevents overvoltage locks while giving full PI authority)
-	float target_mech_rpm = fabsf(target_erpm) / 21.0f;
-	float v_ceiling = 3.0f + target_mech_rpm * 0.035f; // 3.0V base + 0.035V per RPM (e.g. 11.75V @ 250 RPM)
+	// 4. Active Speed Acceleration Damping (Kd on speed change to prevent hunting)
+	float d_speed_erpm = (erpm - motor->m_speed_prev_error) / dt;
+	motor->m_speed_prev_error = erpm;
+	float d_term_v = -d_speed_erpm * 0.000015f;
+	utils_truncate_number_abs(&d_term_v, 1.5f);
+
+	float vq_out = v_base + p_term_v + motor->m_speed_i_term + d_term_v;
+
+	// Maximum voltage ceiling
 	float max_v = ONE_BY_SQRT3 * conf_now->l_max_duty * motor->m_motor_state.v_bus;
-	if (v_ceiling > max_v) v_ceiling = max_v;
-
-	float vq_out = output * v_ceiling;
-	utils_truncate_number_abs(&vq_out, v_ceiling);
+	if (max_v < 2.0f) max_v = 12.0f;
+	utils_truncate_number_abs(&vq_out, max_v);
 	motor->m_iq_set = vq_out;
 }
 
