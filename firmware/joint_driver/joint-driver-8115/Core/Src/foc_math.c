@@ -397,7 +397,7 @@ void foc_run_fw(motor_all_state_t *motor, float dt) {
 
 	if (conf->foc_fw_current_max < 0.001f) return;
 
-	float current_max = conf->l_current_max * conf->l_current_max_scale;
+	float current_max = conf->l_current_max;
 	float i_mag = NORM2_f(state_m->id, state_m->iq);
 
 	if (i_mag > current_max) {
