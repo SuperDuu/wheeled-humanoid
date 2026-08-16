@@ -252,12 +252,13 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 	float output = p_term + motor->m_pos_i_term + d_term + d_term_proc;
 	utils_truncate_number(&output, -1.0f, 1.0f);
 
-	// Position PID calculates target Iq current (Amperes)
-	motor->m_iq_set = output * conf_now->l_current_max;
+	// Position PID calculates Vq voltage output (Volts)
+	float max_pos_v = 12.0f; // Max 12V for position holding
+	motor->m_iq_set = output * max_pos_v;
 }
 
 /**
-  * @brief  VESC Speed Controller Loop (PID in Current-Mode FOC)
+  * @brief  VESC Speed Controller Loop (PID in Voltage-Mode FOC with Back-EMF Feedforward)
   */
 void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *motor) {
 	mc_configuration *conf_now = motor->m_conf;
@@ -302,8 +303,17 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		utils_truncate_number_abs(&motor->m_speed_i_term, 1.0f);
 	}
 
-	// Speed PID calculates target Iq current (Amperes) clamped to motor max current
-	motor->m_iq_set = output * conf_now->l_current_max;
+	// Maximum voltage available: Vmax = Vbus / sqrt(3) * l_max_duty
+	float max_v = ONE_BY_SQRT3 * conf_now->l_max_duty * motor->m_motor_state.v_bus;
+	if (max_v < 1.0f) max_v = 12.0f;
+
+	// Back-EMF Feedforward: Vq_ff = omega_e * lambda
+	float vq_ff = motor->m_speed_est_fast * conf_now->foc_motor_flux_linkage;
+
+	// Speed PID calculates Vq voltage output (Volts)
+	float vq_out = (output * max_v) + vq_ff;
+	utils_truncate_number_abs(&vq_out, max_v);
+	motor->m_iq_set = vq_out;
 }
 
 /**
