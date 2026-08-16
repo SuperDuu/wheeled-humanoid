@@ -323,7 +323,7 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 }
 
 /**
-  * @brief  VESC Speed Controller Loop (Analytic Golden PI + Back-EMF Feedforward)
+  * @brief  VESC Speed Controller Loop (Closed-Loop PI with Dynamic Voltage Ceiling)
   */
 void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *motor) {
 	mc_configuration *conf_now = motor->m_conf;
@@ -349,23 +349,21 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	// 1. Proportional Gain (Kp = 0.00060)
 	float p_term = error * conf_now->s_pid_kp;
 
-	// 2. Continuous Integral Accumulation (Ki = 0.00025) with Anti-Windup
+	// 2. Continuous Integral Accumulation (Ki = 0.00030) with Anti-Windup
 	motor->m_speed_i_term += error * (conf_now->s_pid_ki * dt);
 	utils_truncate_number_abs(&motor->m_speed_i_term, 1.0f);
 
 	float output = p_term + motor->m_speed_i_term;
 	utils_truncate_number_abs(&output, 1.0f);
 
-	// 3. Target Back-EMF Feedforward: Vq_ff = omega_target_rad_s * lambda
-	float vq_ff = (target_erpm * 0.104719755f) * conf_now->foc_motor_flux_linkage;
-
-	// 4. Safe Drive Torque Authority (Max 3.5V ~ 0.9A torque assist, prevents overvoltage stalls)
-	float v_torque_auth = 3.5f;
-	float vq_out = vq_ff + (output * v_torque_auth);
-
+	// 3. Dynamic Voltage Ceiling based on Target Speed (Prevents overvoltage locks while giving full PI authority)
+	float target_mech_rpm = fabsf(target_erpm) / 21.0f;
+	float v_ceiling = 3.0f + target_mech_rpm * 0.035f; // 3.0V base + 0.035V per RPM (e.g. 11.75V @ 250 RPM)
 	float max_v = ONE_BY_SQRT3 * conf_now->l_max_duty * motor->m_motor_state.v_bus;
-	if (max_v < 2.0f) max_v = 12.0f;
-	utils_truncate_number_abs(&vq_out, max_v);
+	if (v_ceiling > max_v) v_ceiling = max_v;
+
+	float vq_out = output * v_ceiling;
+	utils_truncate_number_abs(&vq_out, v_ceiling);
 	motor->m_iq_set = vq_out;
 }
 
