@@ -205,8 +205,8 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     foc_pll_run(elec_angle, dt_fast, &motor->m_pll_phase, &motor->m_pll_speed, motor->m_conf);
     motor->m_speed_est_fast = motor->m_pll_speed;
 
-    // Pure Closed-Loop Dynamic Commutation Angle with Phase Lead Compensation
-    float pwm_phase = elec_angle + (motor->m_speed_est_fast * 0.000075f);
+    // Pure Closed-Loop Commutation Angle directly from calibrated AS5048A
+    float pwm_phase = elec_angle;
     utils_norm_angle_rad(&pwm_phase);
 
     utils_fast_sincos(pwm_phase, &state_m->phase_sin, &state_m->phase_cos);
