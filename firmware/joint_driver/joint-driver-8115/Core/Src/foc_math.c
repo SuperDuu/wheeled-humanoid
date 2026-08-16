@@ -323,7 +323,7 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 }
 
 /**
-  * @brief  VESC Speed Controller Loop (Analytic Linear PI + Target Back-EMF Feedforward)
+  * @brief  VESC Speed Controller Loop (Analytic Golden PI + Back-EMF Feedforward)
   */
 void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *motor) {
 	mc_configuration *conf_now = motor->m_conf;
@@ -351,24 +351,35 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		return;
 	}
 
-	// 1. Linear Proportional Drive (Kp = 0.0020 V/ERPM)
-	float kp = (conf_now->s_pid_kp > 0.00001f) ? (conf_now->s_pid_kp * 4.0f) : 0.0020f;
-	float p_term = error * kp;
+	// 1. Proportional Gain (Kp = 0.00060)
+	float p_term = error * conf_now->s_pid_kp;
 
-	// 2. Linear Integral Accumulation (Ki = 0.0040 V/(ERPM*s))
-	float ki = (conf_now->s_pid_ki > 0.00001f) ? (conf_now->s_pid_ki * 16.0f) : 0.0040f;
-	motor->m_speed_i_term += error * (ki * dt);
-	utils_truncate_number_abs(&motor->m_speed_i_term, 8.0f); // Max 8V integral authority
+	// 2. Integral Gain (Ki = 0.00025)
+	motor->m_speed_i_term += error * conf_now->s_pid_ki * dt;
+	utils_truncate_number_abs(&motor->m_speed_i_term, 1.0f); // Anti-windup in normalized domain
 
-	// 3. Target Back-EMF Feedforward: Vq_ff = omega_target_rad_s * lambda
-	float vq_ff = (target_erpm * 0.104719755f) * conf_now->foc_motor_flux_linkage;
+	float output = p_term + motor->m_speed_i_term;
+	utils_truncate_number_abs(&output, 1.0f);
 
-	// 4. Maximum voltage clamp
+	// 3. Back-EMF Feedforward: Vq_ff = omega_e * lambda
+	float vq_ff = motor->m_speed_est_fast * conf_now->foc_motor_flux_linkage;
+
+	// 4. Maximum voltage & Dynamic Voltage Authority
 	float max_v = ONE_BY_SQRT3 * conf_now->l_max_duty * motor->m_motor_state.v_bus;
 	if (max_v < 2.0f) max_v = 12.0f;
 
-	float vq_out = p_term + motor->m_speed_i_term + vq_ff;
-	utils_truncate_number_abs(&vq_out, max_v);
+	float v_limit = 3.5f + (fabsf(target_erpm) * 0.0025f);
+	if (v_limit > max_v) v_limit = max_v;
+
+	// Breakaway assist below 15 RPM
+	float v_boost = 0.0f;
+	if (fabsf(erpm) < 250.0f) {
+		float fade = 1.0f - (fabsf(erpm) / 250.0f);
+		v_boost = (target_erpm > 0.0f) ? (1.5f * fade) : (-1.5f * fade);
+	}
+
+	float vq_out = v_boost + (output * v_limit) + vq_ff;
+	utils_truncate_number_abs(&vq_out, v_limit);
 	motor->m_iq_set = vq_out;
 }
 
