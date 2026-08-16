@@ -329,7 +329,7 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
     else if (strncmp(cmd, "POS ", 4) == 0 || strncmp(cmd, "ANGLE ", 6) == 0) {
         float pos_deg = atof((strncmp(cmd, "POS ", 4) == 0) ? &cmd[4] : &cmd[6]);
         float pos_rad = DEG2RAD_f(pos_deg);
-        foc_start_trajectory(motor, pos_rad, 0.8f, 3.0f);
+        foc_start_trajectory(motor, pos_rad, 0.0f, 4.0f); // 0.0s = Tốc độ tối đa tức thì
         pos_target_dbg = pos_rad;
         run_foc_mode = 2;
         foc->fault = MC_FAULT_NONE;
@@ -341,7 +341,7 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         if (slot >= 1 && slot <= 12) {
             float slot_angles_deg[12] = {0.0f, 30.0f, 60.0f, 90.0f, 120.0f, 150.0f, 180.0f, -150.0f, -120.0f, -90.0f, -60.0f, -30.0f};
             float target_rad = DEG2RAD_f(slot_angles_deg[slot - 1]);
-            foc_start_trajectory(motor, target_rad, 0.8f, 3.0f);
+            foc_start_trajectory(motor, target_rad, 0.0f, 4.0f); // Tốc độ tối đa tức thì
             pos_target_dbg = target_rad;
             run_foc_mode = 2;
             foc->fault = MC_FAULT_NONE;
