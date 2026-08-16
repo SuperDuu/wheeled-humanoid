@@ -191,16 +191,31 @@ void foc_svm(float alpha, float beta, float max_mod, uint32_t PWMFullDutyCycle,
 }
 
 /**
-  * @brief  VESC Position Controller Loop (PID + Process Derivative + Joint Soft Limits)
+  * @brief  Start a smooth S-Curve trajectory move for the robot joint
+  * @param  target_angle_rad: Target joint angle in Radians
+  * @param  duration_s: Time to move from current position to target in seconds
+  */
+void foc_start_trajectory(motor_all_state_t *motor, float target_angle_rad, float duration_s) {
+	if (motor == NULL || motor->m_conf == NULL) return;
+	if (duration_s < 0.05f) duration_s = 0.05f; // Min 50ms to prevent infinite acceleration
+
+	motor->m_traj_start_angle = motor->m_joint_angle;
+	motor->m_traj_target_angle = target_angle_rad;
+	motor->m_traj_duration = duration_s;
+	motor->m_traj_time = 0.0f;
+	motor->m_traj_active = true;
+	motor->m_pos_pid_set = motor->m_joint_angle;
+	motor->m_control_mode = CONTROL_MODE_POS;
+	motor->m_state = MC_STATE_RUNNING;
+}
+
+/**
+  * @brief  VESC Position Controller Loop (S-Curve Trajectory + PID + Holding Lock)
   */
 void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *motor) {
 	mc_configuration *conf_now = motor->m_conf;
 
 	float angle_now = motor->m_joint_angle; // Controlled on Joint Output Angle
-	float angle_set = motor->m_pos_pid_set;
-
-	// Clamp target within software joint limits (-PI to +PI rad = -180 to +180 deg)
-	utils_truncate_number(&angle_set, conf_now->joint_pos_min, conf_now->joint_pos_max);
 
 	if (motor->m_control_mode != CONTROL_MODE_POS) {
 		motor->m_pos_i_term = 0.0f;
@@ -208,8 +223,32 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 		motor->m_pos_prev_proc = angle_now;
 		motor->m_pos_d_filter = 0.0f;
 		motor->m_pos_d_filter_proc = 0.0f;
+		motor->m_traj_active = false;
 		return;
 	}
+
+	// 1. S-Curve Trajectory Interpolation (Quintic Minimum-Jerk Polynomial)
+	if (motor->m_traj_active) {
+		motor->m_traj_time += dt;
+		if (motor->m_traj_time >= motor->m_traj_duration) {
+			motor->m_traj_time = motor->m_traj_duration;
+			motor->m_traj_active = false; // Đến đích -> Khóa cứng vị trí (Rigid Hold)
+			motor->m_pos_pid_set = motor->m_traj_target_angle;
+		} else {
+			// Polynomial: s(tau) = 10*tau^3 - 15*tau^4 + 6*tau^5
+			float tau = motor->m_traj_time / motor->m_traj_duration;
+			float tau3 = tau * tau * tau;
+			float tau4 = tau3 * tau;
+			float tau5 = tau4 * tau;
+			float s = 10.0f * tau3 - 15.0f * tau4 + 6.0f * tau5;
+			motor->m_pos_pid_set = motor->m_traj_start_angle + s * (motor->m_traj_target_angle - motor->m_traj_start_angle);
+		}
+	}
+
+	float angle_set = motor->m_pos_pid_set;
+
+	// Clamp target within software joint limits (-PI to +PI rad = -180 to +180 deg)
+	utils_truncate_number(&angle_set, conf_now->joint_pos_min, conf_now->joint_pos_max);
 
 	float error = angle_set - angle_now;
 
@@ -252,7 +291,7 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 	float output = p_term + motor->m_pos_i_term + d_term + d_term_proc;
 	utils_truncate_number(&output, -1.0f, 1.0f);
 
-	// Position PID calculates Vq voltage output (Volts)
+	// Position PID calculates Vq voltage output (Volts) for Stiff Holding Torque
 	float max_pos_v = 12.0f; // Max 12V for position holding
 	motor->m_iq_set = output * max_pos_v;
 }

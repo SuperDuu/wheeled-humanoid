@@ -270,22 +270,46 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         foc->fault = MC_FAULT_NONE;
         TIM1_EnsureMoeEnabled();
     }
-    else if (strncmp(cmd, "POS ", 4) == 0 || strncmp(cmd, "ANGLE ", 6) == 0) {
-        float pos_val = atof((strncmp(cmd, "POS ", 4) == 0) ? &cmd[4] : &cmd[6]);
-        // Tự động nhận diện: Nếu nhập giá trị theo độ (vd POS 90, POS 180, POS -45) -> đổi sang Radian
-        // Nếu giá trị nằm trong khoảng [-6.28, +6.28] và có chứa dấu chấm hoặc người dùng nhập nhỏ -> coi là Radian
-        float pos_rad = DEG2RAD_f(pos_val);
-        pos_target_dbg = pos_rad;
-        motor->m_pos_pid_set = pos_rad;
-        motor->m_control_mode = CONTROL_MODE_POS;
-        motor->m_state = MC_STATE_RUNNING;
+    else if (strncmp(cmd, "MOVE ", 5) == 0) {
+        // Cú pháp: MOVE <góc_độ> <thời_gian_ms> (Vd: MOVE 90 1000 = quay 90 độ trong 1.0 giây rồi ghim cứng)
+        float target_deg = 0.0f;
+        float duration_ms = 800.0f; // Mặc định 800ms nếu không nhập thời gian
+        sscanf(&cmd[5], "%f %f", &target_deg, &duration_ms);
+        if (duration_ms < 50.0f) duration_ms = 50.0f;
+
+        float target_rad = DEG2RAD_f(target_deg);
+        foc_start_trajectory(motor, target_rad, duration_ms / 1000.0f);
+        pos_target_dbg = target_rad;
         run_foc_mode = 2;
         foc->fault = MC_FAULT_NONE;
         TIM1_EnsureMoeEnabled();
     }
+    else if (strncmp(cmd, "POS ", 4) == 0 || strncmp(cmd, "ANGLE ", 6) == 0) {
+        float pos_deg = atof((strncmp(cmd, "POS ", 4) == 0) ? &cmd[4] : &cmd[6]);
+        float pos_rad = DEG2RAD_f(pos_deg);
+        foc_start_trajectory(motor, pos_rad, 0.8f); // Dốc S-Curve mượt mà 800ms tới đích rồi ghim cứng
+        pos_target_dbg = pos_rad;
+        run_foc_mode = 2;
+        foc->fault = MC_FAULT_NONE;
+        TIM1_EnsureMoeEnabled();
+    }
+    else if (strncmp(cmd, "SLOT ", 5) == 0) {
+        // 12 VỊ TRÍ GHIM KHỚP TAY ROBOT (1 đến 12 cách nhau 30 độ)
+        int slot = atoi(&cmd[5]);
+        if (slot >= 1 && slot <= 12) {
+            float slot_angles_deg[12] = {0.0f, 30.0f, 60.0f, 90.0f, 120.0f, 150.0f, 180.0f, -150.0f, -120.0f, -90.0f, -60.0f, -30.0f};
+            float target_rad = DEG2RAD_f(slot_angles_deg[slot - 1]);
+            foc_start_trajectory(motor, target_rad, 0.8f);
+            pos_target_dbg = target_rad;
+            run_foc_mode = 2;
+            foc->fault = MC_FAULT_NONE;
+            TIM1_EnsureMoeEnabled();
+        }
+    }
     else if (strcmp(cmd, "HOLD") == 0 || strcmp(cmd, "LOCK") == 0) {
         // GHIM GÓC TỨC THÌ TẠI VỊ TRÍ HIỆN TẠI
         float current_angle = motor->m_joint_angle;
+        motor->m_traj_active = false;
         pos_target_dbg = current_angle;
         motor->m_pos_pid_set = current_angle;
         motor->m_control_mode = CONTROL_MODE_POS;

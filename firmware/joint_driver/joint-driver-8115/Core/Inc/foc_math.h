@@ -67,6 +67,13 @@ typedef struct {
 	float p_fs;
 	float p_dt;
 
+	// Smooth S-Curve Trajectory Profile Generator for Robot Arm Joints
+	float m_traj_start_angle;
+	float m_traj_target_angle;
+	float m_traj_duration;      // in seconds
+	float m_traj_time;          // elapsed time in seconds
+	bool  m_traj_active;
+
 	// Sensor Flag
 	bool m_using_encoder;
 } motor_all_state_t;
@@ -80,6 +87,7 @@ void foc_svm(float alpha, float beta, float max_mod, uint32_t PWMFullDutyCycle,
 		uint32_t* tAout, uint32_t* tBout, uint32_t* tCout, uint32_t *svm_sector);
 void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *motor);
 void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *motor);
+void foc_start_trajectory(motor_all_state_t *motor, float target_angle_rad, float duration_s);
 float foc_correct_encoder(float obs_angle, float enc_angle, float speed, float sl_erpm, motor_all_state_t *motor);
 void foc_run_fw(motor_all_state_t *motor, float dt);
 void foc_precalc_values(motor_all_state_t *motor);
