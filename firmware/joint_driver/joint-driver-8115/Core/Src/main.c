@@ -423,9 +423,13 @@ void Run_EncoderAlignment(void)
   AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_start);
   AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_start);
 
-  // STEP 2: Rotate forward by 2 full electrical revolutions (theta_e = 0 -> 4*PI = 34.3 deg mech)
-  for (int step = 0; step <= 150; step++) {
-    float angle = (4.0f * 3.14159265f) * (float)step / 150.0f;
+  // STEP 2: Rotate forward by 1 FULL MECHANICAL REVOLUTION (360 deg = 21 elec revs = 42*PI)
+  // Quay chậm rãi 1 vòng tròn 360 độ hoàn chỉnh (trong 2.0 giây) để xác định chiều cảm biến chính xác 100%
+  float last_enc = enc_start;
+  float total_mech_delta = 0.0f;
+
+  for (int step = 0; step <= 400; step++) {
+    float angle = (42.0f * 3.14159265f) * (float)step / 400.0f;
     float sin_a, cos_a;
     utils_fast_sincos(angle, &sin_a, &cos_a);
     float valpha = (vd_align / vbus) * cos_a;
@@ -441,25 +445,23 @@ void Run_EncoderAlignment(void)
       __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
     }
     HAL_Delay(5);
+
+    // Tích lũy liên tục độ dịch chuyển cơ học
+    float current_enc = 0.0f;
+    AS5048A_ReadRadians(&g_foc_controller.encoder, &current_enc);
+    float step_diff = current_enc - last_enc;
+    while (step_diff > 3.14159265f) step_diff -= 2.0f * 3.14159265f;
+    while (step_diff < -3.14159265f) step_diff += 2.0f * 3.14159265f;
+    total_mech_delta += step_diff;
+    last_enc = current_enc;
   }
-  HAL_Delay(600); // Chờ rotor ổn định tại góc kết thúc 4*PI điện
+  HAL_Delay(400); // Chờ rotor ổn định tại điểm cuối 1 vòng tròn
 
-  // Read ending encoder position
-  float enc_end = 0.0f;
-  AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_end);
-  AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_end);
-
-  // Calculate delta angle
-  float diff = enc_end - enc_start;
-  while (diff > 3.14159265f) diff -= 2.0f * 3.14159265f;
-  while (diff < -3.14159265f) diff += 2.0f * 3.14159265f;
-
-  // STEP 3: Auto-detect encoder_direction (+1 or -1)
-  // Lý thuyết: d_mech = (4*PI)/21 = +0.598 rad (~34.3 deg)
-  if (diff > 0.10f) {
+  // STEP 3: Auto-detect encoder_direction (+1 or -1) dựa trên tổng 1 vòng quay cơ học (2*PI rad)
+  if (total_mech_delta > 1.0f) {
     g_foc_controller.conf.encoder_direction = 1;
     test_result = 2; // Direction +1 detected
-  } else if (diff < -0.10f) {
+  } else if (total_mech_delta < -1.0f) {
     g_foc_controller.conf.encoder_direction = -1;
     test_result = 3; // Direction -1 detected
   } else {
@@ -470,8 +472,8 @@ void Run_EncoderAlignment(void)
   g_dbg_align.enc_dir = g_foc_controller.conf.encoder_direction;
 
   // STEP 4: Rotate smoothly back to Electrical Zero (theta_e = 0)
-  for (int step = 0; step <= 150; step++) {
-    float angle = (4.0f * 3.14159265f) * (1.0f - (float)step / 150.0f);
+  for (int step = 0; step <= 400; step++) {
+    float angle = (42.0f * 3.14159265f) * (1.0f - (float)step / 400.0f);
     float sin_a, cos_a;
     utils_fast_sincos(angle, &sin_a, &cos_a);
     float valpha = (vd_align / vbus) * cos_a;
