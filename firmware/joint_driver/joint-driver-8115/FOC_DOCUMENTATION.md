@@ -285,20 +285,35 @@ graph TD
 
 ---
 
-### 6.6 Điều Khiển Vị Trí (Position Control), Ghim Góc (Hold) & Ghim Lực (Torque Holding)
-Firmware hỗ trợ đầy đủ 4 chế độ vận hành toàn diện:
+### 6.6 Điều Khiển Khớp Cánh Tay Robot: Bộ Tạo Quỹ Đạo S-Curve (Trajectory Generator), Ghim Góc & 12 Vị Trí Ghim Đặt Sẵn
 
-1. **Điều Khiển Góc Khớp (`POS <độ>`)**:
-   * Cú pháp CLI: `POS 0`, `POS 45`, `POS 90`, `POS 180`, `POS -90` (nhập trực tiếp bằng độ hoặc radian).
-   * Thuật toán: Bộ điều khiển Position PID (`foc_run_pid_control_pos`) tính toán sai số góc $\Delta \theta = \theta_{target} - \theta_{joint}$ và sinh điện áp phục hồi $V_q = K_p \cdot \Delta \theta + K_i \int \Delta \theta dt + K_d \frac{d\theta}{dt}$ đưa trục quay êm ái đến đúng góc đích.
-2. **Ghim Khóa Góc Tức Thì (`HOLD` / `LOCK`)**:
-   * Cú pháp CLI: `HOLD` hoặc `LOCK`.
-   * Tác vụ: Bắt ngay lập tức góc hiện tại của động cơ và chuyển sang `CONTROL_MODE_POS`, tạo mô-men ghì chống xoay (Holding Torque $\sim 1.5 - 2.0\text{ N.m}$). Nếu dùng tay bẻ trục lệch đi, motor tự động sinh lực đẩy ngược lại để giữ nguyên góc ban đầu.
-3. **Ghim Lực / Điều Khiển Mô-men (`IQ <ampe>` / `TORQUE <Nm>`)**:
-   * Cú pháp CLI: `IQ 0.5`, `IQ 1.0`, `IQ -0.5` hoặc `TORQUE 0.5` ($0.5\text{ N.m}$).
-   * Tác vụ: Chuyển sang `CONTROL_MODE_CURRENT`, bơm dòng điện mô-men không đổi vuông góc $90^\circ$ với rotor. Trục động cơ sinh một lực kéo hoặc giữ lực cản cố định, cho phép ứng dụng vào chế độ tạ ảo, kháng lực, hoặc hỗ trợ lực thông minh (Force/Impedance Control).
+Dành riêng cho ứng dụng **Khớp Cánh Tay Robot (Robot Arm Joint Actuator)** đòi hỏi di chuyển mượt mà không rung giật và khóa cứng vị trí khi tới đích:
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│ 🦾 ROBOT JOINT S-CURVE TRAJECTORY & RIGID HOLDING ARCHITECTURE         │
+├────────────────────────────────────────────────────────────────────────┤
+│ 1. Nhận Lệnh:  MOVE <Góc_Đích_Độ> <Thời_Gian_ms> (Vd: MOVE 90 1000)     │
+│ 2. Nội Suy:    Đa thức bậc 5 Quintic Minimum-Jerk s(t) mỗi 1ms:        │
+│                s(τ) = 10τ³ - 15τ⁴ + 6τ⁵  với τ = t / T                │
+│                → Gia tốc & Giật (Jerk) = 0 ở 2 đầu → Êm ái 100%        │
+│ 3. Đến Đích:   Tự động khóa cứng (Rigid Position Holding):            │
+│                Bộ Position PID liên tục bơm lực ghì Holding Torque    │
+│                để chống tải trọng cánh tay hoặc ngoại lực kéo lệch.    │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Các Cú Pháp Lệnh Khớp Robot:
+1. **Di chuyển theo thời gian (`MOVE <góc_độ> <thời_gian_ms>`)**:
+   * Ví dụ: `MOVE 90 1000` $\implies$ Khớp quay từ vị trí hiện tại đến đúng $90.0^\circ$ trong đúng $1.0\text{ giây}$, sau đó **ghim cứng vị trí $90^\circ$**.
+   * Ví dụ: `MOVE 0 500` $\implies$ Khớp quay về $0^\circ$ trong $0.5\text{ giây}$ rồi khóa cứng.
+2. **12 Vị Trí Ghim Khớp Cánh Tay Robot (`SLOT 1` $\dots$ `SLOT 12`)**:
+   * `SLOT 1`: $0^\circ$ | `SLOT 2`: $30^\circ$ | `SLOT 3`: $60^\circ$ | `SLOT 4`: $90^\circ$ | `SLOT 5`: $120^\circ$ | `SLOT 6`: $150^\circ$
+   * `SLOT 7`: $180^\circ$ | `SLOT 8`: $-150^\circ$ | `SLOT 9`: $-120^\circ$ | `SLOT 10`: $-90^\circ$ | `SLOT 11`: $-60^\circ$ | `SLOT 12`: $-30^\circ$
+3. **Ghim Góc Tức Thì Tại Chỗ (`HOLD` / `LOCK`)**:
+   * Giữ cứng góc hiện tại, chống ngoại lực bẻ khớp.
 4. **Nhả Lực Tự Do (`FREE` / `RELEASE`)**:
-   * Cú pháp CLI: `FREE` hoặc `RELEASE` $\implies$ Tắt PWM ngắt lực, trục xoay tay trơn tru không có lực cản.
+   * Ngắt lực để dạy học bằng tay (Hand Teaching / Zero Torque).
 
 ---
 *Báo cáo phân tích kỹ thuật này phản ánh đúng kiến trúc điều khiển FOC thực chiến được tích hợp trong dự án Joint Driver 8115.*
