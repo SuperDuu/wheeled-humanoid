@@ -453,19 +453,32 @@ class FOCOscilloscopeStudio {
     this.currentDir = 1;
     this.currentSwap = false;
 
-    // Apply Speed PID
+    // Apply Speed PID & Ramp
     const btnApplySpeedPID = document.getElementById('btn-apply-speed-pid');
     if (btnApplySpeedPID) {
       btnApplySpeedPID.addEventListener('click', () => {
-        const kp = parseFloat(document.getElementById('tune-skp')?.value || '0.0060');
-        const ki = parseFloat(document.getElementById('tune-ski')?.value || '0.0250');
-        const kd = parseFloat(document.getElementById('tune-skd')?.value || '0.0001');
+        const kp = parseFloat(document.getElementById('tune-skp')?.value || '0.0035');
+        const ki = parseFloat(document.getElementById('tune-ski')?.value || '0.0015');
+        const kd = parseFloat(document.getElementById('tune-skd')?.value || '0.0000');
+        const ramp = parseFloat(document.getElementById('tune-sramp')?.value || '0');
         this.sendCommand(`KP_S ${kp}`);
         this.sendCommand(`KI_S ${ki}`);
         this.sendCommand(`KD_S ${kd}`);
-        this.appendLog(`⚙️ Speed PID Updated: Kp=${kp}, Ki=${ki}, Kd=${kd}`, 'success');
+        this.sendCommand(`RAMP ${ramp}`);
+        this.appendLog(`⚙️ Speed PI & Ramp Updated: Kp=${kp}, Ki=${ki}, Kd=${kd}, Ramp=${ramp}`, 'success');
       });
     }
+
+    // Ramp Preset Buttons
+    document.querySelectorAll('.btn-ramp-preset').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const ramp = btn.getAttribute('data-ramp');
+        const inputRamp = document.getElementById('tune-sramp');
+        if (inputRamp) inputRamp.value = ramp;
+        this.sendCommand(`RAMP ${ramp}`);
+        this.appendLog(`⚡ Acceleration Ramp Set to: ${ramp} ERPM/s`, 'success');
+      });
+    });
 
     // Apply Position PID
     const btnApplyPosPID = document.getElementById('btn-apply-pos-pid');

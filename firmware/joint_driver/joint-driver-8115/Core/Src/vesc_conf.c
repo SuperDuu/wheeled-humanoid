@@ -40,14 +40,14 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_current_filter_const = 0.1f;
     conf->foc_cc_decoupling = FOC_CC_DECOUPLING_DISABLED;
 
-    // Speed Controller (PI) - Voltage-Mode FOC for GB8115 Gimbal Motor
+    // Speed Controller (PI) - High-Response Voltage-Mode FOC for GB8115 Gimbal Motor
     // (Kt = 0.67 Nm/A, J = 2574 g.cm², R = 3.89Ω, Direct Drive)
-    conf->s_pid_kp = 0.0015f;              // Proportional gain tối ưu, đáp ứng vững chắc không vọt lố
-    conf->s_pid_ki = 0.0008f;              // Integral gain giảm 5x triệt tiêu 100% hiện tượng dao động nhấp nhô 1Hz
+    conf->s_pid_kp = 0.0035f;              // Proportional gain cao, phản hồi giật mô-men tức thời cực mạnh
+    conf->s_pid_ki = 0.0015f;              // Integral gain tốc độ cao, triệt tiêu sai số xác lập trong 0.1s
     conf->s_pid_kd = 0.0f;                // Chuẩn VESC PI: Khử bỏ hoàn toàn D-term trên vòng tốc độ
     conf->s_pid_kd_filter = 0.2f;
     conf->s_pid_min_erpm = 5.0f;           // 5 ERPM deadband (~0.24 RPM)
-    conf->s_pid_ramp_erpms_s = 4000.0f;    // Ramp gia tốc 4000 ERPM/s (~190 RPM/s)
+    conf->s_pid_ramp_erpms_s = 0.0f;       // Zero Ramp: Bơm 100% công suất tức thì theo bước nhảy (Instant Step Response)
 
     // Position Controller (PID + Process D) - Voltage-Mode FOC (Direct Drive)
     conf->p_pid_kp = 4.0f;                 // Smooth proportional gain (holding torque)
