@@ -40,19 +40,18 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_current_filter_const = 0.1f;
     conf->foc_cc_decoupling = FOC_CC_DECOUPLING_DISABLED;
 
-    // Speed Controller (PI) - Analytically Tuned for GB8115 Direct Drive (Dead-Flat Speed Tracking)
-    // (Kt = 0.67 Nm/A, J = 2574 g.cm², R = 3.89Ω, Direct Drive)
-    conf->s_pid_kp = 0.00060f;             // Mức Kp tối ưu ổn định tuyệt đối (BW = 20 rad/s)
-    conf->s_pid_ki = 0.00025f;             // Tích phân bù sai số chuẩn xác, êm ái
+    // Speed Controller (PI + Feedforward) for GB8115 + 1:17 Cycloid Gearbox
+    conf->s_pid_kp = 0.0010f;              // Proportional Gain (V/ERPM) - Êm ru, không rung
+    conf->s_pid_ki = 0.00010f;             // Tích phân bù sai số chuẩn xác, êm ái
     conf->s_pid_kd = 0.0f;                 // Zero D-term for pure smooth PI (khử bỏ hoàn toàn rung giật)
     conf->s_pid_kd_filter = 0.2f;
     conf->s_pid_min_erpm = 5.0f;           // 5 ERPM deadband (~0.24 RPM)
-    conf->s_pid_ramp_erpms_s = 0.0f;       // Zero Ramp (Instant Step Response)
+    conf->s_pid_ramp_erpms_s = 1500.0f;    // Smooth Acceleration Ramp (1500 ERPM/s ~ 70 RPM/s)
 
-    // Position Controller (PID + Process D) - Voltage-Mode FOC (Direct Drive)
-    conf->p_pid_kp = 4.0f;                 // Smooth proportional gain (holding torque)
-    conf->p_pid_ki = 0.2f;                 // Low integral gain to remove steady-state error
-    conf->p_pid_kd = 0.08f;                // Damping gain against oscillations
+    // Position Controller (PD + Velocity Feedforward) for 1:17 Cycloid Gearbox
+    conf->p_pid_kp = 20.0f;                // High-stiffness holding gain (20.0 V/rad)
+    conf->p_pid_ki = 0.0f;                 // Zero I-term for Position (No overshoot / No hunting)
+    conf->p_pid_kd = 0.10f;                // Velocity damping against oscillations
     conf->p_pid_kd_proc = 0.05f;           // Damping on measurement
     conf->p_pid_kd_filter = 0.2f;
     conf->p_pid_ang_div = 1.0f;

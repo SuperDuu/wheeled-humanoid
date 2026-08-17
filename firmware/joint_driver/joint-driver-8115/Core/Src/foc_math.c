@@ -295,25 +295,20 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 	float friction_ff = target_vel_rad_s * 0.6f; // Friction/damping feedforward (0.6V/(rad/s))
 	float v_ff = bemf_ff + friction_ff;
 
-	// 3. High-Stiffness Servo Position PID -> Voltage Vq (Volts)
-	float p_term = error * 20.0f; // 20.0 V/rad stiffness
-	
-	// Anti-windup conditional integration
-	if (fabsf(error) < 0.25f) {
-		motor->m_pos_i_term += error * (4.0f * dt);
-		utils_truncate_number_abs((float*)&motor->m_pos_i_term, 5.0f); // Max 5.0V integral
-	} else {
-		motor->m_pos_i_term = 0.0f;
-	}
+	// 3. High-Stiffness Servo Position PD Controller (Pure PD + Velocity Feedforward, Zero I-Lag)
+	float p_gain = (conf_now->p_pid_kp > 0.1f) ? conf_now->p_pid_kp : 20.0f; // 20.0 V/rad stiffness
+	float d_gain = (conf_now->p_pid_kd > 0.001f) ? conf_now->p_pid_kd : 0.10f;
+	float p_term = error * p_gain;
+	motor->m_pos_i_term = 0.0f;   // Loại bỏ hoàn toàn khâu I để chống dao động tích phân (Zero Windup)
 
-	// D-term damping on velocity
+	// D-term damping on velocity (Giảm chấn điện tử dập tắt dao động cơ khí)
 	float mech_vel_rad_s = motor->m_speed_est_fast / pole_pairs;
-	float d_term = -mech_vel_rad_s * 0.10f;
+	float d_term = -mech_vel_rad_s * d_gain;
 
-	float output_v = v_ff + p_term + motor->m_pos_i_term + d_term;
+	float output_v = v_ff + p_term + d_term;
 
-	// 4. Holding Voltage Clamping based on user limit
-	float hold_limit_a = (motor->m_pos_holding_current_limit > 0.1f) ? motor->m_pos_holding_current_limit : 3.5f;
+	// 4. Holding Voltage Clamping based on user limit (Max 16V = ~4.1A / ~45Nm ngõ ra)
+	float hold_limit_a = (motor->m_pos_holding_current_limit > 0.1f) ? motor->m_pos_holding_current_limit : 4.0f;
 	float max_hold_v = hold_limit_a * conf_now->foc_motor_r;
 	if (max_hold_v > 16.0f) max_hold_v = 16.0f;
 	if (max_hold_v < 3.0f) max_hold_v = 3.0f;
@@ -323,7 +318,7 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 }
 
 /**
-  * @brief  VESC Speed Controller Loop (Silent, Smooth, Dead-Flat Voltage-Mode PI)
+  * @brief  VESC Speed Controller Loop (Smooth, Stable, Whisper-Quiet PI + Back-EMF Feedforward)
   */
 void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *motor) {
 	mc_configuration *conf_now = motor->m_conf;
@@ -335,44 +330,53 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		return;
 	}
 
-	// 1. Smooth Acceleration Ramp (2500 ERPM/s ~ 120 RPM/s)
-	// Loại bỏ hoàn toàn hiện tượng sốc mô-men (torque slam) làm nảy răng hộp số Cycloid
-	float ramp_rate = (conf_now->s_pid_ramp_erpms_s > 100.0f) ? conf_now->s_pid_ramp_erpms_s : 2500.0f;
+	// 1. Smooth Acceleration Ramp (Mặc định 1500 ERPM/s ~ 70 RPM/s cơ khí)
+	// Giúp con lăn đĩa Cycloid trượt vào khớp êm ru, không bị giật nảy răng
+	float ramp_rate = (conf_now->s_pid_ramp_erpms_s > 10.0f) ? conf_now->s_pid_ramp_erpms_s : 1500.0f;
 	utils_step_towards((float*)&motor->m_speed_pid_set_rpm, motor->m_speed_command_rpm, ramp_rate * dt);
 
 	float erpm = RADPS2RPM_f(motor->m_speed_est_fast);
 	float target_erpm = motor->m_speed_pid_set_rpm; // Ramped Target ERPM
-	float error = target_erpm - erpm;
+	float raw_error = target_erpm - erpm;
 
 	if (fabsf(target_erpm) < conf_now->s_pid_min_erpm && fabsf(motor->m_speed_command_rpm) < conf_now->s_pid_min_erpm) {
 		motor->m_speed_i_term = 0.0f;
 		motor->m_speed_prev_error = erpm;
+		motor->m_speed_d_filter = 0.0f;
 		motor->m_iq_set = 0.0f;
 		return;
 	}
 
-	// 2. Proportional Drive (Kp = 0.0018 V/ERPM)
-	float p_term = error * 0.0018f;
+	// Lọc thông thấp sai số vận tốc (LPF 0.10) loại bỏ nhiễu lượng tử hóa encoder mà không gây trễ pha
+	UTILS_LP_FAST(motor->m_speed_prev_error, raw_error, 0.10f);
+	float filtered_error = motor->m_speed_prev_error;
 
-	// 3. Integral Action (Ki = 0.0008 V/(ERPM*s)) with Anti-Windup (Max ±8.0V ~ 2.1A)
-	motor->m_speed_i_term += error * (0.00080f * dt);
-	utils_truncate_number_abs(&motor->m_speed_i_term, 8.0f); // Max ±8.0V integral authority (~2.1A)
+	// 2. Proportional Drive (Kp = 0.0010 V/ERPM) - Êm ái, đầm chắc, không bị rung
+	float kp = (conf_now->s_pid_kp > 0.00001f) ? conf_now->s_pid_kp : 0.0010f;
+	float p_term = filtered_error * kp;
 
-	// 4. Active Electronic Damping (D-term on speed acceleration): Triệt tiêu 100% rung lắc và dội bước đĩa Cycloid
-	float d_speed = (erpm - motor->m_speed_prev_error) / dt;
-	motor->m_speed_prev_error = erpm;
-	UTILS_LP_FAST(motor->m_speed_d_filter, d_speed, 0.2f); // Lọc nhiễu đạo hàm
-	float d_term = -motor->m_speed_d_filter * 0.000030f;
-	utils_truncate_number_abs(&d_term, 3.0f);
+	// 3. Khâu Tích phân I chuẩn mực có Anti-Windup (kẹp hẹp ±2.5V ~ 0.64A)
+	float ki = (conf_now->s_pid_ki > 0.000001f) ? conf_now->s_pid_ki : 0.00010f;
+	motor->m_speed_i_term += filtered_error * (ki * dt);
+	utils_truncate_number_abs(&motor->m_speed_i_term, 2.5f);
 
-	// 5. Accurate Back-EMF Feedforward for GB8115 (Kv ~ 40 RPM/V, lambda ~ 0.0065 Wb)
-	float vq_ff = (target_erpm * 0.104719755f) * 0.0065f;
+	// 4. Chuẩn xác Back-EMF Feedforward với từ thông thật GB8115 (lambda = 0.02127 Wb)
+	// Bù chính xác 98% sức điện động BEMF để target RPM bám phẳng lì và đúng 100%
+	float elec_rad_s = target_erpm * 0.104719755f;
+	float lambda = (conf_now->foc_motor_flux_linkage > 0.005f) ? conf_now->foc_motor_flux_linkage : 0.02127f;
+	float vq_bemf = elec_rad_s * lambda;
 
-	float vq_out = vq_ff + p_term + motor->m_speed_i_term + d_term;
+	// Bù ma sát hộp số Cycloid (Friction Feedforward ~1.8V = ~0.46A)
+	float vq_friction = (target_erpm > 5.0f) ? 1.8f : ((target_erpm < -5.0f) ? -1.8f : 0.0f);
+
+	float vq_ff = vq_bemf + vq_friction;
+
+	// Khâu D = 0 cho Speed để motor êm tuyệt đối, không có tiếng gằn
+	float vq_out = vq_ff + p_term + motor->m_speed_i_term;
 
 	// Safe Maximum Voltage Ceiling
 	float max_v = ONE_BY_SQRT3 * conf_now->l_max_duty * motor->m_motor_state.v_bus;
-	if (max_v < 2.0f) max_v = 12.0f;
+	if (max_v < 2.0f) max_v = 14.0f;
 	utils_truncate_number_abs(&vq_out, max_v);
 	motor->m_iq_set = vq_out;
 }

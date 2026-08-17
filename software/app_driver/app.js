@@ -507,19 +507,18 @@ class FOCOscilloscopeStudio {
     this.currentDir = 1;
     this.currentSwap = false;
 
-    // Apply Speed PID & Ramp
+    // Apply Speed PI & Ramp
     const btnApplySpeedPID = document.getElementById('btn-apply-speed-pid');
     if (btnApplySpeedPID) {
       btnApplySpeedPID.addEventListener('click', () => {
-        const kp = parseFloat(document.getElementById('tune-skp')?.value || '0.0035');
-        const ki = parseFloat(document.getElementById('tune-ski')?.value || '0.0015');
-        const kd = parseFloat(document.getElementById('tune-skd')?.value || '0.0000');
-        const ramp = parseFloat(document.getElementById('tune-sramp')?.value || '0');
+        const kp = parseFloat(document.getElementById('tune-skp')?.value || '0.0010');
+        const ki = parseFloat(document.getElementById('tune-ski')?.value || '0.00010');
+        const ramp = parseFloat(document.getElementById('tune-sramp')?.value || '1500');
         this.sendCommand(`KP_S ${kp}`);
         this.sendCommand(`KI_S ${ki}`);
-        this.sendCommand(`KD_S ${kd}`);
+        this.sendCommand(`KD_S 0.0`);
         this.sendCommand(`RAMP ${ramp}`);
-        this.appendLog(`⚙️ Speed PI & Ramp Updated: Kp=${kp}, Ki=${ki}, Kd=${kd}, Ramp=${ramp}`, 'success');
+        this.appendLog(`⚙️ Speed PI & Ramp Updated: Kp=${kp}, Ki=${ki}, Ramp=${ramp}`, 'success');
       });
     }
 
@@ -534,17 +533,16 @@ class FOCOscilloscopeStudio {
       });
     });
 
-    // Apply Position PID
+    // Apply Position PD
     const btnApplyPosPID = document.getElementById('btn-apply-pos-pid');
     if (btnApplyPosPID) {
       btnApplyPosPID.addEventListener('click', () => {
-        const kp = parseFloat(document.getElementById('tune-pkp')?.value || '4.0');
-        const ki = parseFloat(document.getElementById('tune-pki')?.value || '0.2');
-        const kd = parseFloat(document.getElementById('tune-pkd')?.value || '0.08');
+        const kp = parseFloat(document.getElementById('tune-pkp')?.value || '20.0');
+        const kd = parseFloat(document.getElementById('tune-pkd')?.value || '0.10');
         this.sendCommand(`KP_P ${kp}`);
-        this.sendCommand(`KI_P ${ki}`);
+        this.sendCommand(`KI_P 0.0`);
         this.sendCommand(`KD_P ${kd}`);
-        this.appendLog(`⚙️ Position PID Updated: Kp=${kp}, Ki=${ki}, Kd=${kd}`, 'success');
+        this.appendLog(`⚙️ Position PD Updated: Kp=${kp}, Kd=${kd}`, 'success');
       });
     }
 
