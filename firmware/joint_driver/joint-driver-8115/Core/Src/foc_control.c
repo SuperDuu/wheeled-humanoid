@@ -51,11 +51,14 @@ bool FOC_Control_CheckSafety(FOC_Controller_t *foc, float current_a, float curre
 {
     if (foc == NULL) return false;
 
-    float current_mag = sqrtf(current_a * current_a + current_b * current_b);
+    // 1. Filter current magnitude with low-pass filter to reject ADC switching spikes
+    static float current_mag_filtered = 0.0f;
+    float current_mag_raw = sqrtf(current_a * current_a + current_b * current_b);
+    UTILS_LP_FAST(current_mag_filtered, current_mag_raw, 0.02f); // ~60Hz LPF at 20kHz
 
-    // Overcurrent Instantaneous Check (25A / 2.5ms)
+    // 2. Overcurrent Instantaneous Check (Peak 30A for > 2.5ms = 50 ISR cycles)
     static uint32_t overcurrent_count = 0;
-    if (current_mag > 25.0f) {
+    if (current_mag_filtered > 25.0f || current_mag_raw > 35.0f) {
         overcurrent_count++;
         if (overcurrent_count >= 50) {
             foc->fault |= MC_FAULT_OVER_CURRENT;
@@ -64,9 +67,9 @@ bool FOC_Control_CheckSafety(FOC_Controller_t *foc, float current_a, float curre
         if (overcurrent_count > 0) overcurrent_count--;
     }
 
-    // Thermal Safety Timeout Protection (10.0A continuous for > 5.0s = 100,000 ISR cycles @ 20kHz)
+    // 3. Thermal Safety Timeout Protection (Sustained current > 15.0A for > 5.0s = 100,000 ISR cycles @ 20kHz)
     static uint32_t thermal_timeout_count = 0;
-    if (current_mag > 10.0f) {
+    if (current_mag_filtered > 15.0f) {
         thermal_timeout_count++;
         if (thermal_timeout_count >= 100000) {
             foc->fault |= MC_FAULT_OVER_CURRENT;
@@ -75,27 +78,25 @@ bool FOC_Control_CheckSafety(FOC_Controller_t *foc, float current_a, float curre
         thermal_timeout_count = 0;
     }
 
-    // Overvoltage Check (50V max OVP)
+    // 4. Overvoltage Check (50V max OVP)
     if (vbus > foc->conf.l_voltage_max) {
         foc->fault |= MC_FAULT_OVER_VOLTAGE;
     }
 
-    // Undervoltage Check (12V min UVP)
+    // 5. Undervoltage Check (12V min UVP)
     if (vbus < foc->conf.l_voltage_min) {
         foc->fault |= MC_FAULT_UNDER_VOLTAGE;
     }
 
-    // MOSFET Overtemperature Check (85C max)
+    // 6. MOSFET Overtemperature Check (85C max)
     if (temp_fet > foc->conf.l_temp_fet_start) {
         foc->fault |= MC_FAULT_OVER_TEMP_MOS;
     }
 
-
-
-    // If any fault occurred, immediately trip motor off
+    // If any fault occurred, immediately trip motor off and zero duty cycles
     if (foc->fault != MC_FAULT_NONE) {
         foc->motor.m_state = MC_STATE_OFF;
-        foc->duty_a = foc->duty_b = foc->duty_c = 0.5f;
+        foc->duty_a = foc->duty_b = foc->duty_c = 0.0f; // Turn off PWM output completely
         return false;
     }
 
@@ -248,23 +249,25 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     float max_vq = sqrtf(SQ(max_v_mag) - SQ(state_m->vd));
     UTILS_NAN_ZERO(max_vq);
 
-    // 5. High-Performance FOC Controller (Whisper-Quiet Voltage-Mode for Speed/Pos)
+    // 5. FOC Controller
     if (motor->m_control_mode == CONTROL_MODE_DUTY) {
         state_m->vd = 0.0f;
         state_m->vq = state_m->duty_now * state_m->v_bus;
         state_m->vd_int = 0.0f;
         state_m->vq_int = 0.0f;
     } else if (motor->m_control_mode == CONTROL_MODE_SPEED || motor->m_control_mode == CONTROL_MODE_POS) {
-        // Voltage-FOC: m_iq_set chứa trực tiếp điện áp Vq mục tiêu (Volts) từ Speed/Pos PID
+        // Voltage-FOC: m_iq_set chứa điện áp Vq (Volts) từ Speed/Pos PID
         state_m->vd = -motor->m_i_fw_set * conf_now->foc_motor_r;
         state_m->vq = motor->m_iq_set;
         utils_truncate_number_abs((float*)&state_m->vq, max_vq);
         state_m->vd_int = state_m->vd;
         state_m->vq_int = state_m->vq;
     } else {
-        // Current-Mode FOC for pure torque/current control
+        // Current-Mode FOC cho CONTROL_MODE_CURRENT (torque control trực tiếp)
         state_m->iq_target = motor->m_iq_set;
         float id_target = -motor->m_i_fw_set;
+
+        utils_truncate_number_abs((float*)&state_m->iq_target, conf_now->l_current_max);
 
         float Ierr_d = id_target - state_m->id;
         float Ierr_q = state_m->iq_target - state_m->iq;

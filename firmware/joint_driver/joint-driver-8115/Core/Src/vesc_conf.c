@@ -40,15 +40,16 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_current_filter_const = 0.1f;
     conf->foc_cc_decoupling = FOC_CC_DECOUPLING_DISABLED;
 
-    // Speed Controller (PI + Feedforward) for GB8115 + 1:17 Cycloid Gearbox
-    conf->s_pid_kp = 0.0020f;              // Proportional Gain (V/ERPM)
-    conf->s_pid_ki = 0.0010f;              // Integral Gain (V/(ERPM*s))
-    conf->s_pid_kd = 0.0f;                 // Zero D-term for pure smooth PI (khử bỏ hoàn toàn rung giật)
+    // Speed Controller (PI + BEMF Feedforward, Voltage-Mode) for GB8115 + 1:17 Cycloid Gearbox
+    // Output = Vq (Volts). High stiffness to track 450 RPM steadily through 1:17 cycloid cam peaks.
+    conf->s_pid_kp = 0.0030f;              // Proportional Gain (V/ERPM) — strong torque response
+    conf->s_pid_ki = 0.00080f;             // Integral Gain (V/(ERPM*s)) — fast rejection of cycloid friction ripple
+    conf->s_pid_kd = 0.0f;                 // Zero D-term (natural Back-EMF damping)
     conf->s_pid_kd_filter = 0.2f;
     conf->s_pid_min_erpm = 5.0f;           // 5 ERPM deadband (~0.24 RPM)
-    conf->s_pid_ramp_erpms_s = 2500.0f;    // Responsive Ramp (2500 ERPM/s ~ 120 RPM/s)
+    conf->s_pid_ramp_erpms_s = 5000.0f;    // Fast & smooth ramp (5000 ERPM/s ~ 240 RPM/s)
 
-    // Position Controller (PD + Velocity Feedforward) for 1:17 Cycloid Gearbox
+    // Position Controller (PD + Velocity Feedforward, Voltage-Mode) for 1:17 Cycloid Gearbox
     conf->p_pid_kp = 20.0f;                // High-stiffness holding gain (20.0 V/rad)
     conf->p_pid_ki = 0.0f;                 // Zero I-term for Position (No overshoot / No hunting)
     conf->p_pid_kd = 0.10f;                // Velocity damping against oscillations

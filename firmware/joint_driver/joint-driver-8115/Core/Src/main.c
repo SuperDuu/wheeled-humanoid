@@ -762,7 +762,11 @@ int main(void)
     TIM1_EnsureMoeEnabled();
 
     /* 0c. Chế độ điều khiển FOC Closed-Loop (Đồng bộ giữa Live Expressions và USB App) */
-    if (run_foc_mode == 1 || run_foc_mode == 2 || run_foc_mode == 3 || run_foc_mode == 4) {
+    if (g_foc_controller.fault != MC_FAULT_NONE) {
+      // Nếu có lỗi an toàn (Overcurrent/Overvoltage), tự động reset mode về 0 để không bị vòng lặp ON/OFF
+      run_foc_mode = 0;
+      g_foc_controller.motor.m_state = MC_STATE_OFF;
+    } else if (run_foc_mode == 1 || run_foc_mode == 2 || run_foc_mode == 3 || run_foc_mode == 4) {
       // Tự động Căn chỉnh Góc Encoder (Align) Lần đầu nếu chưa được căn chỉnh
       if (!g_foc_controller.aligned && run_alignment != 1) {
         run_alignment = 1;
