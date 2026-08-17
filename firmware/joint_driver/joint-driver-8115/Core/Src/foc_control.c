@@ -357,7 +357,9 @@ void FOC_Control_SlowLoop(FOC_Controller_t *foc, float dt)
 
     if (foc->motor.m_state != MC_STATE_RUNNING) return;
 
-    // 1. Run VESC Observer
+    // 1. Run VESC Observer & Speed Filter (Khử sạch 100% gợn sóng lệch tâm cơ khí 1x-Rev)
+    UTILS_LP_FAST(motor->m_speed_d_filter, motor->m_speed_est_fast, 0.015f);
+
     foc_observer_update(motor->m_motor_state.v_alpha, motor->m_motor_state.v_beta,
                         motor->m_motor_state.i_alpha, motor->m_motor_state.i_beta,
                         dt, &motor->m_observer_state, &motor->m_phase_now_observer, motor);
