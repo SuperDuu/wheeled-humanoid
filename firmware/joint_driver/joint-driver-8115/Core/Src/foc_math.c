@@ -335,28 +335,40 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		return;
 	}
 
+	// 1. Smooth Acceleration Ramp (2500 ERPM/s ~ 120 RPM/s)
+	// Loại bỏ hoàn toàn hiện tượng sốc mô-men (torque slam) làm nảy răng hộp số Cycloid
+	float ramp_rate = (conf_now->s_pid_ramp_erpms_s > 100.0f) ? conf_now->s_pid_ramp_erpms_s : 2500.0f;
+	utils_step_towards((float*)&motor->m_speed_pid_set_rpm, motor->m_speed_command_rpm, ramp_rate * dt);
+
 	float erpm = RADPS2RPM_f(motor->m_speed_est_fast);
-	float target_erpm = motor->m_speed_command_rpm; // Target ERPM
+	float target_erpm = motor->m_speed_pid_set_rpm; // Ramped Target ERPM
 	float error = target_erpm - erpm;
 
-	if (fabsf(target_erpm) < conf_now->s_pid_min_erpm) {
+	if (fabsf(target_erpm) < conf_now->s_pid_min_erpm && fabsf(motor->m_speed_command_rpm) < conf_now->s_pid_min_erpm) {
 		motor->m_speed_i_term = 0.0f;
-		motor->m_speed_prev_error = error;
+		motor->m_speed_prev_error = erpm;
 		motor->m_iq_set = 0.0f;
 		return;
 	}
 
-	// 1. Proportional Drive (Kp = 0.0020 V/ERPM) - Khỏe khoắn vượt ma sát tĩnh đĩa Cycloid
-	float p_term = error * 0.0020f;
+	// 2. Proportional Drive (Kp = 0.0018 V/ERPM)
+	float p_term = error * 0.0018f;
 
-	// 2. Integral Action (Ki = 0.0010 V/(ERPM*s)) with Anti-Windup (Max ±8.0V ~ 2.1A)
-	motor->m_speed_i_term += error * (0.0010f * dt);
+	// 3. Integral Action (Ki = 0.0008 V/(ERPM*s)) with Anti-Windup (Max ±8.0V ~ 2.1A)
+	motor->m_speed_i_term += error * (0.00080f * dt);
 	utils_truncate_number_abs(&motor->m_speed_i_term, 8.0f); // Max ±8.0V integral authority (~2.1A)
 
-	// 3. Accurate Back-EMF Feedforward for GB8115 (Kv ~ 40 RPM/V, lambda ~ 0.0065 Wb)
+	// 4. Active Electronic Damping (D-term on speed acceleration): Triệt tiêu 100% rung lắc và dội bước đĩa Cycloid
+	float d_speed = (erpm - motor->m_speed_prev_error) / dt;
+	motor->m_speed_prev_error = erpm;
+	UTILS_LP_FAST(motor->m_speed_d_filter, d_speed, 0.2f); // Lọc nhiễu đạo hàm
+	float d_term = -motor->m_speed_d_filter * 0.000030f;
+	utils_truncate_number_abs(&d_term, 3.0f);
+
+	// 5. Accurate Back-EMF Feedforward for GB8115 (Kv ~ 40 RPM/V, lambda ~ 0.0065 Wb)
 	float vq_ff = (target_erpm * 0.104719755f) * 0.0065f;
 
-	float vq_out = vq_ff + p_term + motor->m_speed_i_term;
+	float vq_out = vq_ff + p_term + motor->m_speed_i_term + d_term;
 
 	// Safe Maximum Voltage Ceiling
 	float max_v = ONE_BY_SQRT3 * conf_now->l_max_duty * motor->m_motor_state.v_bus;

@@ -206,7 +206,9 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     motor->m_speed_est_fast = motor->m_pll_speed;
 
     // 100% Pure Synchronous Closed-Loop FOC Commutation via AS5048A Magnetic Encoder
-    float pwm_phase = elec_angle;
+    // Bù trễ góc động học (Dynamic Lead Angle ~100µs cho AS5048A CORDIC + SPI pipeline delay)
+    // Giúp vector từ trường luôn giữ góc 90° tối ưu, triệt tiêu rung giật khi tăng tốc
+    float pwm_phase = elec_angle + motor->m_speed_est_fast * 0.000100f;
     utils_norm_angle_rad(&pwm_phase);
 
     utils_fast_sincos(pwm_phase, &state_m->phase_sin, &state_m->phase_cos);
