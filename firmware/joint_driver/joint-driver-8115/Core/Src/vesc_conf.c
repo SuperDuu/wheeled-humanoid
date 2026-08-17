@@ -25,7 +25,7 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_motor_pole_pairs = 21;       // 21 Pole Pairs
     conf->foc_motor_r = 3.89f;             // 3.89 Ohm Phase Resistance
     conf->foc_motor_l = 0.00314f;          // 3.14 mH Phase Inductance
-    conf->foc_motor_flux_linkage = 0.02127f; // 0.02127 Wb Flux Linkage (Kt = 0.67 N.m/A, 2*Kt/(3*Pp))
+    conf->foc_motor_flux_linkage = 0.0065f;  // 0.0065 Wb Flux Linkage (Kv ~ 40 RPM/V)
     conf->foc_motor_ld_lq_diff = 0.0f;     // Surface PMSM (non-salient)
 
     // 1:17 Cycloid Gearbox Mode
@@ -41,12 +41,12 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_cc_decoupling = FOC_CC_DECOUPLING_DISABLED;
 
     // Speed Controller (PI + Feedforward) for GB8115 + 1:17 Cycloid Gearbox
-    conf->s_pid_kp = 0.00080f;             // Proportional Gain (V/ERPM)
-    conf->s_pid_ki = 0.00025f;             // Tích phân bù sai số chuẩn xác, êm ái
+    conf->s_pid_kp = 0.0020f;              // Proportional Gain (V/ERPM)
+    conf->s_pid_ki = 0.0010f;              // Integral Gain (V/(ERPM*s))
     conf->s_pid_kd = 0.0f;                 // Zero D-term for pure smooth PI (khử bỏ hoàn toàn rung giật)
     conf->s_pid_kd_filter = 0.2f;
     conf->s_pid_min_erpm = 5.0f;           // 5 ERPM deadband (~0.24 RPM)
-    conf->s_pid_ramp_erpms_s = 1500.0f;    // Smooth Acceleration Ramp (1500 ERPM/s ~ 70 RPM/s)
+    conf->s_pid_ramp_erpms_s = 2500.0f;    // Responsive Ramp (2500 ERPM/s ~ 120 RPM/s)
 
     // Position Controller (PD + Velocity Feedforward) for 1:17 Cycloid Gearbox
     conf->p_pid_kp = 20.0f;                // High-stiffness holding gain (20.0 V/rad)
