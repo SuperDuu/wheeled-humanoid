@@ -103,7 +103,7 @@ bool Comm_Telemetry_Send(FOC_Controller_t *foc)
 
     // 5. Speeds (Mechanical RPM)
     float pole_pairs = (conf != NULL && conf->foc_motor_pole_pairs > 0) ? (float)conf->foc_motor_pole_pairs : 21.0f;
-    float erpm = (fabsf(motor->m_speed_d_filter) > 0.01f) ? RADPS2RPM_f(motor->m_speed_d_filter) : RADPS2RPM_f(motor->m_speed_est_fast);
+    float erpm = RADPS2RPM_f(motor->m_speed_est_fast);
     packet.speed_rpm = erpm / pole_pairs;
     packet.speed_target_rpm = motor->m_speed_command_rpm / pole_pairs;
 
