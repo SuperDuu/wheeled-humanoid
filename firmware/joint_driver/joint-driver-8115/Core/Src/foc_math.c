@@ -331,42 +331,39 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	}
 
 	// 1. Smooth Acceleration Ramp (Mặc định 1500 ERPM/s ~ 70 RPM/s cơ khí)
-	// Giúp con lăn đĩa Cycloid trượt vào khớp êm ru, không bị giật nảy răng
 	float ramp_rate = (conf_now->s_pid_ramp_erpms_s > 10.0f) ? conf_now->s_pid_ramp_erpms_s : 1500.0f;
 	utils_step_towards((float*)&motor->m_speed_pid_set_rpm, motor->m_speed_command_rpm, ramp_rate * dt);
 
-	float erpm = RADPS2RPM_f(motor->m_speed_est_fast);
 	float target_erpm = motor->m_speed_pid_set_rpm; // Ramped Target ERPM
-	float raw_error = target_erpm - erpm;
+	float erpm_smooth = (fabsf(motor->m_speed_d_filter) > 0.001f) ? RADPS2RPM_f(motor->m_speed_d_filter) : RADPS2RPM_f(motor->m_speed_est_fast);
+	float raw_error = target_erpm - erpm_smooth;
 
 	if (fabsf(target_erpm) < conf_now->s_pid_min_erpm && fabsf(motor->m_speed_command_rpm) < conf_now->s_pid_min_erpm) {
 		motor->m_speed_i_term = 0.0f;
-		motor->m_speed_prev_error = erpm;
-		motor->m_speed_d_filter = 0.0f;
+		motor->m_speed_prev_error = erpm_smooth;
 		motor->m_iq_set = 0.0f;
 		return;
 	}
 
-	// Lọc thông thấp sai số vận tốc (LPF 0.10) loại bỏ nhiễu lượng tử hóa encoder mà không gây trễ pha
-	UTILS_LP_FAST(motor->m_speed_prev_error, raw_error, 0.10f);
+	// Lọc thông thấp sai số vận tốc
+	UTILS_LP_FAST(motor->m_speed_prev_error, raw_error, 0.05f);
 	float filtered_error = motor->m_speed_prev_error;
 
-	// 2. Proportional Drive (Kp = 0.0010 V/ERPM) - Êm ái, đầm chắc, không bị rung
-	float kp = (conf_now->s_pid_kp > 0.00001f) ? conf_now->s_pid_kp : 0.0010f;
+	// 2. Proportional Drive (Kp = 0.00040 V/ERPM) - Êm ái tuyệt đối, không rung
+	float kp = (conf_now->s_pid_kp > 0.00001f) ? conf_now->s_pid_kp : 0.00040f;
 	float p_term = filtered_error * kp;
 
-	// 3. Khâu Tích phân I chuẩn mực có Anti-Windup (kẹp hẹp ±2.5V ~ 0.64A)
-	float ki = (conf_now->s_pid_ki > 0.000001f) ? conf_now->s_pid_ki : 0.00010f;
+	// 3. Khâu Tích phân I (Ki = 0.00008 V/(ERPM*s)) với Anti-Windup kẹp hẹp ±2.0V
+	float ki = (conf_now->s_pid_ki > 0.000001f) ? conf_now->s_pid_ki : 0.00008f;
 	motor->m_speed_i_term += filtered_error * (ki * dt);
-	utils_truncate_number_abs(&motor->m_speed_i_term, 2.5f);
+	utils_truncate_number_abs(&motor->m_speed_i_term, 2.0f);
 
 	// 4. Chuẩn xác Back-EMF Feedforward với từ thông thật GB8115 (lambda = 0.02127 Wb)
-	// Bù chính xác 98% sức điện động BEMF để target RPM bám phẳng lì và đúng 100%
 	float elec_rad_s = target_erpm * 0.104719755f;
 	float lambda = (conf_now->foc_motor_flux_linkage > 0.005f) ? conf_now->foc_motor_flux_linkage : 0.02127f;
 	float vq_bemf = elec_rad_s * lambda;
 
-	// Bù ma sát hộp số Cycloid (Friction Feedforward ~1.8V = ~0.46A)
+	// Bù ma sát hộp số Cycloid (Friction Feedforward ~1.8V)
 	float vq_friction = (target_erpm > 5.0f) ? 1.8f : ((target_erpm < -5.0f) ? -1.8f : 0.0f);
 
 	float vq_ff = vq_bemf + vq_friction;
