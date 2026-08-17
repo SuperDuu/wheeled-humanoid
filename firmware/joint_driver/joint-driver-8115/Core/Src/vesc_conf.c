@@ -41,8 +41,8 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_cc_decoupling = FOC_CC_DECOUPLING_DISABLED;
 
     // Speed Controller (PI + Feedforward) for GB8115 + 1:17 Cycloid Gearbox
-    conf->s_pid_kp = 0.00040f;             // Proportional Gain (V/ERPM)
-    conf->s_pid_ki = 0.00008f;             // Tích phân bù sai số chuẩn xác, êm ái
+    conf->s_pid_kp = 0.00080f;             // Proportional Gain (V/ERPM)
+    conf->s_pid_ki = 0.00025f;             // Tích phân bù sai số chuẩn xác, êm ái
     conf->s_pid_kd = 0.0f;                 // Zero D-term for pure smooth PI (khử bỏ hoàn toàn rung giật)
     conf->s_pid_kd_filter = 0.2f;
     conf->s_pid_min_erpm = 5.0f;           // 5 ERPM deadband (~0.24 RPM)

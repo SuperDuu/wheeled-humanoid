@@ -345,32 +345,26 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		return;
 	}
 
-	// 2. Proportional Drive (Kp = conf_now->s_pid_kp ~ 0.00040 V/ERPM)
-	float kp = (conf_now->s_pid_kp > 0.00001f) ? conf_now->s_pid_kp : 0.00040f;
+	// 2. Proportional Drive (Kp = conf_now->s_pid_kp ~ 0.00080 V/ERPM)
+	float kp = (conf_now->s_pid_kp > 0.00001f) ? conf_now->s_pid_kp : 0.00080f;
 	float p_term = error * kp;
 
-	// 3. Khâu Tích phân I (Ki = conf_now->s_pid_ki ~ 0.00008 V/(ERPM*s)) với Anti-Windup kẹp hẹp ±2.5V (~0.64A)
-	float ki = (conf_now->s_pid_ki > 0.000001f) ? conf_now->s_pid_ki : 0.00008f;
+	// 3. Khâu Tích phân I (Ki = conf_now->s_pid_ki ~ 0.00025 V/(ERPM*s))
+	// Cho phép khâu I tự do bù đủ áp ma sát mà không bị kẹp sai lệch
+	float ki = (conf_now->s_pid_ki > 0.000001f) ? conf_now->s_pid_ki : 0.00025f;
 	motor->m_speed_i_term += error * (ki * dt);
-	utils_truncate_number_abs(&motor->m_speed_i_term, 2.5f);
-
-	// 4. Chuẩn xác Back-EMF Feedforward với từ thông thật GB8115 (lambda = 0.02127 Wb)
-	// Cung cấp 98% điện áp cần thiết để motor quay đúng tốc độ mong muốn mà không gây dao động
-	float elec_rad_s = target_erpm * 0.104719755f;
-	float lambda = (conf_now->foc_motor_flux_linkage > 0.005f) ? conf_now->foc_motor_flux_linkage : 0.02127f;
-	float vq_bemf = elec_rad_s * lambda;
-
-	// Bù ma sát hộp số Cycloid (Friction Feedforward ~1.8V = ~0.46A)
-	float vq_friction = (target_erpm > 5.0f) ? 1.8f : ((target_erpm < -5.0f) ? -1.8f : 0.0f);
-
-	float vq_ff = vq_bemf + vq_friction;
-
-	// Khâu D = 0 cho Speed để motor êm tuyệt đối, không có tiếng gằn
-	float vq_out = vq_ff + p_term + motor->m_speed_i_term;
 
 	// Safe Maximum Voltage Ceiling
 	float max_v = ONE_BY_SQRT3 * conf_now->l_max_duty * motor->m_motor_state.v_bus;
 	if (max_v < 2.0f) max_v = 14.0f;
+	utils_truncate_number_abs(&motor->m_speed_i_term, max_v);
+
+	// 4. Back-EMF Feedforward với từ thông chuẩn xác GB8115 (lambda = 0.0065 Wb cho Kv ~ 40 RPM/V)
+	float elec_rad_s = target_erpm * 0.104719755f;
+	float vq_ff = elec_rad_s * 0.0065f;
+
+	// Khâu D = 0 cho Speed để motor êm tuyệt đối, không có tiếng gằn
+	float vq_out = vq_ff + p_term + motor->m_speed_i_term;
 	utils_truncate_number_abs(&vq_out, max_v);
 	motor->m_iq_set = vq_out;
 }
