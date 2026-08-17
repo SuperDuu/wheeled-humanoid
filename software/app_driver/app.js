@@ -511,8 +511,8 @@ class FOCOscilloscopeStudio {
     const btnApplySpeedPID = document.getElementById('btn-apply-speed-pid');
     if (btnApplySpeedPID) {
       btnApplySpeedPID.addEventListener('click', () => {
-        const kp = parseFloat(document.getElementById('tune-skp')?.value || '0.00100');
-        const ki = parseFloat(document.getElementById('tune-ski')?.value || '0.00020');
+        const kp = parseFloat(document.getElementById('tune-skp')?.value || '0.00060');
+        const ki = parseFloat(document.getElementById('tune-ski')?.value || '0.00010');
         const ramp = parseFloat(document.getElementById('tune-sramp')?.value || '1500');
         this.sendCommand(`KP_S ${kp}`);
         this.sendCommand(`KI_S ${ki}`);

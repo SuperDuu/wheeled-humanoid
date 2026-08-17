@@ -335,7 +335,7 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	utils_step_towards((float*)&motor->m_speed_pid_set_rpm, motor->m_speed_command_rpm, ramp_rate * dt);
 
 	float target_erpm = motor->m_speed_pid_set_rpm; // Ramped Target ERPM
-	float erpm = RADPS2RPM_f(motor->m_speed_est_fast);
+	float erpm = (fabsf(motor->m_speed_d_filter) > 0.01f) ? RADPS2RPM_f(motor->m_speed_d_filter) : RADPS2RPM_f(motor->m_speed_est_fast);
 	float error = target_erpm - erpm;
 
 	if (fabsf(target_erpm) < conf_now->s_pid_min_erpm && fabsf(motor->m_speed_command_rpm) < conf_now->s_pid_min_erpm) {
@@ -345,17 +345,17 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		return;
 	}
 
-	// 2. Proportional Drive (Kp = 0.0010 V/ERPM) - Đầm chắc, phản ứng trực tiếp không trễ pha
-	float kp = (conf_now->s_pid_kp > 0.00001f) ? conf_now->s_pid_kp : 0.0010f;
+	// 2. Proportional Drive (Kp = conf_now->s_pid_kp ~ 0.00060 V/ERPM)
+	float kp = (conf_now->s_pid_kp > 0.00001f) ? conf_now->s_pid_kp : 0.00060f;
 	float p_term = error * kp;
 
-	// 3. Khâu Tích phân I (Ki = 0.00020 V/(ERPM*s)) với Anti-Windup kẹp hẹp ±3.0V (~0.77A)
-	float ki = (conf_now->s_pid_ki > 0.000001f) ? conf_now->s_pid_ki : 0.00020f;
+	// 3. Khâu Tích phân I (Ki = conf_now->s_pid_ki ~ 0.00010 V/(ERPM*s)) với Anti-Windup kẹp hẹp ±3.0V (~0.77A)
+	float ki = (conf_now->s_pid_ki > 0.000001f) ? conf_now->s_pid_ki : 0.00010f;
 	motor->m_speed_i_term += error * (ki * dt);
 	utils_truncate_number_abs(&motor->m_speed_i_term, 3.0f);
 
 	// 4. Chuẩn xác Back-EMF Feedforward với từ thông thật GB8115 (lambda = 0.02127 Wb)
-	// Tự động cấp trước 98% điện áp cần thiết để target 200 RPM đạt đúng 200.0 RPM
+	// Tự động cấp trước 98% điện áp cần thiết để target 300 RPM đạt đúng 300.0 RPM
 	float elec_rad_s = target_erpm * 0.104719755f;
 	float lambda = (conf_now->foc_motor_flux_linkage > 0.005f) ? conf_now->foc_motor_flux_linkage : 0.02127f;
 	float vq_bemf = elec_rad_s * lambda;
