@@ -91,22 +91,17 @@ HAL_StatusTypeDef AS5048A_ReadRawAngle(AS5048A_t *enc, uint16_t *raw_angle)
     HAL_GPIO_WritePin(enc->cs_port, enc->cs_pin, GPIO_PIN_SET);
 
     if (status == HAL_OK) {
-        // Verify Even Parity
+        // Verify Even Parity on 16-bit frame
         uint16_t expected_parity_frame = AS5048A_CalculateEvenParity(response & 0x7FFF);
         if (response == expected_parity_frame) {
-            if (!(response & (1 << 14))) {
-                // Valid frame without Error Flag
-                uint16_t angleData = response & 0x3FFF;
-                enc->raw_angle = angleData;
-                enc->angle_rad = ((float)angleData / 16384.0f) * (2.0f * (float)M_PI);
-                enc->angle_deg = ((float)angleData / 16384.0f) * 360.0f;
-                enc->error_flag = 0;
-            } else {
-                // Error flag set on AS5048A: Keep last valid angle to prevent pole jump
-                enc->error_flag = 1;
-            }
+            // Valid frame: Extract 14-bit absolute angle (bits 13:0)
+            uint16_t angleData = response & 0x3FFF;
+            enc->raw_angle = angleData;
+            enc->angle_rad = ((float)angleData / 16384.0f) * (2.0f * (float)M_PI);
+            enc->angle_deg = ((float)angleData / 16384.0f) * 360.0f;
+            enc->error_flag = (response & (1 << 14)) ? 1 : 0;
         } else {
-            // Parity mismatch due to EMI: Retain last valid angle to prevent pole slip
+            // Parity mismatch on this cycle: retain last valid angle for 1 sample (50µs)
             enc->error_flag = 1;
         }
     } else {
