@@ -318,7 +318,7 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 }
 
 /**
-  * @brief  VESC Speed Controller Loop (Smooth, Stable, Whisper-Quiet PI + Back-EMF Feedforward)
+  * @brief  VESC Speed Controller Loop (Smooth, Powerful PI + Back-EMF Feedforward)
   */
 void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *motor) {
 	mc_configuration *conf_now = motor->m_conf;
@@ -330,8 +330,8 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		return;
 	}
 
-	// 1. Smooth Acceleration Ramp (Mặc định 1500 ERPM/s ~ 70 RPM/s cơ khí)
-	float ramp_rate = (conf_now->s_pid_ramp_erpms_s > 10.0f) ? conf_now->s_pid_ramp_erpms_s : 1500.0f;
+	// 1. Smooth Acceleration Ramp (2500 ERPM/s ~ 120 RPM/s cơ khí)
+	float ramp_rate = (conf_now->s_pid_ramp_erpms_s > 10.0f) ? conf_now->s_pid_ramp_erpms_s : 2500.0f;
 	utils_step_towards((float*)&motor->m_speed_pid_set_rpm, motor->m_speed_command_rpm, ramp_rate * dt);
 
 	float target_erpm = motor->m_speed_pid_set_rpm; // Ramped Target ERPM
@@ -345,23 +345,23 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		return;
 	}
 
-	// 2. Proportional Drive (Kp = conf_now->s_pid_kp ~ 0.00080 V/ERPM)
-	float kp = (conf_now->s_pid_kp > 0.00001f) ? conf_now->s_pid_kp : 0.00080f;
+	// 2. Proportional Drive (Kp = conf_now->s_pid_kp ~ 0.0020 V/ERPM)
+	float kp = (conf_now->s_pid_kp > 0.00001f) ? conf_now->s_pid_kp : 0.0020f;
 	float p_term = error * kp;
 
-	// 3. Khâu Tích phân I (Ki = conf_now->s_pid_ki ~ 0.00025 V/(ERPM*s))
-	// Cho phép khâu I tự do bù đủ áp ma sát mà không bị kẹp sai lệch
-	float ki = (conf_now->s_pid_ki > 0.000001f) ? conf_now->s_pid_ki : 0.00025f;
+	// 3. Integral Action (Ki = conf_now->s_pid_ki ~ 0.0010 V/(ERPM*s))
+	float ki = (conf_now->s_pid_ki > 0.000001f) ? conf_now->s_pid_ki : 0.0010f;
 	motor->m_speed_i_term += error * (ki * dt);
 
 	// Safe Maximum Voltage Ceiling
 	float max_v = ONE_BY_SQRT3 * conf_now->l_max_duty * motor->m_motor_state.v_bus;
-	if (max_v < 2.0f) max_v = 14.0f;
+	if (max_v < 2.0f) max_v = 16.0f;
 	utils_truncate_number_abs(&motor->m_speed_i_term, max_v);
 
-	// 4. Back-EMF Feedforward với từ thông chuẩn xác GB8115 (lambda = 0.0065 Wb cho Kv ~ 40 RPM/V)
+	// 4. Back-EMF Feedforward với từ thông chuẩn xác GB8115 (lambda = 0.0065 Wb)
 	float elec_rad_s = target_erpm * 0.104719755f;
-	float vq_ff = elec_rad_s * 0.0065f;
+	float lambda = (conf_now->foc_motor_flux_linkage > 0.001f) ? conf_now->foc_motor_flux_linkage : 0.0065f;
+	float vq_ff = elec_rad_s * lambda;
 
 	// Khâu D = 0 cho Speed để motor êm tuyệt đối, không có tiếng gằn
 	float vq_out = vq_ff + p_term + motor->m_speed_i_term;
