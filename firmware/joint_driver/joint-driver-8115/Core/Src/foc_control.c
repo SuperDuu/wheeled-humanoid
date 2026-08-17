@@ -204,8 +204,6 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     float dt_fast = 0.000050f; // 20kHz Fast Loop period
     foc_pll_run(elec_angle, dt_fast, &motor->m_pll_phase, &motor->m_pll_speed, motor->m_conf);
     motor->m_speed_est_fast = motor->m_pll_speed;
-    // Bộ lọc thông thấp bậc cao khử sạch 100% gợn sóng lệch tâm nam châm 1x-Rev (~3.3Hz)
-    UTILS_LP_FAST(motor->m_speed_d_filter, motor->m_pll_speed, 0.0025f);
 
     // 100% Pure Synchronous Closed-Loop FOC Commutation via AS5048A Magnetic Encoder
     // Trực tiếp dùng góc điện elec_angle để vector điện áp luôn vuông góc 90° lý tưởng với từ trường rotor

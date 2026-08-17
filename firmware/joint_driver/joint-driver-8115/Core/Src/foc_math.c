@@ -335,35 +335,32 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	utils_step_towards((float*)&motor->m_speed_pid_set_rpm, motor->m_speed_command_rpm, ramp_rate * dt);
 
 	float target_erpm = motor->m_speed_pid_set_rpm; // Ramped Target ERPM
-	float erpm_smooth = (fabsf(motor->m_speed_d_filter) > 0.001f) ? RADPS2RPM_f(motor->m_speed_d_filter) : RADPS2RPM_f(motor->m_speed_est_fast);
-	float raw_error = target_erpm - erpm_smooth;
+	float erpm = RADPS2RPM_f(motor->m_speed_est_fast);
+	float error = target_erpm - erpm;
 
 	if (fabsf(target_erpm) < conf_now->s_pid_min_erpm && fabsf(motor->m_speed_command_rpm) < conf_now->s_pid_min_erpm) {
 		motor->m_speed_i_term = 0.0f;
-		motor->m_speed_prev_error = erpm_smooth;
+		motor->m_speed_prev_error = erpm;
 		motor->m_iq_set = 0.0f;
 		return;
 	}
 
-	// Lọc thông thấp sai số vận tốc
-	UTILS_LP_FAST(motor->m_speed_prev_error, raw_error, 0.05f);
-	float filtered_error = motor->m_speed_prev_error;
+	// 2. Proportional Drive (Kp = 0.0010 V/ERPM) - Đầm chắc, phản ứng trực tiếp không trễ pha
+	float kp = (conf_now->s_pid_kp > 0.00001f) ? conf_now->s_pid_kp : 0.0010f;
+	float p_term = error * kp;
 
-	// 2. Proportional Drive (Kp = 0.00040 V/ERPM) - Êm ái tuyệt đối, không rung
-	float kp = (conf_now->s_pid_kp > 0.00001f) ? conf_now->s_pid_kp : 0.00040f;
-	float p_term = filtered_error * kp;
-
-	// 3. Khâu Tích phân I (Ki = 0.00008 V/(ERPM*s)) với Anti-Windup kẹp hẹp ±2.0V
-	float ki = (conf_now->s_pid_ki > 0.000001f) ? conf_now->s_pid_ki : 0.00008f;
-	motor->m_speed_i_term += filtered_error * (ki * dt);
-	utils_truncate_number_abs(&motor->m_speed_i_term, 2.0f);
+	// 3. Khâu Tích phân I (Ki = 0.00020 V/(ERPM*s)) với Anti-Windup kẹp hẹp ±3.0V (~0.77A)
+	float ki = (conf_now->s_pid_ki > 0.000001f) ? conf_now->s_pid_ki : 0.00020f;
+	motor->m_speed_i_term += error * (ki * dt);
+	utils_truncate_number_abs(&motor->m_speed_i_term, 3.0f);
 
 	// 4. Chuẩn xác Back-EMF Feedforward với từ thông thật GB8115 (lambda = 0.02127 Wb)
+	// Tự động cấp trước 98% điện áp cần thiết để target 200 RPM đạt đúng 200.0 RPM
 	float elec_rad_s = target_erpm * 0.104719755f;
 	float lambda = (conf_now->foc_motor_flux_linkage > 0.005f) ? conf_now->foc_motor_flux_linkage : 0.02127f;
 	float vq_bemf = elec_rad_s * lambda;
 
-	// Bù ma sát hộp số Cycloid (Friction Feedforward ~1.8V)
+	// Bù ma sát hộp số Cycloid (Friction Feedforward ~1.8V = ~0.46A)
 	float vq_friction = (target_erpm > 5.0f) ? 1.8f : ((target_erpm < -5.0f) ? -1.8f : 0.0f);
 
 	float vq_ff = vq_bemf + vq_friction;
