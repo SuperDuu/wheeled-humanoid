@@ -30,6 +30,7 @@ volatile uint8_t run_open_loop = 0;
 volatile float open_loop_target_rpm = 100.0f;
 volatile float open_loop_current_rpm = 0.0f;
 volatile float open_loop_angle = 0.0f;
+volatile float open_loop_voltage = 9.0f; // 9.0V (~2.3A) - High torque for 1:17 Cycloid gearbox load
 
 /* Checksum calculation */
 static uint16_t CalculateChecksum(const uint8_t *data, uint16_t len)
@@ -189,12 +190,15 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
     }
     else if (strncmp(cmd, "OPENLOOP", 8) == 0 || strncmp(cmd, "TEST", 4) == 0 || strncmp(cmd, "RUN", 3) == 0) {
         float rpm = 100.0f;
-        if (strlen(cmd) > 8 && strncmp(cmd, "OPENLOOP", 8) == 0) {
-            float val = atof(&cmd[8]);
-            if (val != 0.0f) rpm = val;
-        } else if (strlen(cmd) > 4 && strncmp(cmd, "TEST", 4) == 0) {
-            float val = atof(&cmd[4]);
-            if (val != 0.0f) rpm = val;
+        float v_custom = 0.0f;
+        const char *arg = (strncmp(cmd, "OPENLOOP", 8) == 0) ? &cmd[8] :
+                          (strncmp(cmd, "TEST", 4) == 0) ? &cmd[4] : &cmd[3];
+        while (*arg == ' ') arg++;
+        if (*arg != '\0') {
+            int n = sscanf(arg, "%f %f", &rpm, &v_custom);
+            if (n >= 2 && v_custom > 0.5f) {
+                open_loop_voltage = v_custom;
+            }
         }
         open_loop_target_rpm = rpm;
         open_loop_current_rpm = 0.0f;
@@ -202,6 +206,12 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         motor->m_state = MC_STATE_RUNNING;
         foc->fault = MC_FAULT_NONE;
         TIM1_EnsureMoeEnabled();
+    }
+    else if (strncmp(cmd, "V_OPEN ", 7) == 0 || strncmp(cmd, "VOPEN ", 6) == 0) {
+        float v = atof((strncmp(cmd, "V_OPEN ", 7) == 0) ? &cmd[7] : &cmd[6]);
+        if (v >= 1.0f && v <= 20.0f) {
+            open_loop_voltage = v;
+        }
     }
     else if (strncmp(cmd, "MODE ", 5) == 0) {
         int m = atoi(&cmd[5]);

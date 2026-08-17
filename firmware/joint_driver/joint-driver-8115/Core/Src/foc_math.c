@@ -346,12 +346,12 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		return;
 	}
 
-	// 1. Proportional Drive (Kp = 0.00080 V/ERPM)
-	float p_term = error * 0.00080f;
+	// 1. Proportional Drive (Kp = 0.0020 V/ERPM) - Khỏe khoắn vượt ma sát tĩnh đĩa Cycloid
+	float p_term = error * 0.0020f;
 
-	// 2. Integral Action (Ki = 0.00040 V/(ERPM*s)) with Anti-Windup
-	motor->m_speed_i_term += error * (0.00040f * dt);
-	utils_truncate_number_abs(&motor->m_speed_i_term, 4.0f); // Max ±4.0V integral authority
+	// 2. Integral Action (Ki = 0.0010 V/(ERPM*s)) with Anti-Windup (Max ±8.0V ~ 2.1A)
+	motor->m_speed_i_term += error * (0.0010f * dt);
+	utils_truncate_number_abs(&motor->m_speed_i_term, 8.0f); // Max ±8.0V integral authority (~2.1A)
 
 	// 3. Accurate Back-EMF Feedforward for GB8115 (Kv ~ 40 RPM/V, lambda ~ 0.0065 Wb)
 	float vq_ff = (target_erpm * 0.104719755f) * 0.0065f;
