@@ -256,19 +256,13 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         float mech_rpm = atof(&cmd[6]);
         float pole_pairs = (motor->m_conf != NULL) ? (float)motor->m_conf->foc_motor_pole_pairs : 21.0f;
         speed_target_dbg = mech_rpm;
+        run_open_loop = 0;
+        motor->m_speed_command_rpm = mech_rpm * pole_pairs;
+        motor->m_control_mode = CONTROL_MODE_SPEED;
+        motor->m_state = MC_STATE_RUNNING;
+        run_foc_mode = 3;
         foc->fault = MC_FAULT_NONE;
-        if (run_open_loop == 1) {
-            open_loop_target_rpm = mech_rpm;
-        } else {
-            motor->m_speed_command_rpm = mech_rpm * pole_pairs;
-            motor->m_speed_i_term = 0.0f;
-            motor->m_speed_prev_error = 0.0f;
-            motor->m_speed_d_filter = 0.0f;
-            motor->m_control_mode = CONTROL_MODE_SPEED;
-            motor->m_state = MC_STATE_RUNNING;
-            run_foc_mode = 3;
-            TIM1_EnsureMoeEnabled();
-        }
+        TIM1_EnsureMoeEnabled();
     }
     else if (strncmp(cmd, "IQ ", 3) == 0 || strncmp(cmd, "CURRENT ", 8) == 0 || strncmp(cmd, "TORQUE ", 7) == 0 || strncmp(cmd, "FORCE ", 6) == 0) {
         float iq = 0.0f;
@@ -362,12 +356,24 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
             TIM1_EnsureMoeEnabled();
         }
     }
+    else if (strncmp(cmd, "REL ", 4) == 0 || strncmp(cmd, "STEP ", 5) == 0) {
+        // QUAY TƯƠNG ĐỐI (VD: REL 30 quay tới thêm 30 độ, REL -30 quay lùi 30 độ)
+        float rel_deg = atof((strncmp(cmd, "REL ", 4) == 0) ? &cmd[4] : &cmd[5]);
+        float target_rad = motor->m_joint_angle + DEG2RAD_f(rel_deg);
+        foc_start_trajectory(motor, target_rad, 1.2f, 4.0f);
+        pos_target_dbg = target_rad;
+        run_foc_mode = 2;
+        run_open_loop = 0;
+        foc->fault = MC_FAULT_NONE;
+        TIM1_EnsureMoeEnabled();
+    }
     else if (strncmp(cmd, "POS ", 4) == 0 || strncmp(cmd, "ANGLE ", 6) == 0) {
         float pos_deg = atof((strncmp(cmd, "POS ", 4) == 0) ? &cmd[4] : &cmd[6]);
         float pos_rad = DEG2RAD_f(pos_deg);
         foc_start_trajectory(motor, pos_rad, 0.0f, 4.0f); // 0.0s = Tốc độ tối đa tức thì
         pos_target_dbg = pos_rad;
         run_foc_mode = 2;
+        run_open_loop = 0;
         foc->fault = MC_FAULT_NONE;
         TIM1_EnsureMoeEnabled();
     }

@@ -28,8 +28,8 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_motor_flux_linkage = 0.02127f; // 0.02127 Wb Flux Linkage (Kt = 0.67 N.m/A, 2*Kt/(3*Pp))
     conf->foc_motor_ld_lq_diff = 0.0f;     // Surface PMSM (non-salient)
 
-    // Direct Drive Mode (No Gearbox - 1:1 Direct Coupling, Unlimited Rotation)
-    conf->gear_ratio = 1.0f;               // 1:1 Direct Drive (No reduction)
+    // 1:17 Cycloid Gearbox Mode
+    conf->gear_ratio = 17.0f;              // 1:17 Cycloidal Gearbox Reduction Ratio
     conf->encoder_direction = -1;          // Physical AS5048A angle decreases during forward electrical rotation
     conf->joint_pos_min = -1000000.0f;     // Unlimited continuous rotation
     conf->joint_pos_max =  1000000.0f;     // Unlimited continuous rotation
