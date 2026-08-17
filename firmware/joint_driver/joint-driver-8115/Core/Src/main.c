@@ -1686,8 +1686,9 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
     g_foc_controller.motor.m_speed_est_fast = elec_rad_s;
 
     /* === 3. TÍNH ĐIỆN ÁP V/f CHUẨN (Mô-men Giữ Đồng Bộ Vững) ===
-     * Duy trì V_boost = 2.5V (~0.64A) ổn định kết hợp bù sức điện động BEMF. */
-    float v_boost = 2.5f;
+     * Duy trì V_boost = open_loop_voltage (Mặc định 9.0V = ~2.31A / ~25Nm ngõ ra hộp số)
+     * kết hợp bù sức điện động BEMF để kéo tải nặng đĩa Cycloid 1:17 mượt mà không trượt bước. */
+    float v_boost = (open_loop_voltage > 1.0f) ? open_loop_voltage : 9.0f;
     float v_bemf  = g_foc_controller.conf.foc_motor_flux_linkage * fabsf(elec_rad_s);
     float v_open  = v_boost + v_bemf;
 
