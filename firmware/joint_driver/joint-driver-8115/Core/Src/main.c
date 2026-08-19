@@ -414,9 +414,13 @@ void Run_EncoderAlignment(void)
       __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
       __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
     }
+    Comm_Telemetry_Process(&g_foc_controller);
     HAL_Delay(5);
   }
-  HAL_Delay(800); // Chờ rotor ổn định tuyệt đối tại góc 0 điện
+  for (int i = 0; i < 80; i++) {
+    Comm_Telemetry_Process(&g_foc_controller);
+    HAL_Delay(10);
+  }
 
   // Read starting encoder position (Đọc 2 lần liên tiếp để lấy giá trị mới nhất theo chuẩn SPI AS5048A)
   float enc_start = 0.0f;
@@ -444,7 +448,6 @@ void Run_EncoderAlignment(void)
       __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
       __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
     }
-    HAL_Delay(5);
 
     // Tích lũy liên tục độ dịch chuyển cơ học
     float current_enc = 0.0f;
@@ -454,8 +457,14 @@ void Run_EncoderAlignment(void)
     while (step_diff < -3.14159265f) step_diff += 2.0f * 3.14159265f;
     total_mech_delta += step_diff;
     last_enc = current_enc;
+
+    Comm_Telemetry_Process(&g_foc_controller);
+    HAL_Delay(5);
   }
-  HAL_Delay(400); // Chờ rotor ổn định tại điểm cuối 1 vòng tròn
+  for (int i = 0; i < 40; i++) {
+    Comm_Telemetry_Process(&g_foc_controller);
+    HAL_Delay(10);
+  }
 
   // STEP 3: Auto-detect encoder_direction (+1 or -1) dựa trên tổng 1 vòng quay cơ học (2*PI rad)
   if (total_mech_delta > 1.0f) {
@@ -488,9 +497,13 @@ void Run_EncoderAlignment(void)
       __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
       __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
     }
+    Comm_Telemetry_Process(&g_foc_controller);
     HAL_Delay(5);
   }
-  HAL_Delay(800); // Chờ rotor settle chính xác tuyệt đối ở góc 0 điện
+  for (int i = 0; i < 80; i++) {
+    Comm_Telemetry_Process(&g_foc_controller);
+    HAL_Delay(10);
+  }
 
   float enc_zero = 0.0f;
   AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_zero);
@@ -514,8 +527,14 @@ void Run_EncoderAlignment(void)
     uint32_t ta, tb, tc, sector;
     foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
+    if (g_foc_controller.phase_swap_bc) {
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tc * period) / 1000);
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tb * period) / 1000);
+    } else {
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
+    }
+    Comm_Telemetry_Process(&g_foc_controller);
     HAL_Delay(4);
   }
 
@@ -1634,7 +1653,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
     return; // Không chạy FOC khi đang calibrate
   }
 
-  // Chuyển đổi dòng điện 3 pha chuẩn (đồng bộ theo cờ phase_swap_bc)
+  // Chuyển đổi dòng điện 3 pha chuẩn theo cấu trúc Low-Side Shunt (Dòng vào pha = -(ADC - offset))
   float current_b, current_c;
   if (g_foc_controller.phase_swap_bc) {
     current_b = -((float)raw_ic - g_foc_controller.offset_ia) * ADC_TO_AMPS;
@@ -1662,6 +1681,11 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
   const float dt = 1.0f / 20000.0f; // 50µs = 1/20kHz
   if (run_open_loop == 1) {
     TIM1_EnsureMoeEnabled();
+
+    /* Đọc Encoder realtime trong Open-Loop để telemetry nhận góc thực */
+    float raw_enc_rad = 0.0f;
+    AS5048A_ReadRadians(&g_foc_controller.encoder, &raw_enc_rad);
+    foc_update_cycloidal_joint_angle(&g_foc_controller.motor, raw_enc_rad);
 
     /* === 1. SMOOTH ACCELERATION RAMP (80 RPM/s) ===
      * Hỗ trợ mượt mà cả chiều quay thuận (+) và nghịch (-).
