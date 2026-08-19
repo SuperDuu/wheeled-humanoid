@@ -207,6 +207,20 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         foc->fault = MC_FAULT_NONE;
         TIM1_EnsureMoeEnabled();
     }
+    else if (strncmp(cmd, "LOCK_ANGLE ", 11) == 0 || strncmp(cmd, "LOCK ", 5) == 0) {
+        float angle = 0.0f;
+        float volt = 4.0f;
+        const char *arg = (strncmp(cmd, "LOCK_ANGLE ", 11) == 0) ? &cmd[11] : &cmd[5];
+        sscanf(arg, "%f %f", &angle, &volt);
+        open_loop_angle = angle;
+        open_loop_voltage = (volt > 0.5f) ? volt : 4.0f;
+        open_loop_current_rpm = 0.0f;
+        open_loop_target_rpm = 0.0f;
+        run_open_loop = 1;
+        motor->m_state = MC_STATE_RUNNING;
+        foc->fault = MC_FAULT_NONE;
+        TIM1_EnsureMoeEnabled();
+    }
     else if (strncmp(cmd, "V_OPEN ", 7) == 0 || strncmp(cmd, "VOPEN ", 6) == 0) {
         float v = atof((strncmp(cmd, "V_OPEN ", 7) == 0) ? &cmd[7] : &cmd[6]);
         if (v >= 1.0f && v <= 20.0f) {
@@ -243,9 +257,11 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         else if (strncmp(cmd, "CLOSE_LOOP ", 11) == 0) rpm = atof(&cmd[11]);
         speed_target_dbg = rpm;
         motor->m_speed_command_rpm = rpm * 21.0f;
+        motor->m_speed_pid_set_rpm = RADPS2RPM_f(motor->m_speed_est_fast);
+        motor->m_speed_d_filter = motor->m_speed_pid_set_rpm;
         motor->m_speed_i_term = 0.0f;
         motor->m_speed_prev_error = 0.0f;
-        motor->m_speed_d_filter = 0.0f;
+        motor->m_speed_d_filter_proc = 0.0f;
         motor->m_control_mode = CONTROL_MODE_SPEED;
         motor->m_state = MC_STATE_RUNNING;
         run_foc_mode = 3;
@@ -258,6 +274,11 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         speed_target_dbg = mech_rpm;
         run_open_loop = 0;
         motor->m_speed_command_rpm = mech_rpm * pole_pairs;
+        motor->m_speed_pid_set_rpm = RADPS2RPM_f(motor->m_speed_est_fast);
+        motor->m_speed_d_filter = motor->m_speed_pid_set_rpm;
+        motor->m_speed_i_term = 0.0f;
+        motor->m_speed_prev_error = 0.0f;
+        motor->m_speed_d_filter_proc = 0.0f;
         motor->m_control_mode = CONTROL_MODE_SPEED;
         motor->m_state = MC_STATE_RUNNING;
         run_foc_mode = 3;
@@ -276,6 +297,12 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         }
         iq_target_dbg = iq;
         motor->m_iq_set = iq;
+        // BUMPLESS TRANSFER: Initialize PI integrators to current voltage output
+        // so that the output doesn't jump on mode switch (prevents motor jerk).
+        // In DUTY mode, vd=0 and vq=duty*vbus. Starting the integrator at the
+        // current vq ensures continuity: first-cycle output ≈ vq_prev + small_correction.
+        motor->m_motor_state.vq_int = motor->m_motor_state.vq;
+        motor->m_motor_state.vd_int = motor->m_motor_state.vd;
         motor->m_control_mode = CONTROL_MODE_CURRENT;
         motor->m_state = MC_STATE_RUNNING;
         run_foc_mode = 1;
@@ -303,6 +330,7 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         motor->m_speed_i_term = 0.0f;
         motor->m_speed_prev_error = 0.0f;
         motor->m_speed_d_filter = 0.0f;
+        motor->m_speed_d_filter_proc = 0.0f;
         motor->m_pos_i_term = 0.0f;
         motor->m_pos_prev_error = 0.0f;
         motor->m_pos_d_filter = 0.0f;
@@ -422,33 +450,90 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         run_foc_mode = 0;
         TIM1_EnsureMoeEnabled();
     }
+    else if (strncmp(cmd, "DIR ", 4) == 0) {
+        int dir = atoi(&cmd[4]);
+        if (dir == 1 || dir == -1) {
+            foc->conf.encoder_direction = dir;
+            if (motor->m_conf != NULL) motor->m_conf->encoder_direction = dir;
+        }
+    }
+    else if (strncmp(cmd, "SWAPBC ", 7) == 0 || strncmp(cmd, "SWAP ", 5) == 0) {
+        int swap = atoi((strncmp(cmd, "SWAPBC ", 7) == 0) ? &cmd[7] : &cmd[5]);
+        foc->phase_swap_bc = (swap != 0);
+    }
+    else if (strncmp(cmd, "OFFSET ", 7) == 0) {
+        float off = atof(&cmd[7]);
+        foc->zero_electric_angle = off;
+    }
+    else if (strncmp(cmd, "SET_SPEED_PID ", 14) == 0 || strncmp(cmd, "SPID ", 5) == 0) {
+        float kp = 0.0015f, ki = 0.0010f, ramp = 3000.0f;
+        const char *arg = (strncmp(cmd, "SET_SPEED_PID ", 14) == 0) ? &cmd[14] : &cmd[5];
+        if (sscanf(arg, "%f %f %f", &kp, &ki, &ramp) >= 2) {
+            foc->conf.s_pid_kp = kp;
+            foc->conf.s_pid_ki = ki;
+            if (ramp > 0.0f) foc->conf.s_pid_ramp_erpms_s = ramp;
+            if (motor->m_conf != NULL) {
+                motor->m_conf->s_pid_kp = kp;
+                motor->m_conf->s_pid_ki = ki;
+                if (ramp > 0.0f) motor->m_conf->s_pid_ramp_erpms_s = ramp;
+            }
+        }
+    }
+    else if (strncmp(cmd, "SET_POS_PID ", 12) == 0 || strncmp(cmd, "PPID ", 5) == 0) {
+        float kp = 20.0f, kd = 0.10f;
+        const char *arg = (strncmp(cmd, "SET_POS_PID ", 12) == 0) ? &cmd[12] : &cmd[5];
+        if (sscanf(arg, "%f %f", &kp, &kd) >= 2) {
+            foc->conf.p_pid_kp = kp;
+            foc->conf.p_pid_kd = kd;
+            if (motor->m_conf != NULL) {
+                motor->m_conf->p_pid_kp = kp;
+                motor->m_conf->p_pid_kd = kd;
+            }
+        }
+    }
     else if (strncmp(cmd, "KP_S ", 5) == 0 || strncmp(cmd, "SET_SKP ", 8) == 0) {
         float val = atof((strncmp(cmd, "KP_S ", 5) == 0) ? &cmd[5] : &cmd[8]);
         foc->conf.s_pid_kp = val;
+        if (motor->m_conf != NULL) motor->m_conf->s_pid_kp = val;
     }
     else if (strncmp(cmd, "KI_S ", 5) == 0 || strncmp(cmd, "SET_SKI ", 8) == 0) {
         float val = atof((strncmp(cmd, "KI_S ", 5) == 0) ? &cmd[5] : &cmd[8]);
         foc->conf.s_pid_ki = val;
+        if (motor->m_conf != NULL) motor->m_conf->s_pid_ki = val;
+    }
+    else if (strncmp(cmd, "FLUX ", 5) == 0 || strncmp(cmd, "LAMBDA ", 7) == 0) {
+        float val = atof((strncmp(cmd, "FLUX ", 5) == 0) ? &cmd[5] : &cmd[7]);
+        if (val > 0.001f && val < 0.1f) {
+            foc->conf.foc_motor_flux_linkage = val;
+            if (motor->m_conf != NULL) motor->m_conf->foc_motor_flux_linkage = val;
+        }
     }
     else if (strncmp(cmd, "KD_S ", 5) == 0 || strncmp(cmd, "SET_SKD ", 8) == 0) {
         float val = atof((strncmp(cmd, "KD_S ", 5) == 0) ? &cmd[5] : &cmd[8]);
         foc->conf.s_pid_kd = val;
+        if (motor->m_conf != NULL) motor->m_conf->s_pid_kd = val;
     }
     else if (strncmp(cmd, "KP_P ", 5) == 0 || strncmp(cmd, "SET_PKP ", 8) == 0) {
         float val = atof((strncmp(cmd, "KP_P ", 5) == 0) ? &cmd[5] : &cmd[8]);
         foc->conf.p_pid_kp = val;
+        if (motor->m_conf != NULL) motor->m_conf->p_pid_kp = val;
     }
     else if (strncmp(cmd, "KI_P ", 5) == 0 || strncmp(cmd, "SET_PKI ", 8) == 0) {
         float val = atof((strncmp(cmd, "KI_P ", 5) == 0) ? &cmd[5] : &cmd[8]);
         foc->conf.p_pid_ki = val;
+        if (motor->m_conf != NULL) motor->m_conf->p_pid_ki = val;
     }
     else if (strncmp(cmd, "KD_P ", 5) == 0 || strncmp(cmd, "SET_PKD ", 8) == 0) {
         float val = atof((strncmp(cmd, "KD_P ", 5) == 0) ? &cmd[5] : &cmd[8]);
         foc->conf.p_pid_kd = val;
+        if (motor->m_conf != NULL) motor->m_conf->p_pid_kd = val;
     }
     else if (strncmp(cmd, "DIR ", 4) == 0) {
         int d = atoi(&cmd[4]);
-        if (d == 1 || d == -1) foc->conf.encoder_direction = d;
+        if (d == 1 || d == -1) {
+            foc->conf.encoder_direction = d;
+            if (motor->m_conf != NULL) motor->m_conf->encoder_direction = d;
+        }
     }
     else if (strncmp(cmd, "SWAP ", 5) == 0) {
         int s = atoi(&cmd[5]);
@@ -461,11 +546,37 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
     }
     else if (strncmp(cmd, "DUTY ", 5) == 0) {
         float d = atof(&cmd[5]);
-        if (d > 0.05f && d <= 0.95f) foc->conf.l_max_duty = d;
+        if (d > 0.05f && d <= 0.95f) {
+            foc->conf.l_max_duty = d;
+            if (motor->m_conf != NULL) motor->m_conf->l_max_duty = d;
+        }
     }
     else if (strncmp(cmd, "RAMP ", 5) == 0 || strncmp(cmd, "SET_RAMP ", 9) == 0) {
         float r = atof((strncmp(cmd, "RAMP ", 5) == 0) ? &cmd[5] : &cmd[9]);
-        if (r >= 0.0f) foc->conf.s_pid_ramp_erpms_s = r;
+        if (r >= 0.0f) {
+            foc->conf.s_pid_ramp_erpms_s = r;
+            if (motor->m_conf != NULL) motor->m_conf->s_pid_ramp_erpms_s = r;
+        }
+    }
+    else if (strncmp(cmd, "LUT ", 4) == 0) {
+        int idx = 0;
+        int val = 0;
+        if (sscanf(&cmd[4], "%d %d", &idx, &val) >= 2) {
+            if (idx >= 0 && idx < ENCODER_LUT_SIZE) {
+                foc->encoder_lut[idx] = (int16_t)val;
+                foc->use_encoder_lut = true;
+            }
+        }
+    }
+    else if (strncmp(cmd, "USE_LUT ", 8) == 0 || strncmp(cmd, "ENABLE_LUT ", 11) == 0) {
+        int en = atoi((strncmp(cmd, "USE_LUT ", 8) == 0) ? &cmd[8] : &cmd[11]);
+        foc->use_encoder_lut = (en != 0);
+    }
+    else if (strncmp(cmd, "TEST_VQ ", 8) == 0 || strncmp(cmd, "STATIC_TEST ", 12) == 0) {
+        float val = atof((strncmp(cmd, "TEST_VQ ", 8) == 0) ? &cmd[8] : &cmd[12]);
+        motor->m_control_mode = CONTROL_MODE_DUTY;
+        motor->m_motor_state.duty_now = val / motor->m_motor_state.v_bus;
+        motor->m_state = MC_STATE_RUNNING;
     }
 }
 
