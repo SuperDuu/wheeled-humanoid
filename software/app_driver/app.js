@@ -202,7 +202,6 @@ class FOCOscilloscopeStudio {
       if (inputSpeed) inputSpeed.value = val;
       if (sliderSpeed) sliderSpeed.value = val;
       if (speedDisplay) speedDisplay.innerText = `${val} RPM`;
-      this.sendCommand(`MODE 3`);
       this.sendCommand(`SPEED ${val}`);
       document.querySelectorAll('.btn-mode').forEach(b => b.classList.remove('active'));
       const speedBtn = document.querySelector('.btn-mode[data-mode="3"]');
@@ -246,7 +245,6 @@ class FOCOscilloscopeStudio {
       const numVal = parseFloat(val).toFixed(1);
       if (inputVq) inputVq.value = numVal;
       if (vqDisplay) vqDisplay.innerText = `${numVal} V`;
-      this.sendCommand(`MODE 5`);
       this.sendCommand(`VQ ${numVal}`);
       document.querySelectorAll('.btn-mode').forEach(b => b.classList.remove('active'));
       const vqBtn = document.querySelector('.btn-mode[data-mode="5"]');
@@ -283,13 +281,15 @@ class FOCOscilloscopeStudio {
     const inputIq = document.getElementById('input-iq');
     const iqDisplay = document.getElementById('iq-display');
     const btnSetIq = document.getElementById('btn-set-iq');
+    const sliderIq = document.getElementById('slider-iq');
 
     const updateIq = (val) => {
-      const numVal = parseFloat(val).toFixed(1);
+      const numVal = parseFloat(val).toFixed(2);
       if (inputIq) inputIq.value = numVal;
+      if (sliderIq) sliderIq.value = numVal;
       if (iqDisplay) iqDisplay.innerText = `${numVal} A`;
-      this.sendCommand(`MODE 1`);
       this.sendCommand(`IQ ${numVal}`);
+      this.appendLog(`⚡ Đặt dòng điện mục tiêu Iq: ${numVal}A`, 'success');
       document.querySelectorAll('.btn-mode').forEach(b => b.classList.remove('active'));
       const curBtn = document.querySelector('.btn-mode[data-mode="1"]');
       if (curBtn) curBtn.classList.add('active');
@@ -303,6 +303,23 @@ class FOCOscilloscopeStudio {
         if (e.key === 'Enter') updateIq(inputIq.value);
       });
     }
+
+    if (sliderIq) {
+      sliderIq.addEventListener('input', (e) => {
+        if (iqDisplay) iqDisplay.innerText = `${parseFloat(e.target.value).toFixed(2)} A`;
+        if (inputIq) inputIq.value = e.target.value;
+      });
+      sliderIq.addEventListener('change', (e) => {
+        updateIq(e.target.value);
+      });
+    }
+
+    document.querySelectorAll('.btn-iq-preset').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const iq = btn.getAttribute('data-iq');
+        if (iq !== null) updateIq(iq);
+      });
+    });
 
     // Position / Angle Controls (Degrees -> Radians)
     const inputPos = document.getElementById('input-pos');
@@ -339,28 +356,76 @@ class FOCOscilloscopeStudio {
       });
     });
 
-    // Open-Loop Test Run Buttons (Forward & Reverse)
-    const btnFwd = document.getElementById('btn-openloop-fwd');
-    if (btnFwd) {
-      btnFwd.addEventListener('click', () => {
+    // Open-Loop Quick Test Buttons
+    const btnOpenloopFwd = document.getElementById('btn-openloop-fwd');
+    if (btnOpenloopFwd) {
+      btnOpenloopFwd.addEventListener('click', () => {
         this.sendCommand('OPENLOOP 200');
-        this.appendLog('⚡ TEST RUN (+200 RPM) started.', 'success');
-      });
-    }
-    const btnRev = document.getElementById('btn-openloop-rev');
-    if (btnRev) {
-      btnRev.addEventListener('click', () => {
-        this.sendCommand('OPENLOOP -200');
-        this.appendLog('🔄 TEST RUN (-200 RPM Reverse) started.', 'success');
+        this.appendLog('Open-loop Forward 200 ERPM started.', 'warn');
       });
     }
 
-    // Align Encoder Button
+    const btnOpenloopRev = document.getElementById('btn-openloop-rev');
+    if (btnOpenloopRev) {
+      btnOpenloopRev.addEventListener('click', () => {
+        this.sendCommand('OPENLOOP -200');
+        this.appendLog('Open-loop Reverse -200 ERPM started.', 'warn');
+      });
+    }
+
+    // Direct D-Axis Encoder Alignment
     const btnAlign = document.getElementById('btn-align');
     if (btnAlign) {
       btnAlign.addEventListener('click', () => {
         this.sendCommand('ALIGN');
         this.appendLog('Aligning encoder zero angle... Please wait 2 seconds.', 'warn');
+      });
+    }
+
+    // ✨ One-Click Auto-Tune / Calibration for Any Motor
+    const btnAutoTune = document.getElementById('btn-auto-tune');
+    if (btnAutoTune) {
+      btnAutoTune.addEventListener('click', async () => {
+        if (!confirm('Bắt đầu quy trình TỰ ĐỘNG NHẬN DẠNG & TUNE PID ĐỘNG CƠ (One-Click Auto-Tune)?\n\nĐộng cơ sẽ tự động thực hiện 5 giai đoạn:\n1. Phát hiện số cặp cực & chiều encoder\n2. Nạp bảng bù phi tuyến LUT 128 điểm\n3. Căn chỉnh góc 0 cơ điện tử\n4. Kiểm tra Closed-Loop 2 chiều\n5. Nhận dạng hàm truyền & tự động tính toán Speed PI + Pos PD tối ưu (~25 giây).')) {
+          return;
+        }
+        btnAutoTune.disabled = true;
+        btnAutoTune.innerText = '⏳ TUNING...';
+        this.appendLog('🚀 Đang chạy Universal Auto-Tune & PID Optimization... Vui lòng không chạm vào động cơ.', 'warn');
+
+        try {
+          const res = await fetch('/api/auto_tune', { method: 'POST' });
+          const data = await res.json();
+          if (data.success) {
+            const p = data.profile;
+            // Auto-populate PID fields on UI
+            if (p.speed_pi) {
+              const elSkp = document.getElementById('tune-skp');
+              const elSki = document.getElementById('tune-ski');
+              const elSramp = document.getElementById('tune-sramp');
+              if (elSkp) elSkp.value = p.speed_pi.kp.toFixed(5);
+              if (elSki) elSki.value = p.speed_pi.ki.toFixed(5);
+              if (elSramp) elSramp.value = p.speed_pi.ramp || 3000;
+            }
+            if (p.pos_pd) {
+              const elPkp = document.getElementById('tune-pkp');
+              const elPkd = document.getElementById('tune-pkd');
+              if (elPkp) elPkp.value = p.pos_pd.kp.toFixed(2);
+              if (elPkd) elPkd.value = p.pos_pd.kd.toFixed(3);
+            }
+
+            this.appendLog(`🎉 AUTO-TUNE HOÀN TẤT! Pole Pairs=${p.pole_pairs}, Dir=${p.encoder_direction}, Speed PI: Kp=${p.speed_pi?.kp.toFixed(5)}, Ki=${p.speed_pi?.ki.toFixed(5)}`, 'success');
+            alert(`🎉 AUTO-TUNE & TỐI ƯU PID THÀNH CÔNG!\n\n- Số cặp cực: ${p.pole_pairs}\n- Chiều Encoder: ${p.encoder_direction}\n- Bù lệch tâm: ${p.eccentricity_deg_mech.toFixed(2)}° cơ\n- Tốc độ thuận: ${p.forward_100_rpm.toFixed(1)} RPM | Nghịch: ${p.reverse_100_rpm.toFixed(1)} RPM\n- Speed PI Tối Ưu: Kp = ${p.speed_pi?.kp.toFixed(5)}, Ki = ${p.speed_pi?.ki.toFixed(5)}\n- Pos PD Tối Ưu: Kp = ${p.pos_pd?.kp.toFixed(2)}, Kd = ${p.pos_pd?.kd.toFixed(3)}\n\nĐã tự động nạp thông số vào Driver & cập nhật giao diện!`);
+          } else {
+            this.appendLog(`❌ Auto-tune thất bại: ${data.message}`, 'error');
+            alert(`Auto-tune thất bại:\n${data.message}`);
+          }
+        } catch (err) {
+          this.appendLog(`❌ Lỗi kết nối Auto-tune: ${err.message}`, 'error');
+        } finally {
+          btnAutoTune.disabled = false;
+          btnAutoTune.innerText = '✨ AUTO TUNE';
+        }
       });
     }
 
@@ -511,14 +576,11 @@ class FOCOscilloscopeStudio {
     const btnApplySpeedPID = document.getElementById('btn-apply-speed-pid');
     if (btnApplySpeedPID) {
       btnApplySpeedPID.addEventListener('click', () => {
-        const kp = parseFloat(document.getElementById('tune-skp')?.value || '0.00200');
+        const kp = parseFloat(document.getElementById('tune-skp')?.value || '0.00150');
         const ki = parseFloat(document.getElementById('tune-ski')?.value || '0.00100');
-        const ramp = parseFloat(document.getElementById('tune-sramp')?.value || '2500');
-        this.sendCommand(`KP_S ${kp}`);
-        this.sendCommand(`KI_S ${ki}`);
-        this.sendCommand(`KD_S 0.0`);
-        this.sendCommand(`RAMP ${ramp}`);
-        this.appendLog(`⚙️ Speed PI & Ramp Updated: Kp=${kp}, Ki=${ki}, Ramp=${ramp}`, 'success');
+        const ramp = parseFloat(document.getElementById('tune-sramp')?.value || '3000');
+        this.sendCommand(`SET_SPEED_PID ${kp} ${ki} ${ramp}`);
+        this.appendLog(`⚙️ Speed PI & Ramp Cập Nhật Thành Công: Kp=${kp}, Ki=${ki}, Ramp=${ramp} ERPM/s`, 'success');
       });
     }
 
@@ -539,10 +601,8 @@ class FOCOscilloscopeStudio {
       btnApplyPosPID.addEventListener('click', () => {
         const kp = parseFloat(document.getElementById('tune-pkp')?.value || '20.0');
         const kd = parseFloat(document.getElementById('tune-pkd')?.value || '0.10');
-        this.sendCommand(`KP_P ${kp}`);
-        this.sendCommand(`KI_P 0.0`);
-        this.sendCommand(`KD_P ${kd}`);
-        this.appendLog(`⚙️ Position PD Updated: Kp=${kp}, Kd=${kd}`, 'success');
+        this.sendCommand(`SET_POS_PID ${kp} ${kd}`);
+        this.appendLog(`⚙️ Position PD Cập Nhật Thành Công: Kp=${kp}, Kd=${kd}`, 'success');
       });
     }
 

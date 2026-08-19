@@ -82,6 +82,23 @@ class TelemetryManager:
         self.sse_clients = []
         self.sse_lock = threading.Lock()
 
+        # Background auto-reconnector
+        self.auto_reconnect_enabled = True
+        self.reconnect_thread = threading.Thread(target=self._auto_reconnect_loop, daemon=True)
+        self.reconnect_thread.start()
+
+    def _auto_reconnect_loop(self):
+        while True:
+            time.sleep(1.0)
+            if self.auto_reconnect_enabled and not self.is_connected:
+                ports = self.get_available_ports()
+                if ports:
+                    target_port = ports[0]['port']
+                    try:
+                        self.connect(target_port, self.baudrate or 115200)
+                    except Exception:
+                        pass
+
     def get_available_ports(self):
         ports = []
         usb_ports = []
@@ -146,9 +163,9 @@ class TelemetryManager:
         if not self.is_connected or not self.ser:
             return False, "Not connected"
         try:
-            if not cmd_str.endswith('\n'):
-                cmd_str += '\n'
-            self.ser.write(cmd_str.encode('utf-8'))
+            cmd = cmd_str.strip() + '\r\n'
+            self.ser.write(cmd.encode('utf-8'))
+            self.ser.flush()
             self.log_diagnostic(f"Sent Command: {cmd_str.strip()}")
             return True, "Command sent"
         except Exception as e:
@@ -305,12 +322,16 @@ class TelemetryManager:
                         if errors_per_sec > 0:
                             self.log_diagnostic(f"⚠️ Checksum errors: {errors_per_sec:.0f}/s (total={self.error_count})")
                     self._last_error_count = self.error_count
-                    self.last_fps_packets = self.packet_count
-                    self.last_fps_time = now
-
             except Exception as e:
                 if self.running:
                     self.log_diagnostic(f"Serial read error: {str(e)}")
+                    self.is_connected = False
+                    try:
+                        if self.ser:
+                            self.ser.close()
+                    except Exception:
+                        pass
+                    break
                     time.sleep(0.01)
 
     def _broadcast_sse(self, pkt):
@@ -432,6 +453,47 @@ class TelemetryHTTPHandler(SimpleHTTPRequestHandler):
             cmd = body.get("command", "")
             success, msg = telemetry_mgr.send_command(cmd)
             self._send_json({"success": success, "message": msg})
+
+        elif path == "/api/auto_tune":
+            import subprocess
+            telemetry_mgr.auto_reconnect_enabled = False
+            was_connected = telemetry_mgr.is_connected
+            saved_port = telemetry_mgr.port
+            saved_baud = telemetry_mgr.baudrate
+            if was_connected:
+                telemetry_mgr.disconnect()
+                time.sleep(0.5)
+
+            script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "foc_studio_oss", "auto_identify_motor.py"))
+            profile_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "foc_studio_oss", "motor_calib_profile.json"))
+            if os.path.exists(profile_path):
+                try:
+                    os.remove(profile_path)
+                except Exception:
+                    pass
+            try:
+                cmd_args = [sys.executable, script_path]
+                if saved_port:
+                    cmd_args.append(saved_port)
+                res = subprocess.run(cmd_args, capture_output=True, text=True, timeout=90)
+                output = res.stdout
+                profile = {}
+                if os.path.exists(profile_path):
+                    with open(profile_path, "r") as f:
+                        profile = json.load(f)
+                success = (res.returncode == 0 and bool(profile))
+                msg = output if success else (res.stderr or output or "Calibration failed")
+            except Exception as e:
+                success = False
+                msg = str(e)
+                profile = {}
+            finally:
+                if was_connected:
+                    time.sleep(0.3)
+                    telemetry_mgr.connect(saved_port, saved_baud)
+                telemetry_mgr.auto_reconnect_enabled = True
+
+            self._send_json({"success": success, "message": msg, "profile": profile})
 
         else:
             self.send_error(404, "Endpoint not found")
