@@ -1,0 +1,22 @@
+======================================================================
+FOC CLOSED-LOOP VERIFICATION REPORT
+======================================================================
+
+[1] Running ALIGN (7.5s)...
+  Alignment Done: EncDir=1, ZeroAngle=-2.9656 rad (-169.9 deg)
+
+[2] Testing VQ 4.0V (3.0s)...
+  VQ 4.0V Result: Mean = +92.2 RPM, Max = 102.3 RPM
+
+[3] Testing SPEED 100 RPM Closed-Loop (4.0s)...
+  SPEED 100 Result: Actual Mean = +80.3 RPM (Target=100 RPM) | Vq = 2.82V | Iq = 0.003A
+
+[4] Testing SPEED 200 RPM Closed-Loop (4.0s)...
+  SPEED 200 Result: Actual Mean = +163.8 RPM (Target=200 RPM) | Vq = 4.98V | Iq = -0.008A
+
+[5] Testing SPEED -100 RPM Reverse Closed-Loop (4.0s)...
+  SPEED -100 Result: Actual Mean = -81.1 RPM (Target=-100 RPM) | Vq = -2.78V | Iq = -0.002A
+
+======================================================================
+Verification complete. Log saved to: /home/du/Desktop/wheeled-humanoid/foc_verification_report.txt
+======================================================================
