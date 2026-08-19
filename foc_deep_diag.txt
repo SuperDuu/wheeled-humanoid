@@ -1,0 +1,107 @@
+======================================================================
+DEEP FOC DIAGNOSTIC
+======================================================================
+
+[0] Reading baseline (1s)...
+  Baseline: Mode=5, State=0, Fault=0, Vbus=23.3V, EncDir=1, ZeroAngle=0.0
+
+[1] Running ALIGN (7.5s)...
+  Collected 645 alignment samples
+  encoder_dir=1, zero_elec_angle=-2.7953 rad (-160.16 deg)
+
+[2] VQ +6.0V test (3s)...
+  Collected 305 VQ samples
+  --- First 5 VQ samples ---
+    RPM= -13.21 Phase_e=+0.169 Mech=+3.166 Iq=+0.085 Id=-0.213 Vq= +6.00 Vd= +0.00 Da=0.421 Db=0.722 Dc=0.278 Ia=-0.290 Ib=+0.086 Ic=+0.204
+    RPM= +16.03 Phase_e=+0.805 Mech=+3.196 Iq=+0.613 Id=-0.385 Vq= +6.00 Vd= +0.00 Da=0.269 Db=0.731 Dc=0.400 Ia=-0.894 Ib=+0.488 Ic=+0.406
+    RPM= +28.28 Phase_e=+1.135 Mech=+3.212 Iq=+0.468 Id=-0.098 Vq= +6.00 Vd= +0.00 Da=0.267 Db=0.733 Dc=0.519 Ia=+0.133 Ib=+0.146 Ic=-0.279
+    RPM= +24.24 Phase_e=+1.224 Mech=+3.216 Iq=+0.525 Id=-0.063 Vq= +6.00 Vd= +0.00 Da=0.271 Db=0.729 Dc=0.553 Ia=-0.189 Ib=+0.287 Ic=-0.098
+    RPM= +14.48 Phase_e=+1.208 Mech=+3.216 Iq=+0.587 Id=-0.084 Vq= +6.00 Vd= +0.00 Da=0.270 Db=0.730 Dc=0.546 Ia=-0.471 Ib=+0.408 Ic=+0.063
+  --- Last 5 VQ samples ---
+    RPM=  +0.08 Phase_e=+1.118 Mech=+5.006 Iq=+0.411 Id=-0.017 Vq= +5.89 Vd= +0.00 Da=0.267 Db=0.734 Dc=0.512 Ia=-0.632 Ib=+0.388 Ic=+0.244
+    RPM=  -0.01 Phase_e=+1.134 Mech=+5.007 Iq=+0.545 Id=-0.117 Vq= +5.89 Vd= +0.00 Da=0.267 Db=0.733 Dc=0.518 Ia=-0.733 Ib=+0.448 Ic=+0.285
+    RPM=  -0.02 Phase_e=+1.126 Mech=+5.007 Iq=+0.588 Id=-0.174 Vq= +5.89 Vd= +0.00 Da=0.267 Db=0.733 Dc=0.515 Ia=-0.552 Ib=+0.388 Ic=+0.164
+    RPM=  -0.05 Phase_e=+1.134 Mech=+5.007 Iq=+0.476 Id=-0.080 Vq= +5.89 Vd= +0.00 Da=0.267 Db=0.733 Dc=0.518 Ia=+0.113 Ib=+0.146 Ic=-0.259
+    RPM=  +0.12 Phase_e=+1.134 Mech=+5.007 Iq=+0.475 Id=-0.080 Vq= +5.89 Vd= +0.00 Da=0.267 Db=0.733 Dc=0.518 Ia=-0.290 Ib=+0.227 Ic=+0.063
+
+  VQ STEADY-STATE (244 samples):
+    Speed: mean=+14.01 RPM
+    Iq:    mean=+0.3492 A (SHOULD BE POSITIVE)
+    Id:    mean=-0.0784 A
+
+[3] IQ 1.0A test (3s)...
+  Collected 305 IQ samples
+  --- ALL IQ samples (every 5th) ---
+    [  0] RPM=  -0.17 Iq= +0.186 IqTgt=+1.000 Vq=  +7.84 Vd=  -0.23 Phase_e=+1.118 Ia=+0.032 Ib=+0.227 Ic=-0.259 Fault=0
+    [  1] RPM=  +2.19 Iq= -1.310 IqTgt=+1.000 Vq= +10.48 Vd=  -0.57 Phase_e=+1.247 Ia=+1.019 Ib=-0.760 Ic=-0.259 Fault=0
+    [  2] RPM=  +9.14 Iq= -0.650 IqTgt=+1.000 Vq= +10.48 Vd=  -0.63 Phase_e=+1.473 Ia=+0.637 Ib=-0.357 Ic=-0.279 Fault=0
+    [  3] RPM= +11.74 Iq= -0.423 IqTgt=+1.000 Vq= +10.48 Vd=  -0.58 Phase_e=+1.529 Ia=+0.254 Ib=-0.156 Ic=-0.098 Fault=0
+    [  4] RPM=  +7.44 Iq= -0.534 IqTgt=+1.000 Vq= +10.48 Vd=  -0.55 Phase_e=+1.537 Ia=+0.496 Ib=-0.317 Ic=-0.178 Fault=0
+    [  5] RPM=  +3.86 Iq= -0.412 IqTgt=+1.000 Vq= +10.47 Vd=  -0.67 Phase_e=+1.545 Ia=+0.878 Ib=-0.357 Ic=-0.521 Fault=0
+    [  6] RPM=  +1.78 Iq= -0.349 IqTgt=+1.000 Vq= +10.48 Vd=  -0.61 Phase_e=+1.561 Ia=+0.133 Ib=-0.075 Ic=-0.058 Fault=0
+    [  7] RPM=  +0.79 Iq= -0.388 IqTgt=+1.000 Vq= +10.48 Vd=  -0.51 Phase_e=+1.529 Ia=+0.536 Ib=-0.357 Ic=-0.178 Fault=0
+    [  8] RPM=  +0.30 Iq= -0.383 IqTgt=+1.000 Vq= +10.47 Vd=  -0.76 Phase_e=+1.529 Ia=+0.435 Ib=-0.075 Ic=-0.360 Fault=0
+    [  9] RPM=  +0.19 Iq= -0.292 IqTgt=+1.000 Vq= +10.48 Vd=  -0.63 Phase_e=+1.553 Ia=-0.048 Ib=+0.066 Ic=-0.017 Fault=0
+    [ 10] RPM=  +0.02 Iq= -0.448 IqTgt=+1.000 Vq= +10.48 Vd=  -0.51 Phase_e=+1.545 Ia=+0.697 Ib=-0.438 Ic=-0.259 Fault=0
+    [ 15] RPM=  -0.02 Iq= -0.403 IqTgt=+1.000 Vq= +10.48 Vd=  -0.56 Phase_e=+1.513 Ia=+0.556 Ib=-0.378 Ic=-0.178 Fault=0
+    [ 20] RPM=  +0.09 Iq= -0.336 IqTgt=+1.000 Vq= +10.48 Vd=  -0.53 Phase_e=+1.545 Ia=+0.294 Ib=-0.216 Ic=-0.078 Fault=0
+    [ 25] RPM=  +0.00 Iq= -0.461 IqTgt=+1.000 Vq= +10.47 Vd=  -0.77 Phase_e=+1.529 Ia=+0.476 Ib=-0.096 Ic=-0.380 Fault=0
+    [ 30] RPM=  -0.14 Iq= -0.408 IqTgt=+1.000 Vq= +10.48 Vd=  -0.61 Phase_e=+1.545 Ia=+0.294 Ib=-0.176 Ic=-0.118 Fault=0
+    [ 35] RPM=  -0.02 Iq= -0.438 IqTgt=+1.000 Vq= +10.48 Vd=  -0.53 Phase_e=+1.521 Ia=+0.455 Ib=-0.317 Ic=-0.138 Fault=0
+    [ 40] RPM=  +0.06 Iq= -0.382 IqTgt=+1.000 Vq= +10.31 Vd=  -0.56 Phase_e=+1.545 Ia=+0.254 Ib=-0.116 Ic=-0.138 Fault=0
+    [ 45] RPM=  +0.12 Iq= -0.314 IqTgt=+1.000 Vq= +10.31 Vd=  -0.54 Phase_e=+1.545 Ia=+0.274 Ib=-0.156 Ic=-0.118 Fault=0
+    [ 50] RPM=  +0.09 Iq= -0.419 IqTgt=+1.000 Vq= +10.29 Vd=  -0.80 Phase_e=+1.545 Ia=+0.415 Ib=+0.005 Ic=-0.420 Fault=0
+    [ 55] RPM=  -0.03 Iq= -0.286 IqTgt=+1.000 Vq= +10.31 Vd=  -0.56 Phase_e=+1.545 Ia=+0.113 Ib=-0.075 Ic=-0.037 Fault=0
+    [ 60] RPM=  +0.00 Iq= -0.312 IqTgt=+1.000 Vq= +10.31 Vd=  -0.58 Phase_e=+1.545 Ia=-0.149 Ib=+0.086 Ic=+0.063 Fault=0
+    [ 65] RPM=  +0.03 Iq= -0.170 IqTgt=+1.000 Vq= +10.31 Vd=  -0.60 Phase_e=+1.537 Ia=+0.032 Ib=+0.005 Ic=-0.037 Fault=0
+    [ 70] RPM=  -0.02 Iq= -0.326 IqTgt=+1.000 Vq= +10.31 Vd=  -0.56 Phase_e=+1.529 Ia=+0.053 Ib=-0.015 Ic=-0.037 Fault=0
+    [ 75] RPM=  +0.01 Iq= -0.362 IqTgt=+1.000 Vq= +10.31 Vd=  -0.51 Phase_e=+1.545 Ia=+0.576 Ib=-0.317 Ic=-0.259 Fault=0
+    [ 80] RPM=  -0.02 Iq= -0.315 IqTgt=+1.000 Vq= +10.30 Vd=  -0.68 Phase_e=+1.537 Ia=+0.395 Ib=-0.035 Ic=-0.360 Fault=0
+    [ 85] RPM=  -0.03 Iq= -0.359 IqTgt=+1.000 Vq= +10.31 Vd=  -0.50 Phase_e=+1.545 Ia=+0.173 Ib=-0.096 Ic=-0.078 Fault=0
+    [ 90] RPM=  -0.03 Iq= -0.567 IqTgt=+1.000 Vq= +10.31 Vd=  -0.52 Phase_e=+1.545 Ia=+0.919 Ib=-0.438 Ic=-0.481 Fault=0
+    [ 95] RPM=  -0.00 Iq= -0.334 IqTgt=+1.000 Vq= +10.32 Vd=  -0.47 Phase_e=+1.545 Ia=+0.214 Ib=-0.096 Ic=-0.118 Fault=0
+    [100] RPM=  +0.03 Iq= -0.403 IqTgt=+1.000 Vq= +10.32 Vd=  -0.38 Phase_e=+1.545 Ia=+0.435 Ib=-0.257 Ic=-0.178 Fault=0
+    [105] RPM=  +0.06 Iq= -0.437 IqTgt=+1.000 Vq= +10.32 Vd=  -0.39 Phase_e=+1.553 Ia=+0.153 Ib=-0.075 Ic=-0.078 Fault=0
+    [110] RPM=  +0.04 Iq= -0.391 IqTgt=+1.000 Vq= +10.32 Vd=  -0.30 Phase_e=+1.545 Ia=+0.335 Ib=-0.196 Ic=-0.138 Fault=0
+    [115] RPM=  -0.11 Iq= -0.339 IqTgt=+1.000 Vq= +10.32 Vd=  -0.35 Phase_e=+1.553 Ia=+0.395 Ib=-0.257 Ic=-0.138 Fault=0
+    [120] RPM=  -0.29 Iq= -0.393 IqTgt=+1.000 Vq= +10.30 Vd=  -0.71 Phase_e=+1.537 Ia=+0.657 Ib=-0.176 Ic=-0.481 Fault=0
+    [125] RPM=  -0.32 Iq= -0.267 IqTgt=+1.000 Vq= +10.30 Vd=  -0.77 Phase_e=+1.521 Ia=+0.415 Ib=-0.277 Ic=-0.138 Fault=0
+    [130] RPM=  -0.32 Iq= -0.327 IqTgt=+1.000 Vq= +10.29 Vd=  -0.89 Phase_e=+1.489 Ia=+0.314 Ib=-0.196 Ic=-0.118 Fault=0
+    [135] RPM=  -0.25 Iq= -0.316 IqTgt=+1.000 Vq= +10.29 Vd=  -0.91 Phase_e=+1.481 Ia=+0.153 Ib=-0.096 Ic=-0.058 Fault=0
+    [140] RPM=  +0.00 Iq= -0.354 IqTgt=+1.000 Vq= +10.31 Vd=  -0.72 Phase_e=+1.489 Ia=+0.254 Ib=-0.317 Ic=+0.063 Fault=0
+    [145] RPM=  -0.23 Iq= -0.411 IqTgt=+1.000 Vq= +10.30 Vd=  -0.86 Phase_e=+1.481 Ia=+0.476 Ib=-0.317 Ic=-0.158 Fault=0
+    [150] RPM=  -0.08 Iq= -0.546 IqTgt=+1.000 Vq= +10.28 Vd=  -1.10 Phase_e=+1.465 Ia=+0.677 Ib=-0.196 Ic=-0.481 Fault=0
+    [155] RPM=  -0.07 Iq= -0.577 IqTgt=+1.000 Vq= +10.30 Vd=  -0.87 Phase_e=+1.465 Ia=+0.476 Ib=-0.277 Ic=-0.199 Fault=0
+    [160] RPM=  -0.22 Iq= -0.680 IqTgt=+1.000 Vq= +10.30 Vd=  -0.85 Phase_e=+1.456 Ia=+0.576 Ib=-0.378 Ic=-0.199 Fault=0
+    [165] RPM=  +0.01 Iq= -0.646 IqTgt=+1.000 Vq= +10.30 Vd=  -0.86 Phase_e=+1.465 Ia=+0.596 Ib=-0.398 Ic=-0.199 Fault=0
+    [170] RPM=  -0.12 Iq= -0.569 IqTgt=+1.000 Vq= +10.30 Vd=  -0.80 Phase_e=+1.456 Ia=+0.476 Ib=-0.317 Ic=-0.158 Fault=0
+    [175] RPM=  +0.40 Iq= -0.680 IqTgt=+1.000 Vq= +10.30 Vd=  -0.86 Phase_e=+1.473 Ia=+1.603 Ib=-0.801 Ic=-0.803 Fault=0
+    [180] RPM=  +0.44 Iq= -0.387 IqTgt=+1.000 Vq= +10.29 Vd=  -1.01 Phase_e=+1.505 Ia=+0.798 Ib=-0.317 Ic=-0.481 Fault=0
+    [185] RPM=  +0.02 Iq= -0.405 IqTgt=+1.000 Vq= +10.30 Vd=  -0.87 Phase_e=+1.513 Ia=+1.019 Ib=-0.519 Ic=-0.501 Fault=0
+    [190] RPM=  +0.20 Iq= -0.407 IqTgt=+1.000 Vq= +10.33 Vd=  -0.75 Phase_e=+1.529 Ia=+0.214 Ib=-0.136 Ic=-0.078 Fault=0
+    [195] RPM=  +0.33 Iq= -0.358 IqTgt=+1.000 Vq= +10.35 Vd=  -0.46 Phase_e=+1.561 Ia=+0.455 Ib=-0.297 Ic=-0.158 Fault=0
+    [200] RPM=  +0.34 Iq= -0.505 IqTgt=+1.000 Vq= +10.35 Vd=  -0.29 Phase_e=+1.569 Ia=+0.294 Ib=-0.136 Ic=-0.158 Fault=0
+    [205] RPM=  +0.27 Iq= -0.352 IqTgt=+1.000 Vq= +10.35 Vd=  -0.13 Phase_e=+1.569 Ia=+0.677 Ib=-0.237 Ic=-0.440 Fault=0
+    [210] RPM=  +0.07 Iq= -0.277 IqTgt=+1.000 Vq= +10.35 Vd=  +0.16 Phase_e=+1.585 Ia=+0.173 Ib=-0.116 Ic=-0.058 Fault=0
+    [215] RPM=  +0.04 Iq= -0.299 IqTgt=+1.000 Vq= +10.35 Vd=  +0.20 Phase_e=+1.585 Ia=+0.355 Ib=-0.237 Ic=-0.118 Fault=0
+    [220] RPM=  +0.12 Iq= -0.336 IqTgt=+1.000 Vq= +10.35 Vd=  +0.27 Phase_e=+1.609 Ia=+0.274 Ib=-0.176 Ic=-0.098 Fault=0
+    [225] RPM=  +0.08 Iq= -0.301 IqTgt=+1.000 Vq= +10.35 Vd=  +0.33 Phase_e=+1.601 Ia=+0.194 Ib=-0.116 Ic=-0.078 Fault=0
+    [230] RPM=  +0.16 Iq= -0.370 IqTgt=+1.000 Vq= +10.35 Vd=  +0.29 Phase_e=+1.609 Ia=+0.133 Ib=-0.055 Ic=-0.078 Fault=0
+    [235] RPM=  +0.12 Iq= -0.284 IqTgt=+1.000 Vq= +10.35 Vd=  +0.34 Phase_e=+1.601 Ia=+0.053 Ib=-0.015 Ic=-0.037 Fault=0
+    [240] RPM=  -0.01 Iq= -0.472 IqTgt=+1.000 Vq= +10.42 Vd=  +0.33 Phase_e=+1.601 Ia=+0.173 Ib=-0.075 Ic=-0.098 Fault=0
+    [245] RPM=  -0.03 Iq= -0.341 IqTgt=+1.000 Vq= +10.43 Vd=  +0.09 Phase_e=+1.601 Ia=+0.576 Ib=-0.055 Ic=-0.521 Fault=0
+    [250] RPM=  -0.12 Iq= -0.135 IqTgt=+1.000 Vq= +10.42 Vd=  +0.21 Phase_e=+1.585 Ia=+0.697 Ib=-0.277 Ic=-0.420 Fault=0
+    [255] RPM=  -0.14 Iq= -0.186 IqTgt=+1.000 Vq= +10.41 Vd=  +0.51 Phase_e=+1.585 Ia=-0.672 Ib=+0.106 Ic=+0.567 Fault=0
+    [260] RPM=  -0.39 Iq= -0.384 IqTgt=+1.000 Vq= +10.42 Vd=  +0.44 Phase_e=+1.569 Ia=+0.415 Ib=-0.317 Ic=-0.098 Fault=0
+    [265] RPM=  -1.71 Iq= -0.738 IqTgt=+1.000 Vq= +10.38 Vd=  +1.00 Phase_e=+1.513 Ia=+0.455 Ib=-0.357 Ic=-0.098 Fault=0
+    [270] RPM=  -1.45 Iq= -0.822 IqTgt=+1.000 Vq= +10.42 Vd=  +0.15 Phase_e=+1.344 Ia=+0.637 Ib=-0.438 Ic=-0.199 Fault=0
+    [275] RPM=  +2.50 Iq= -0.547 IqTgt=+1.000 Vq= +10.42 Vd=  +0.43 Phase_e=+1.537 Ia=+0.375 Ib=-0.277 Ic=-0.098 Fault=0
+    [280] RPM=  -1.10 Iq= -0.735 IqTgt=+1.000 Vq= +10.40 Vd=  +0.65 Phase_e=+1.473 Ia=+0.496 Ib=-0.357 Ic=-0.138 Fault=0
+    [285] RPM=  -0.59 Iq= -0.816 IqTgt=+1.000 Vq= +10.43 Vd=  +0.04 Phase_e=+1.368 Ia=+0.757 Ib=-0.438 Ic=-0.320 Fault=0
+    [290] RPM=  +1.25 Iq= -0.399 IqTgt=+1.000 Vq= +10.32 Vd=  +0.65 Phase_e=+1.529 Ia=+0.194 Ib=-0.257 Ic=+0.063 Fault=0
+    [295] RPM=  -2.12 Iq= -1.043 IqTgt=+1.000 Vq= +10.31 Vd=  +0.75 Phase_e=+1.416 Ia=+1.019 Ib=-0.720 Ic=-0.299 Fault=0
+    [300] RPM=  +2.31 Iq= -1.120 IqTgt=+1.000 Vq= +10.34 Vd=  -0.01 Phase_e=+1.392 Ia=+1.060 Ib=-0.720 Ic=-0.340 Fault=0
+
+======================================================================
+Report saved to: /home/du/Desktop/wheeled-humanoid/foc_deep_diag.txt
+======================================================================

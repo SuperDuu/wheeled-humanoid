@@ -1,0 +1,39 @@
+======================================================================
+FOC POLARITY & ANGLE AUTO-DISCRIMINATOR
+DO NOT TOUCH OR PUSH MOTOR WITH HAND DURING THIS TEST!
+======================================================================
+
+[1] Running ALIGN to establish zero reference (7.5s)...
+  Alignment base: raw_enc=2.5790 rad, zero_elec_angle=-0.8349 rad (-47.8 deg)
+
+--- [1/7] Testing CONFIG A: DIR=+1, Offset=Aligned (0 deg) ---
+  Result: MaxSpeed=0.3 RPM | MeanSpeed=-0.0 RPM | DeltaMech=-0.001 rad (-0.0 deg) | MeanIq=-0.449A
+  Motor held/locked position (0 RPM)
+
+--- [2/7] Testing CONFIG B: DIR=-1, Offset=Aligned (0 deg) ---
+  Result: MaxSpeed=0.2 RPM | MeanSpeed=+0.0 RPM | DeltaMech=-0.028 rad (-1.6 deg) | MeanIq=-0.380A
+  Motor held/locked position (0 RPM)
+
+--- [3/7] Testing CONFIG C: DIR=+1, Offset=+90 deg (Q-lead) ---
+  Result: MaxSpeed=16.0 RPM | MeanSpeed=+1.4 RPM | DeltaMech=+0.454 rad (+26.0 deg) | MeanIq=+0.187A
+  Motor showed partial movement (16.0 RPM)
+
+--- [4/7] Testing CONFIG D: DIR=+1, Offset=-90 deg (Q-lag) ---
+  Result: MaxSpeed=0.2 RPM | MeanSpeed=+0.0 RPM | DeltaMech=+0.001 rad (+0.0 deg) | MeanIq=+0.439A
+  Motor held/locked position (0 RPM)
+
+--- [5/7] Testing CONFIG E: DIR=+1, Offset=180 deg (Inverted) ---
+  Result: MaxSpeed=0.2 RPM | MeanSpeed=-0.0 RPM | DeltaMech=+0.001 rad (+0.0 deg) | MeanIq=+0.439A
+  Motor held/locked position (0 RPM)
+
+--- [6/7] Testing CONFIG F: DIR=-1, Offset=+90 deg ---
+  Result: MaxSpeed=0.2 RPM | MeanSpeed=-0.0 RPM | DeltaMech=-0.003 rad (-0.2 deg) | MeanIq=+0.356A
+  Motor held/locked position (0 RPM)
+
+--- [7/7] Testing CONFIG G: DIR=-1, Offset=-90 deg ---
+  Result: MaxSpeed=0.2 RPM | MeanSpeed=-0.0 RPM | DeltaMech=+0.000 rad (+0.0 deg) | MeanIq=+0.347A
+  Motor held/locked position (0 RPM)
+
+======================================================================
+No configuration spun continuously without external help.
+======================================================================
