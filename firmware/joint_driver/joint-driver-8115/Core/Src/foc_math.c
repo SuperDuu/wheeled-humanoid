@@ -304,39 +304,32 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 	float pole_pairs = (float)conf_now->foc_motor_pole_pairs;
 	float gear_ratio = (conf_now->gear_ratio > 0.1f) ? conf_now->gear_ratio : 17.0f;
 
-	// 2. Velocity Feedforward: Chuẩn hóa theo tốc độ trục động cơ (rad/s điện)
-	float motor_vel_target = target_vel_rad_s * gear_ratio;
-	float elec_rad_s = motor_vel_target * pole_pairs;
-	float bemf_ff = elec_rad_s * conf_now->foc_motor_flux_linkage;
-	float friction_ff = (target_vel_rad_s > 0.01f ? 1.0f : (target_vel_rad_s < -0.01f ? -1.0f : 0.0f));
-	float v_ff = bemf_ff + friction_ff;
+	// 2. Velocity Tracking & Damping (MIT Mini Cheetah Impedance Model)
+	float actual_joint_vel = (motor->m_speed_est_fast / pole_pairs) / gear_ratio; // Output rad/s
+	float vel_error = target_vel_rad_s - actual_joint_vel;
 
-	// 3. High-Stiffness Servo Position PD Controller (Volts output)
-	float p_gain = (conf_now->p_pid_kp > 0.1f) ? conf_now->p_pid_kp : 30.0f; // 30.0 V/rad stiffness
-	float d_gain = (conf_now->p_pid_kd > 0.001f) ? conf_now->p_pid_kd : 0.08f;
+	// 3. Smooth Cycloid Friction Feedforward
+	float iq_friction_ff = 0.50f * tanhf(target_vel_rad_s / 0.05f);
+
+	// 4. MIT Impedance PD Controller: Iq_cmd = Kp * e_pos + Kd * e_vel + Iq_ff
+	float p_gain = conf_now->p_pid_kp; // 15.0 A/rad (Virtual joint stiffness)
+	float d_gain = conf_now->p_pid_kd; // 0.50 A/(rad/s) (Virtual joint damping)
 	float p_term = error * p_gain;
-	motor->m_pos_i_term = 0.0f;   // Zero I-lag
-
-	// D-term damping on velocity tracking error (triệt tiêu lực cản tự hãm khi đang tăng tốc)
-	float actual_motor_vel = motor->m_speed_est_fast / pole_pairs;
-	float vel_error = motor_vel_target - actual_motor_vel;
 	float d_term = vel_error * d_gain;
+	motor->m_pos_i_term = 0.0f;        // Zero I-term (No windup, elastic impact absorption)
 
-	float output_v = v_ff + p_term + d_term;
+	float iq_cmd = p_term + d_term + iq_friction_ff;
 
-	// 4. Holding Voltage Clamping based on user limit (Max 16V = ~4.1A / ~45Nm ngõ ra)
-	float hold_limit_a = (motor->m_pos_holding_current_limit > 0.1f) ? motor->m_pos_holding_current_limit : 4.0f;
-	float max_hold_v = hold_limit_a * conf_now->foc_motor_r;
-	if (max_hold_v > 16.0f) max_hold_v = 16.0f;
-	if (max_hold_v < 3.0f) max_hold_v = 3.0f;
+	// 5. Holding Current Limit (Max 6.6A stall limit)
+	float hold_limit_a = (conf_now->l_current_max > 0.1f) ? conf_now->l_current_max : 6.60f;
+	utils_truncate_number_abs(&iq_cmd, hold_limit_a);
 
-	utils_truncate_number_abs(&output_v, max_hold_v);
-	motor->m_iq_set = output_v;
+	motor->m_iq_set = iq_cmd; // Commanded torque current in Amperes -> 20kHz Current Loop
 }
 
 /**
-  * @brief  Speed Controller Loop (Voltage-Mode: Output = Vq in Volts)
-  *         Feedforward + P + Bounded-I Controller with smooth speed tracking.
+  * @brief  Speed Controller Loop (Cascaded Current-Mode FOC: Output = Iq in Amperes)
+  *         Speed PI + Zero-Crossing Tanh Friction Feedforward + Anti-Windup.
   */
 void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *motor) {
 	mc_configuration *conf_now = motor->m_conf;
@@ -348,55 +341,56 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		return;
 	}
 
-	// 1. Smooth Responsive Acceleration Ramp (5000 ERPM/s ~ 240 RPM/s)
-	float ramp_rate = (conf_now->s_pid_ramp_erpms_s > 10.0f) ? conf_now->s_pid_ramp_erpms_s : 5000.0f;
+	// 1. Smooth Acceleration Ramp (3000 ERPM/s ~ 142 RPM/s)
+	float ramp_rate = (conf_now->s_pid_ramp_erpms_s > 10.0f) ? conf_now->s_pid_ramp_erpms_s : 3000.0f;
 	utils_step_towards((float*)&motor->m_speed_pid_set_rpm, motor->m_speed_command_rpm, ramp_rate * dt);
 
 	float target_erpm = motor->m_speed_pid_set_rpm; // Ramped Target ERPM
 
-	// 1b. Smooth low-pass filter on speed feedback (~15Hz cutoff)
-	float erpm_raw = RADPS2RPM_f(motor->m_speed_est_fast);
-	UTILS_LP_FAST(motor->m_speed_d_filter, erpm_raw, 0.08f);
-	float erpm = motor->m_speed_d_filter;
-
+	// 2. Direct zero-lag PLL electrical speed feedback (20kHz 2nd-order PLL)
+	float erpm = RADPS2RPM_f(motor->m_speed_est_fast);
 	float error = target_erpm - erpm;
 
 	// Deadband when stopping
 	if (fabsf(target_erpm) < conf_now->s_pid_min_erpm && fabsf(motor->m_speed_command_rpm) < conf_now->s_pid_min_erpm) {
 		motor->m_speed_i_term = 0.0f;
-		motor->m_speed_prev_error = erpm;
+		motor->m_speed_prev_error = error;
 		motor->m_iq_set = 0.0f;
 		return;
 	}
 
-	// 2. Safe Maximum Voltage Ceiling
-	float max_v = ONE_BY_SQRT3 * conf_now->l_max_duty * motor->m_motor_state.v_bus;
-	if (max_v < 2.0f) max_v = 16.0f;
+	// 3. Smooth Zero-Crossing Friction Feedforward for 1:17 Cycloid Gearbox
+	float target_mech_rpm = target_erpm / (float)conf_now->foc_motor_pole_pairs;
+	float iq_friction_ff = 0.50f * tanhf(target_mech_rpm / 0.80f) + 0.0005f * target_mech_rpm;
 
-	// 3. Back-EMF Feedforward: Provides ~90% of required stator voltage for target speed
-	float elec_rad_s = target_erpm * 0.104719755f;
-	float lambda = (conf_now->foc_motor_flux_linkage > 0.001f) ? conf_now->foc_motor_flux_linkage : 0.0065f;
-	float vq_ff = elec_rad_s * lambda;
+	// 4. Proportional Term (Active Stiffness)
+	float kp = conf_now->s_pid_kp; // 0.0050 A/ERPM
+	float iq_p = error * kp;
 
-	// 4. Proportional Term (Kp: V/ERPM) - High stiffness to slice through cycloid gearbox torque peaks
-	float kp = (conf_now->s_pid_kp > 0.00001f) ? conf_now->s_pid_kp : 0.0030f;
-	float p_term = error * kp;
-
-	// 5. Integral Term with Anti-Windup (Max +/- 8.0V) to reject gearbox cyclic load disturbances
-	float ki = (conf_now->s_pid_ki > 0.000001f) ? conf_now->s_pid_ki : 0.00080f;
-	float max_i_term = 8.0f; // Sufficient authority to hold speed through 1:17 cycloid cam peaks
-
-	float i_increment = error * (ki * dt);
-	float vq_preview = vq_ff + p_term + motor->m_speed_i_term + i_increment;
-	if (fabsf(vq_preview) < max_v || (error * motor->m_speed_i_term < 0.0f)) {
-		motor->m_speed_i_term += i_increment;
-		utils_truncate_number_abs(&motor->m_speed_i_term, max_i_term);
+	// 5. Anti-Windup Integral Term (Zero steady-state error)
+	float ki = conf_now->s_pid_ki; // 0.0500 A/(ERPM*s)
+	if (ki > 0.00001f) {
+		motor->m_speed_i_term += (error * ki * dt);
+		utils_truncate_number_abs(&motor->m_speed_i_term, 3.0f); // Max 3.0A I-term authority
+	} else {
+		motor->m_speed_i_term = 0.0f;
 	}
 
-	// 6. Total Output Voltage
-	float vq_out = vq_ff + p_term + motor->m_speed_i_term;
-	utils_truncate_number_abs(&vq_out, max_v);
-	motor->m_iq_set = vq_out;
+	// 6. Active Derivative Damping
+	float d_error = (error - motor->m_speed_prev_error) / dt;
+	motor->m_speed_prev_error = error;
+	float kd = conf_now->s_pid_kd; // 0.0001 A/(ERPM/s)
+	float iq_d = d_error * kd;
+	utils_truncate_number_abs(&iq_d, 1.50f);
+
+	// 7. Total Commanded Current (Amperes)
+	float iq_cmd = iq_p + motor->m_speed_i_term + iq_d + iq_friction_ff;
+
+	// 8. Safe Stall Current Clamping
+	float i_max = (conf_now->l_current_max > 0.1f) ? conf_now->l_current_max : 6.60f;
+	utils_truncate_number_abs(&iq_cmd, i_max);
+
+	motor->m_iq_set = iq_cmd; // Target Iq current in Amperes -> 20kHz Current Loop
 }
 
 /**

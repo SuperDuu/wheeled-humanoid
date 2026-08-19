@@ -61,6 +61,7 @@ typedef struct {
 	float m_speed_i_term;
 	float m_speed_prev_error;
 	float m_speed_d_filter;
+	float m_speed_d_filter_proc;
 
 	// Pre-calculated variables
 	float p_lq;
