@@ -8,7 +8,7 @@ import struct
 import numpy as np
 from typing import Optional, Dict, Any
 
-# Binary Packet Format:
+# Binary Packet Format (94 bytes):
 # typedef struct {
 #     uint8_t  magic1;             // 0xAA (offset 0)
 #     uint8_t  magic2;             // 0x55 (offset 1)
@@ -21,11 +21,18 @@ from typing import Optional, Dict, Any
 #     float    phase_elec, mech_angle, joint_angle; // (offset 44, 48, 52)
 #     float    speed_rpm, speed_target_rpm; // (offset 56, 60)
 #     float    v_bus, temp_fet;    //      (offset 64, 68)
-#     uint8_t  control_mode, motor_state, fault_code, reserved; // (offset 72, 73, 74, 75)
-#     uint16_t checksum;           //      (offset 76)
-# } telemetry_packet_t; Total = 78 bytes.
-PACKET_FORMAT = "<BBBB I 16f BBBB H"
-PACKET_SIZE = struct.calcsize(PACKET_FORMAT)
+#     uint8_t  control_mode, motor_state, fault_code; // (offset 72, 73, 74)
+#     int8_t   encoder_dir;        //      (offset 75)
+#     float    vd, vq, zero_elec_angle, id_target; // (offset 76, 80, 84, 88)
+#     uint16_t checksum;           //      (offset 92)
+# } telemetry_packet_t; Total = 94 bytes.
+PACKET_FORMAT_94 = "<BBBB I 16f 3B b 4f H"
+PACKET_SIZE_94 = struct.calcsize(PACKET_FORMAT_94)
+
+PACKET_FORMAT_78 = "<BBBB I 16f BBBB H"
+PACKET_SIZE_78 = struct.calcsize(PACKET_FORMAT_78)
+
+PACKET_SIZE = PACKET_SIZE_94
 MAGIC1 = 0xAA
 MAGIC2 = 0x55
 
@@ -35,45 +42,62 @@ class TelemetryParser:
 
     @staticmethod
     def calculate_checksum(buffer: bytes, length: int) -> int:
-        """Calculate simple 16-bit summation checksum over packet buffer."""
-        return sum(buffer[:length]) & 0xFFFF
+        """Calculate simple 16-bit summation checksum over packet buffer payload."""
+        return sum(buffer[4:length]) & 0xFFFF
 
     @classmethod
     def parse_packet(cls, raw_bytes: bytes) -> Optional[Dict[str, Any]]:
         """
         Unpack binary bytes and compute vector/telemetry metrics via NumPy.
+        Supports both 94-byte and legacy 78-byte packets.
         """
-        if len(raw_bytes) < PACKET_SIZE:
+        if len(raw_bytes) < PACKET_SIZE_78:
             return None
 
-        unpacked = struct.unpack(PACKET_FORMAT, raw_bytes[:PACKET_SIZE])
-        magic1, magic2, pkt_type, payload_len = unpacked[0:4]
-
-        if magic1 != MAGIC1 or magic2 != MAGIC2:
+        # Check magic
+        if raw_bytes[0] != MAGIC1 or raw_bytes[1] != MAGIC2:
             return None
 
-        timestamp_ms = unpacked[4]
-        # 16 floats
-        (i_a, i_b, i_c,
-         i_d, i_q, i_q_target,
-         duty_a, duty_b, duty_c,
-         phase_elec, mech_angle, joint_angle,
-         speed_rpm, speed_target_rpm,
-         v_bus, temp_fet) = unpacked[5:21]
+        if len(raw_bytes) >= PACKET_SIZE_94:
+            unpacked = struct.unpack(PACKET_FORMAT_94, raw_bytes[:PACKET_SIZE_94])
+            magic1, magic2, pkt_type, payload_len = unpacked[0:4]
+            timestamp_ms = unpacked[4]
+            (i_a, i_b, i_c,
+             i_d, i_q, i_q_target,
+             duty_a, duty_b, duty_c,
+             phase_elec, mech_angle, joint_angle,
+             speed_rpm, speed_target_rpm,
+             v_bus, temp_fet) = unpacked[5:21]
+            control_mode, motor_state, fault_code = unpacked[21:24]
+            encoder_dir = unpacked[24]
+            vd, vq, zero_elec_angle, id_target = unpacked[25:29]
+            checksum = unpacked[29]
 
-        control_mode, motor_state, fault_code, reserved = unpacked[21:25]
-        checksum = unpacked[25]
+            expected_cs = cls.calculate_checksum(raw_bytes, PACKET_SIZE_94 - 2)
+            if checksum != expected_cs:
+                return None
+        else:
+            unpacked = struct.unpack(PACKET_FORMAT_78, raw_bytes[:PACKET_SIZE_78])
+            magic1, magic2, pkt_type, payload_len = unpacked[0:4]
+            timestamp_ms = unpacked[4]
+            (i_a, i_b, i_c,
+             i_d, i_q, i_q_target,
+             duty_a, duty_b, duty_c,
+             phase_elec, mech_angle, joint_angle,
+             speed_rpm, speed_target_rpm,
+             v_bus, temp_fet) = unpacked[5:21]
+            control_mode, motor_state, fault_code, reserved = unpacked[21:25]
+            encoder_dir = -1
+            vd, vq, zero_elec_angle, id_target = 0.0, 0.0, 0.0, 0.0
+            checksum = unpacked[25]
 
-        # Verify Checksum
-        expected_cs = cls.calculate_checksum(raw_bytes, PACKET_SIZE - 2)
-        if checksum != expected_cs:
-            # Checksum mismatch
-            return None
+            expected_cs = sum(raw_bytes[:PACKET_SIZE_78 - 2]) & 0xFFFF
+            if checksum != expected_cs:
+                return None
 
         # -------------------------------------------------------------
         # NumPy Vector Mathematics & Scientific Processing
         # -------------------------------------------------------------
-        # 3-Phase current array
         i_phases = np.array([i_a, i_b, i_c], dtype=np.float32)
         i_sum = float(np.sum(i_phases))
         i_peak = float(np.max(np.abs(i_phases)))
@@ -109,5 +133,10 @@ class TelemetryParser:
             "power_watts": round(power_watts, 2),
             "control_mode": int(control_mode),
             "motor_state": int(motor_state),
-            "fault_code": int(fault_code)
+            "fault_code": int(fault_code),
+            "encoder_dir": int(encoder_dir),
+            "vd": round(float(vd), 4),
+            "vq": round(float(vq), 4),
+            "zero_elec_angle": round(float(zero_elec_angle), 4),
+            "id_target": round(float(id_target), 4),
         }

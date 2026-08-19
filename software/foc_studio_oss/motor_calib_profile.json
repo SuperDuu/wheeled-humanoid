@@ -1,0 +1,45 @@
+{
+  "timestamp": "2026-08-18 17:47:06",
+  "pole_pairs": 21,
+  "encoder_direction": 1,
+  "zero_electric_angle_rad": 0.0,
+  "eccentricity_deg_mech": 0.2638877879690948,
+  "forward_100_rpm": 75.61023999999999,
+  "reverse_100_rpm": -78.98578125,
+  "fopdt_model": {
+    "K_gain_rpm_v": 31.167955464979954,
+    "tau_ms": 229.99999999999997,
+    "theta_dead_time_ms": 27.500000000000004,
+    "tau_c_ms": 41.25000000000001
+  },
+  "multi_speed_test": {
+    "tested_rpms": [
+      50,
+      100,
+      200,
+      300
+    ],
+    "measured_rpms": [
+      -0.0037864077669902915,
+      74.67300970873787,
+      84.89833333333335,
+      85.34225490196079
+    ],
+    "measured_vqs": [
+      0.0,
+      2.421364077669903,
+      2.7124627450980396,
+      2.7354352941176465
+    ]
+  },
+  "speed_pi": {
+    "kp": 0.0018,
+    "ki": 0.0002,
+    "ramp": 3000
+  },
+  "pos_pd": {
+    "kp": 20.0,
+    "kd": 0.1
+  },
+  "status": "CALIBRATED_READY"
+}
