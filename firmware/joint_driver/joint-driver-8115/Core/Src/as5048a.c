@@ -150,50 +150,47 @@ HAL_StatusTypeDef AS5048A_Sample(AS5048A_t *enc, float dt)
     enc->angle_rad = enc->angle_singleturn;
     enc->angle_deg = enc->angle_singleturn * (180.0f / (float)M_PI);
 
-    // 5. Turn Rollover Tracking
-    int32_t rollover = 0;
-    float angle_diff = enc->angle_singleturn - enc->old_angle;
-    if (angle_diff > (float)M_PI) { rollover = -1; }
-    else if (angle_diff < -(float)M_PI) { rollover = 1; }
-    enc->turns += rollover;
+    // 5. Shortest-path single-turn angular displacement
+    float d_angle = enc->angle_singleturn - enc->old_angle;
+    if (d_angle > (float)M_PI) {
+        d_angle -= 2.0f * (float)M_PI;
+    } else if (d_angle < -(float)M_PI) {
+        d_angle += 2.0f * (float)M_PI;
+    }
 
     int first_sample = !enc->first_sample;
     if (first_sample) {
         enc->turns = 0;
-        if (enc->angle_singleturn > (0.5f * (float)M_PI)) { enc->turns = -1; }
         enc->first_sample = 1;
-    }
-
-    // 6. Multi-turn position exact in integer counts
-    enc->count_buff[0] = count_wrapped + (AS5048A_CPR * enc->turns);
-    enc->angle_multiturn = (2.0f * (float)M_PI) * ((float)enc->count_buff[0]) / (float)AS5048A_CPR;
-
-    if (first_sample) {
-        for (int i = 1; i < AS5048A_N_POS_SAMPLES; i++) {
-            enc->count_buff[i] = enc->count_buff[0];
+        enc->velocity_rad_s = 0.0f;
+        enc->velocity_rpm = 0.0f;
+    } else {
+        // Multi-turn tracking
+        if (enc->angle_singleturn < enc->old_angle - (float)M_PI) {
+            enc->turns++;
+        } else if (enc->angle_singleturn > enc->old_angle + (float)M_PI) {
+            enc->turns--;
         }
-    }
 
-    // 7. Velocity: Finite difference of integer counts + low-speed count deadband.
-    float dt_total = dt * (float)(AS5048A_N_POS_SAMPLES - 1);
-    if (dt_total > 0.000001f) {
-        int32_t vel_counts = enc->count_buff[0] - enc->count_buff[AS5048A_N_POS_SAMPLES - 1];
-        float raw_vel = 0.0f;
-        /* Reject multi-turn wrap-around glitch spikes (> 3000 counts in 12ms = > 900 RPM) */
-        if ((vel_counts > 2 && vel_counts < 3000) || (vel_counts < -2 && vel_counts > -3000)) {
-            raw_vel = (2.0f * (float)M_PI) * ((float)vel_counts)
-                      / ((float)AS5048A_CPR * dt_total);
-        }
-        if (first_sample) {
-            enc->velocity_rad_s = 0.0f;
-        } else {
-            enc->velocity_rad_s += 0.05f * (raw_vel - enc->velocity_rad_s);
-            if (fabsf(enc->velocity_rad_s) < 0.10f && raw_vel == 0.0f) {
+        // 6. Robust Instantaneous Velocity with Glitch Rejection
+        if (dt > 0.000001f) {
+            float raw_vel = d_angle / dt;
+            /* Reject glitch spikes (> 120 rad/s = > 1150 RPM) */
+            if (raw_vel > 120.0f || raw_vel < -120.0f) {
+                raw_vel = enc->velocity_rad_s;
+            }
+            /* Smooth 1st-order filter (~30 Hz cutoff at 10kHz sample rate) */
+            enc->velocity_rad_s += 0.025f * (raw_vel - enc->velocity_rad_s);
+            if (fabsf(enc->velocity_rad_s) < 0.08f && fabsf(d_angle) < 0.0001f) {
                 enc->velocity_rad_s = 0.0f;
             }
+            enc->velocity_rpm = enc->velocity_rad_s * (60.0f / (2.0f * (float)M_PI));
         }
-        enc->velocity_rpm = enc->velocity_rad_s * (60.0f / (2.0f * (float)M_PI));
     }
+
+    // 7. Multi-turn position
+    enc->count_buff[0] = count_wrapped + (AS5048A_CPR * enc->turns);
+    enc->angle_multiturn = (2.0f * (float)M_PI) * ((float)enc->count_buff[0]) / (float)AS5048A_CPR;
 
     return status;
 }
