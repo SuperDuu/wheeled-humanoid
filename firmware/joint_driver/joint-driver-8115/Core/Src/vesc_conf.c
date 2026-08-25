@@ -23,40 +23,42 @@ void vesc_conf_set_defaults(mc_configuration *conf)
                                           // At 0.95, phases B&C have only 2.5µs → ADC corrupted → Iq flips negative!
     conf->l_min_duty = 0.005f;           // 0.5% min duty cycle
 
-    // Motor Physical Parameters (GB8115-4: 21 pole pairs, R=3.90 Ohm, L=1.20 mH, Kv=39.5 RPM/V -> lambda=0.01160 Wb)
+    // Controller phase-domain parameters for the assembled GB8115-4.
+    // R was identified by the locked-rotor regression V=R*I+Vdrop (RMSE 0.058 V).
+    // L is the per-phase value from the 3.14 mH line-to-line specification.
+    // Lambda was identified from the 3 V direct-Vq run: (Vq-R*Iq)/omega_e ~= 0.030 Wb.
     conf->foc_motor_pole_pairs = 21;       // 21 Pole Pairs (42 Magnets)
-    conf->foc_motor_r = 3.90f;             // 3.90 Ohm Phase Resistance
-    conf->foc_motor_l = 0.00120f;          // 1.20 mH Phase Inductance
-    conf->foc_motor_flux_linkage = 0.01160f; // 0.01160 Wb Flux Linkage (Kt = 0.3654 Nm/A)
+    conf->foc_motor_r = 2.263f;             // Ohm, measured phase-domain slope
+    conf->foc_motor_l = 0.00157f;           // H, per phase
+    conf->foc_motor_flux_linkage = 0.03000f; // Wb, phase-domain flux linkage
     conf->foc_motor_ld_lq_diff = 0.0f;     // Surface PMSM (non-salient)
 
     // 1:17 Cycloid Gearbox Mode
     conf->gear_ratio = 17.0f;              // 1:17 Cycloidal Gearbox Reduction Ratio
-    conf->encoder_direction = 1;           // Physical AS5048A angle increases during forward electrical rotation
+    conf->encoder_direction = 1;           // Standard forward electrical angle rotation
     conf->joint_pos_min = -1000000.0f;     // Unlimited continuous rotation
     conf->joint_pos_max =  1000000.0f;     // Unlimited continuous rotation
 
-    // Current Controller (PI D/Q) - 20kHz Inner Loop (Pole placement: f_bw = 800Hz, w_bw = 5026.5 rad/s)
-    // Kp_curr = L * w_bw = 0.00120 * 5026.5 = 6.03 V/A
-    // Ki_curr = R * w_bw = 3.90 * 5026.5 = 19603.0 V/(A*s)
-    conf->foc_current_kp = 6.03f;           // Kp = 6.03 V/A
-    conf->foc_current_ki = 19603.0f;        // Ki = 19603.0 V/(A*s)
-    conf->foc_current_filter_const = 0.1f;
-    conf->foc_observer_gain = 0.5e6f;
+    // Current Controller (PI D/Q) - 20kHz Inner Loop
+    // Keep the conservative Kp and place the PI zero on the measured motor pole:
+    // Ki/Kp = R/L = 1441.4 rad/s.
+    conf->foc_current_kp = 1.20f;
+    conf->foc_current_ki = 1730.0f;
+    conf->foc_current_filter_const = 0.18f;
     conf->foc_cc_decoupling = FOC_CC_DECOUPLING_BEMF; // Bù khử ghép chéo d-q
 
     // Speed Controller (Cascaded Current-Mode FOC: Outputs Iq command in Amperes)
-    conf->s_pid_kp = 0.0050f;              // Kp = 0.0050 A/ERPM (Active Stiffness)
-    conf->s_pid_ki = 0.0500f;              // Ki = 0.0500 A/(ERPM*s) (Zero steady-state error with Anti-Windup)
-    conf->s_pid_kd = 0.0001f;              // Kd = 0.0001 A/(ERPM/s) (Damping)
-    conf->s_pid_kd_filter = 0.2f;
-    conf->s_pid_min_erpm = 5.0f;           // 5 ERPM deadband (~0.24 RPM)
-    conf->s_pid_ramp_erpms_s = 3000.0f;    // 3000 ERPM/s ramp rate (~142 RPM/s)
+    conf->s_pid_kp = 0.00035f;             // Well-damped; loop crossover at ~2.5 Hz (high phase margin)
+    conf->s_pid_ki = 0.00012f;             // Zero at 0.054 Hz eliminates steady-state droop smoothly
+    conf->s_pid_kd = 0.0f;                 // Disable D until encoder speed is clean
+    conf->s_pid_kd_filter = 0.020f;        // ~3.5 Hz; smooth velocity feedback with low phase delay
+    conf->s_pid_min_erpm = 10.0f;          // 10 ERPM deadband (~0.48 RPM motor)
+    conf->s_pid_ramp_erpms_s = 5000.0f;    // 5000 ERPM/s (~240 RPM/s motor, 0-200 in ~0.8s)
 
     // Position Controller (MIT Mini Cheetah Impedance PD: Outputs Iq command in Amperes)
-    conf->p_pid_kp = 15.0f;                // Kp_pos = 15.0 A/rad (Virtual Joint Stiffness)
+    conf->p_pid_kp = 8.0f;                 // Kp_pos = 8.0 A/rad (Virtual Joint Stiffness)
     conf->p_pid_ki = 0.0f;                 // Zero I-term (No windup, elastic ground impact absorption)
-    conf->p_pid_kd = 0.50f;                // Kd_pos = 0.50 A/(rad/s) (Virtual Joint Damping)
+    conf->p_pid_kd = 0.25f;                // Kd_pos = 0.25 A/(rad/s) (Virtual Joint Damping)
     conf->p_pid_kd_proc = 0.05f;           // Damping on measurement
     conf->p_pid_kd_filter = 0.2f;
     conf->p_pid_ang_div = 1.0f;
@@ -64,12 +66,11 @@ void vesc_conf_set_defaults(mc_configuration *conf)
 
     // Observer & Sensorless Configuration
     conf->foc_observer_type = FOC_OBSERVER_ORTEGA_ORIGINAL;
-    conf->foc_observer_gain = 1000.0f;
-    // PLL Speed Estimator (20kHz 2nd-order PLL: wn=200 rad/s ~32Hz BW, zeta=0.707)
-    // K_pll_1 = 2 * zeta * wn = 2 * 0.707 * 200 = 283.0
-    // K_pll_2 = wn^2 = 200^2 = 40000.0
-    conf->foc_pll_kp = 283.0f;             // K_pll_1 = 283.0
-    conf->foc_pll_ki = 40000.0f;           // K_pll_2 = 40000.0
+    // VESC Ortega scaling uses gamma * lambda^2 ~= 1000.
+    conf->foc_observer_gain = 1.11e6f;
+    // PLL Speed Estimator (wn=84 rad/s ~13Hz BW, zeta=1.0 for silent velocity tracking)
+    conf->foc_pll_kp = 160.0f;             // K_pll_1 = 160.0
+    conf->foc_pll_ki = 7000.0f;            // K_pll_2 = 7000.0
     conf->foc_sl_erpm = 2000.0f;
 
     // Field Weakening
