@@ -45,6 +45,11 @@ __pycache__/
 *.log
 *.csv
 
+# Consolidated docs only; old/generated FOC reports stay out of git.
+docs/*.md
+!docs/GB8115_FOC_CURRENT_STATE.md
+
 #Mechanical
 *.STL
 *.stl
+.agents/
