@@ -26,6 +26,7 @@
 #include "motor_interface.h"
 #include "comm_can.h"
 #include "comm_telemetry.h"
+#include "encoder_cal_store.h"
 #include "vesc_utils.h"
 #include <math.h>
 
@@ -97,8 +98,8 @@ float current_joint_rpm = 0.0f;
 float current_iq_amps = 0.0f;
 float current_vbus = 0.0f;
 
-/* Bộ đếm chia tần cho Slow Loop 1kHz */
-static volatile uint32_t slow_loop_divider = 0;
+/* Slow loop is scheduled from measured ISR elapsed time, not an assumed IRQ rate. */
+static float slow_loop_elapsed_s = 0.0f;
 
 /* ================================================================
  * Kết quả đọc ADC Regular Channels + DRV8353 SPI Status
@@ -123,6 +124,13 @@ volatile ADC_Readings_t g_adc_readings = {
 #define CURRENT_SENSE_CSA_GAIN 20.0f /* V/V - SỬA THEO PCB THẬT */
 #define ADC_TO_AMPS                                                            \
   ((3.3f / 4096.0f) / (CURRENT_SENSE_R_SHUNT * CURRENT_SENSE_CSA_GAIN))
+
+/* Low-side shunt current must be sampled inside the all-low-side-on window.
+ * PWM mode 1 + center-aligned counter gives that window near CNT ~= ARR. */
+#define ADC_INJECTED_SAMPLE_TICKS_FROM_TOP 300U
+#define CURRENT_IDLE_OFFSET_ALPHA 0.001f
+#define CURRENT_RUN_FILTER_ALPHA 0.25f
+#define CURRENT_DEADBAND_A 0.04f
 
 /* Biến phục vụ test chiều quay động cơ và encoder */
 volatile int run_direction_test = 0;  /* Set = 1 trong Live Expressions để chạy */
@@ -170,10 +178,16 @@ typedef struct {
 
 volatile Debug_Test_t g_dbg_test = {0};
 volatile uint32_t g_adc_isr_counter = 0; /* Đếm số lần ADC ISR callback chạy */
+volatile float g_foc_isr_dt_s = 0.000100f;
+volatile uint32_t g_foc_isr_missed_periods = 0;
+volatile uint32_t g_adc_calib_wait_ms = 0;
+volatile uint8_t g_adc_calib_timeout = 0;
 
-/* ===== ENCODER ALIGNMENT DEBUG ===== */
+/* ===== ENCODER ALIGNMENT & CALIBRATION DEBUG ===== */
 volatile int run_alignment = 0;   /* Set = 1 trong Live Expressions để chạy alignment */
+volatile int run_calibration = 0; /* Set = 1 để chạy 1-turn Ben Katz 128-point LUT calibration */
 volatile int align_result = 0;    /* 0: Idle, 1: Đang chạy, 2: OK, -1: Lỗi */
+volatile int8_t g_encoder_calibration_result = 0;
 
 typedef struct {
   float zero_electric_angle;  /* Góc điện offset (rad) */
@@ -193,6 +207,14 @@ volatile Align_Debug_t g_dbg_align = {0};
 /* ===== CURRENT SENSING DEBUG (Phase 2) ===== */
 volatile float g_dbg_ia = 0, g_dbg_ib = 0, g_dbg_ic = 0; /* Dòng điện realtime */
 volatile float g_dbg_offset_ia = 0, g_dbg_offset_ib = 0;  /* ADC offsets */
+
+static float Current_Deadband(float current)
+{
+  if (fabsf(current) < CURRENT_DEADBAND_A) {
+    return 0.0f;
+  }
+  return current;
+}
 
 /* ===== PHASE 3 & 4: FOC CLOSED-LOOP DEBUG ===== */
 volatile int run_foc_mode = 0;       /* 0: Dừng, 1: Torque/Current Mode, 2: Position Mode, 3: Speed Mode */
@@ -238,6 +260,9 @@ void DRV8353_ReadStatus(void);
 void Run_MotorDirectionTest(void);
 void Run_EncoderAlignment(void);
 void TIM1_EnsureMoeEnabled(void);
+static void Apply_SvmVector(float vd, float theta_e, float vbus, uint32_t period);
+static void Ramp_SvmVector(float vd_from, float vd_to, float theta_e,
+                           float vbus, uint32_t period, int steps, int delay_ms);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -384,7 +409,310 @@ void Run_MotorDirectionTest(void)
 void Run_EncoderAlignment(void)
 {
   if (run_alignment != 1) return;
+  align_result = 1;
+
+  mc_state old_state = g_foc_controller.motor.m_state;
+  g_foc_controller.motor.m_state = MC_STATE_DETECTING;
+  TIM1_EnsureMoeEnabled();
+
+  uint32_t period = htim1.Init.Period;
+  float vbus = g_adc_readings.vbus;
+  if (vbus < 6.0f) vbus = 24.0f;
+
+  /* ====================================================================
+   * DYNAMIC ALIGN — open-loop rotation measures zero_electric_angle
+   * ====================================================================
+   * Static d-axis lock with 21 pole-pairs is susceptible to cogging bias:
+   * rotor sits ~3.5° mechanical off the true d-axis → 75° electrical error
+   * → Iq command produces mostly Id → motor stalls after 30–40 s.
+   *
+   * Dynamic ALIGN spins open-loop through ALL cogging positions over 1+
+   * full mechanical revolutions, then circular-averages θ_field − pp×θ_enc.
+   * Forward + backward rotation cancels the load-angle bias.
+   * ==================================================================== */
+
+  const float vd_align = 8.0f;
+  const float sample_dt = 0.001f;    /* 1 ms per step */
+  float encoder_scale = (float)(g_foc_controller.conf.encoder_direction *
+                                g_foc_controller.conf.foc_motor_pole_pairs);
+  float pole_pairs = (float)g_foc_controller.conf.foc_motor_pole_pairs;
+
+  /* Target speed: 20 RPM mechanical → 44 rad/s electrical.
+   * At 8 V with λ≈0.030, BEMF≈1.3 V, available torque I≈(8−1.3)/2.26≈3 A,
+   * far above cogging, so rotor will track the field cleanly. */
+  float omega_elec_target = 20.0f * pole_pairs * 2.0f * (float)M_PI / 60.0f;
+  /* 1.5 mechanical revolutions = 1.5 × 21 = 31.5 electrical revolutions.
+   * At ω_e ≈ 44 rad/s that takes ~4.5 seconds. */
+  int steps_per_dir = 4500;   /* 4500 ms */
+  int ramp_steps    = 500;    /* 500 ms ramp */
+  int stable_start  = 800;    /* start sampling after 800 ms */
+
+  /* --- Phase 0: initial d-axis lock to overcome stiction --- */
+  for (int i = 0; i <= 40; i++) {
+    if (run_alignment != 1 || g_foc_controller.fault != MC_FAULT_NONE)
+      goto alignment_abort;
+    Apply_SvmVector(vd_align * (float)i / 40.0f, 0.0f, vbus, period);
+    HAL_Delay(4);
+  }
+  HAL_Delay(150);
+
+  /* --- Phase 1: Forward rotation (+20 RPM) --- */
+  float theta = 0.0f;
+  float fwd_sin_sum = 0.0f, fwd_cos_sum = 0.0f;
+  uint32_t fwd_count = 0U;
+
+  for (int step = 0; step < steps_per_dir; step++) {
+    if (run_alignment != 1 || g_foc_controller.fault != MC_FAULT_NONE)
+      goto alignment_abort;
+
+    /* Smooth acceleration ramp */
+    float speed_frac = (step < ramp_steps)
+                       ? (float)step / (float)ramp_steps
+                       : 1.0f;
+    float omega_now = omega_elec_target * speed_frac;
+    theta += omega_now * sample_dt;
+    while (theta >  (float)M_PI) theta -= 2.0f * (float)M_PI;
+    while (theta < -(float)M_PI) theta += 2.0f * (float)M_PI;
+
+    Apply_SvmVector(vd_align, theta, vbus, period);
+    HAL_Delay(1);
+    AS5048A_Sample(&g_foc_controller.encoder, sample_dt);
+
+    /* Accumulate circular-average samples after ramp-up */
+    if (step >= stable_start) {
+      float zero_sample = encoder_scale *
+                          g_foc_controller.encoder.angle_singleturn - theta;
+      utils_norm_angle_rad(&zero_sample);
+      fwd_sin_sum += sinf(zero_sample);
+      fwd_cos_sum += cosf(zero_sample);
+      fwd_count++;
+    }
+
+    /* Telemetry every 50 ms */
+    if (step % 50 == 0)
+      Comm_Telemetry_Process(&g_foc_controller);
+  }
+
+  /* Decelerate to stop */
+  for (int i = 20; i >= 0; i--) {
+    float frac = (float)i / 20.0f;
+    theta += omega_elec_target * frac * sample_dt;
+    while (theta >  (float)M_PI) theta -= 2.0f * (float)M_PI;
+    while (theta < -(float)M_PI) theta += 2.0f * (float)M_PI;
+    Apply_SvmVector(vd_align * frac, theta, vbus, period);
+    HAL_Delay(10);
+  }
+  HAL_Delay(200);
+
+  /* --- Phase 2: Backward rotation (−20 RPM) --- */
+  /* Re-lock at current position before reversing */
+  AS5048A_Sample(&g_foc_controller.encoder, sample_dt);
+  theta = 0.0f;
+  for (int i = 0; i <= 30; i++) {
+    Apply_SvmVector(vd_align * (float)i / 30.0f, 0.0f, vbus, period);
+    HAL_Delay(4);
+  }
+  HAL_Delay(100);
+
+  float bwd_sin_sum = 0.0f, bwd_cos_sum = 0.0f;
+  uint32_t bwd_count = 0U;
+
+  for (int step = 0; step < steps_per_dir; step++) {
+    if (run_alignment != 1 || g_foc_controller.fault != MC_FAULT_NONE)
+      goto alignment_abort;
+
+    float speed_frac = (step < ramp_steps)
+                       ? (float)step / (float)ramp_steps
+                       : 1.0f;
+    float omega_now = -omega_elec_target * speed_frac;   /* negative = backward */
+    theta += omega_now * sample_dt;
+    while (theta >  (float)M_PI) theta -= 2.0f * (float)M_PI;
+    while (theta < -(float)M_PI) theta += 2.0f * (float)M_PI;
+
+    Apply_SvmVector(vd_align, theta, vbus, period);
+    HAL_Delay(1);
+    AS5048A_Sample(&g_foc_controller.encoder, sample_dt);
+
+    if (step >= stable_start) {
+      float zero_sample = encoder_scale *
+                          g_foc_controller.encoder.angle_singleturn - theta;
+      utils_norm_angle_rad(&zero_sample);
+      bwd_sin_sum += sinf(zero_sample);
+      bwd_cos_sum += cosf(zero_sample);
+      bwd_count++;
+    }
+
+    if (step % 50 == 0)
+      Comm_Telemetry_Process(&g_foc_controller);
+  }
+
+  /* Decelerate backward to stop */
+  for (int i = 20; i >= 0; i--) {
+    float frac = (float)i / 20.0f;
+    theta += (-omega_elec_target) * frac * sample_dt;
+    while (theta >  (float)M_PI) theta -= 2.0f * (float)M_PI;
+    while (theta < -(float)M_PI) theta += 2.0f * (float)M_PI;
+    Apply_SvmVector(vd_align * frac, theta, vbus, period);
+    HAL_Delay(10);
+  }
+
+  /* --- Phase 3: Compute zero from forward + backward --- */
+  if (fwd_count < 100 || bwd_count < 100)
+    goto alignment_abort;
+
+  float zero_fwd = atan2f(fwd_sin_sum, fwd_cos_sum);
+  float zero_bwd = atan2f(bwd_sin_sum, bwd_cos_sum);
+
+  /* Circular average of forward and backward cancels the load angle δ:
+   * zero_fwd ≈ zero_true + δ,  zero_bwd ≈ zero_true − δ
+   * average ≈ zero_true */
+  float elec_offset = atan2f(sinf(zero_fwd) + sinf(zero_bwd),
+                             cosf(zero_fwd) + cosf(zero_bwd));
+
+  /* --- Phase 4: Polarity check (resolve π ambiguity) --- */
+  /* Re-lock rotor at discovered d-axis */
+  HAL_Delay(200);
+  AS5048A_Sample(&g_foc_controller.encoder, sample_dt);
+  float lock_phase = encoder_scale *
+                     g_foc_controller.encoder.angle_singleturn - elec_offset;
+  utils_norm_angle_rad(&lock_phase);
+  /* Apply d-axis voltage to settle rotor */
+  for (int i = 0; i <= 30; i++) {
+    Apply_SvmVector(vd_align * (float)i / 30.0f, lock_phase, vbus, period);
+    HAL_Delay(4);
+  }
+  HAL_Delay(200);
+
+  AS5048A_Sample(&g_foc_controller.encoder, 0.002f);
+  int32_t polarity_start_count = g_foc_controller.encoder.count_buff[0];
+  /* Re-read phase after rotor settled at d-axis lock */
+  float polarity_phase = encoder_scale *
+                         g_foc_controller.encoder.angle_singleturn -
+                         elec_offset;
+  utils_norm_angle_rad(&polarity_phase);
+  float polarity_q_angle = polarity_phase + 0.5f * (float)M_PI;
+  utils_norm_angle_rad(&polarity_q_angle);
+
+  const float polarity_test_v = 4.0f;
+  for (int i = 1; i <= 10; i++) {
+    if (run_alignment != 1 || g_foc_controller.fault != MC_FAULT_NONE)
+      goto alignment_abort;
+    Apply_SvmVector(polarity_test_v * (float)i / 10.0f,
+                    polarity_q_angle, vbus, period);
+    HAL_Delay(2);
+    AS5048A_Sample(&g_foc_controller.encoder, 0.002f);
+  }
+  for (int i = 0; i < 30; i++) {
+    Apply_SvmVector(polarity_test_v, polarity_q_angle, vbus, period);
+    HAL_Delay(2);
+    AS5048A_Sample(&g_foc_controller.encoder, 0.002f);
+    Comm_Telemetry_Process(&g_foc_controller);
+  }
+  int32_t polarity_delta_counts =
+      g_foc_controller.conf.encoder_direction *
+      (g_foc_controller.encoder.count_buff[0] - polarity_start_count);
+  Ramp_SvmVector(polarity_test_v, 0.0f, polarity_q_angle,
+                 vbus, period, 10, 2);
+  if (polarity_delta_counts > -4 && polarity_delta_counts < 4) {
+    goto alignment_abort;
+  }
+  if (polarity_delta_counts < 0) {
+    elec_offset += (float)M_PI;
+    utils_norm_angle_rad(&elec_offset);
+  }
+
+  /* --- Phase 5: Store result --- */
+  AS5048A_Sample(&g_foc_controller.encoder, sample_dt);
+  float enc_zero = g_foc_controller.encoder.angle_singleturn;
+  g_foc_controller.zero_electric_angle = elec_offset;
+  g_foc_controller.aligned = true;
+
+  g_dbg_align.vbus = vbus;
+  g_dbg_align.enc_dir = g_foc_controller.conf.encoder_direction;
+  g_dbg_align.zero_electric_angle = elec_offset;
+  g_dbg_align.encoder_rad = enc_zero;
+  g_dbg_align.aligned = 1;
+
+  /* Ramp down gently */
+  for (int i = 30; i >= 0; i--) {
+    Apply_SvmVector(vd_align * (float)i / 30.0f, 0.0f, vbus, period);
+    Comm_Telemetry_Process(&g_foc_controller);
+    HAL_Delay(4);
+  }
+
+  align_result = 2;
+  goto alignment_done;
+
+alignment_abort:
+  align_result = -1;
+  g_foc_controller.aligned = false;
+
+alignment_done:
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, period / 2);
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, period / 2);
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, period / 2);
+  g_foc_controller.duty_a = g_foc_controller.duty_b = g_foc_controller.duty_c = 0.5f;
+
+  HAL_Delay(50);
+  /* Reset velocity after the field has ramped down and the drivetrain has
+   * relaxed. Resetting before ramp-down turns that elastic motion into a
+   * false high-speed sample at the closed-loop handoff. */
+  AS5048A_Sample(&g_foc_controller.encoder, 0.001f);
+  int32_t aligned_count = g_foc_controller.encoder.count_buff[0];
+  for (int i = 1; i < AS5048A_N_POS_SAMPLES; i++) {
+    g_foc_controller.encoder.count_buff[i] = aligned_count;
+  }
+  g_foc_controller.encoder.velocity_rad_s = 0.0f;
+  g_foc_controller.encoder.velocity_rpm = 0.0f;
+  g_foc_controller.motor.m_speed_est_fast = 0.0f;
+  g_foc_controller.motor.m_speed_d_filter = 0.0f;
+  g_foc_controller.motor.m_speed_d_filter_proc = 0.0f;
+  g_foc_controller.motor.m_state = old_state;
+  run_alignment = 0;
+}
+
+static void Apply_SvmVector(float vd, float theta_e, float vbus, uint32_t period)
+{
+  float sin_a, cos_a;
+  utils_fast_sincos(theta_e, &sin_a, &cos_a);
+  float valpha = (vd / vbus) * cos_a;
+  float vbeta  = (vd / vbus) * sin_a;
+  uint32_t ta, tb, tc, sector;
+  foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
+  if (g_foc_controller.phase_swap_bc) {
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tc * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tb * period) / 1000);
+    g_foc_controller.duty_a = (float)ta / 1000.0f;
+    g_foc_controller.duty_b = (float)tc / 1000.0f;
+    g_foc_controller.duty_c = (float)tb / 1000.0f;
+  } else {
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
+    g_foc_controller.duty_a = (float)ta / 1000.0f;
+    g_foc_controller.duty_b = (float)tb / 1000.0f;
+    g_foc_controller.duty_c = (float)tc / 1000.0f;
+  }
+}
+
+static void Ramp_SvmVector(float vd_from, float vd_to, float theta_e, float vbus, uint32_t period, int steps, int delay_ms)
+{
+  for (int i = 0; i <= steps; i++) {
+    float vd = vd_from + (vd_to - vd_from) * ((float)i / (float)steps);
+    Apply_SvmVector(vd, theta_e, vbus, period);
+    Comm_Telemetry_Process(&g_foc_controller);
+    HAL_Delay(delay_ms);
+  }
+}
+
+/**
+ * @brief  Ben Katz MIT Mini Cheetah 128-point Full 1-Revolution Encoder Linearization
+ */
+void Run_EncoderCalibration(void)
+{
+  if (run_calibration != 1) return;
   align_result = 1; // Running
+  g_encoder_calibration_result = 1;
 
   mc_state old_state = g_foc_controller.motor.m_state;
   g_foc_controller.motor.m_state = MC_STATE_DETECTING;
@@ -395,148 +723,139 @@ void Run_EncoderAlignment(void)
   float vbus = g_adc_readings.vbus;
   if (vbus < 6.0f) vbus = 24.0f;
 
-  /* Giữ DRV8353 ổn định liên tục, không reset EN để tránh trôi DC bias của mạch CSA */
-  TIM1_EnsureMoeEnabled();
-
-  float vd_align = 10.0f; // 10.0V alignment voltage (~2.5A peak torque for solid locking through cycloid gearbox)
-
-  // STEP 1: Lock to Electrical Zero (theta_e = 0)
-  for (int step = 0; step <= 50; step++) {
-    float vd = vd_align * (float)step / 50.0f;
-    float valpha = vd / vbus, vbeta = 0.0f;
-    uint32_t ta, tb, tc, sector;
-    foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
-    if (g_foc_controller.phase_swap_bc) {
-      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tc * period) / 1000);
-      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tb * period) / 1000);
-    } else {
-      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
-      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
-    }
-    Comm_Telemetry_Process(&g_foc_controller);
-    HAL_Delay(5);
+  const float vd_cal = 6.0f;
+  float pole_pairs = (float)g_foc_controller.conf.foc_motor_pole_pairs;
+  if (pole_pairs < 1.0f) {
+    pole_pairs = 21.0f;
   }
+
+  g_foc_controller.conf.encoder_direction = 1;
+  if (g_foc_controller.motor.m_conf != NULL) {
+    g_foc_controller.motor.m_conf->encoder_direction = 1;
+  }
+  g_foc_controller.encoder.use_lut = 0; // Disable LUT during calibration
+
+  // STEP 1: Lock rotor firmly at electrical zero for settling.
+  Ramp_SvmVector(0.0f, vd_cal, 0.0f, vbus, period, 80, 5);
   for (int i = 0; i < 80; i++) {
+    if (run_calibration != 1 || g_foc_controller.fault != MC_FAULT_NONE) goto calibration_abort;
+    Apply_SvmVector(vd_cal, 0.0f, vbus, period);
     Comm_Telemetry_Process(&g_foc_controller);
     HAL_Delay(10);
   }
 
-  // Read starting encoder position (Đọc 2 lần liên tiếp để lấy giá trị mới nhất theo chuẩn SPI AS5048A)
-  float enc_start = 0.0f;
-  AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_start);
-  AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_start);
+  // STEP 2: Sweep at 5.9 RPM. At 2 V the measured pull-in limit is about 10 RPM.
+  int32_t err_fwd[128];
+  int32_t err_bwd[128];
+  int16_t candidate_lut[128];
+  int32_t forward_progress = 0;
+  int32_t backward_progress = 0;
+  bool calibration_valid = false;
 
-  // STEP 2: Rotate forward by 1 FULL MECHANICAL REVOLUTION (360 deg = 21 elec revs = 42*PI)
-  // Quay chậm rãi 1 vòng tròn 360 độ hoàn chỉnh (trong 2.0 giây) để xác định chiều cảm biến chính xác 100%
-  float last_enc = enc_start;
-  float total_mech_delta = 0.0f;
+  uint16_t raw_start = 0;
+  AS5048A_ReadRawAngle(&g_foc_controller.encoder, &raw_start);
+  AS5048A_ReadRawAngle(&g_foc_controller.encoder, &raw_start);
+  uint16_t previous_raw = raw_start;
 
-  for (int step = 0; step <= 400; step++) {
-    float angle = (42.0f * 3.14159265f) * (float)step / 400.0f;
-    float sin_a, cos_a;
-    utils_fast_sincos(angle, &sin_a, &cos_a);
-    float valpha = (vd_align / vbus) * cos_a;
-    float vbeta  = (vd_align / vbus) * sin_a;
-    uint32_t ta, tb, tc, sector;
-    foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
-    if (g_foc_controller.phase_swap_bc) {
-      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tc * period) / 1000);
-      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tb * period) / 1000);
-    } else {
-      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
-      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
+  for (int k = 0; k < 128; k++) {
+    // 10 microsteps per calibration point for buttery-smooth continuous rotation
+    for (int s = 0; s < 10; s++) {
+      if (run_calibration != 1 || g_foc_controller.fault != MC_FAULT_NONE) goto calibration_abort;
+      float theta_mech = (2.0f * (float)M_PI * ((float)k + (float)s / 10.0f)) / 128.0f;
+      float theta_elec = theta_mech * pole_pairs;
+      Apply_SvmVector(vd_cal, theta_elec, vbus, period);
+      Comm_Telemetry_Process(&g_foc_controller);
+      HAL_Delay(8);
     }
+    
+    uint16_t r_val = 0;
+    AS5048A_ReadRawAngle(&g_foc_controller.encoder, &r_val);
+    AS5048A_ReadRawAngle(&g_foc_controller.encoder, &r_val);
 
-    // Tích lũy liên tục độ dịch chuyển cơ học
-    float current_enc = 0.0f;
-    AS5048A_ReadRadians(&g_foc_controller.encoder, &current_enc);
-    float step_diff = current_enc - last_enc;
-    while (step_diff > 3.14159265f) step_diff -= 2.0f * 3.14159265f;
-    while (step_diff < -3.14159265f) step_diff += 2.0f * 3.14159265f;
-    total_mech_delta += step_diff;
-    last_enc = current_enc;
-
-    Comm_Telemetry_Process(&g_foc_controller);
-    HAL_Delay(5);
+    int32_t step_counts = (int32_t)r_val - (int32_t)previous_raw;
+    while (step_counts > 8192) step_counts -= 16384;
+    while (step_counts < -8192) step_counts += 16384;
+    forward_progress += step_counts;
+    previous_raw = r_val;
+    
+    int32_t count_ideal = ((int32_t)raw_start + ((k * 16384) / 128)) % 16384;
+    int32_t diff = (int32_t)r_val - count_ideal;
+    while (diff > 8192)  diff -= 16384;
+    while (diff < -8192) diff += 16384;
+    err_fwd[k] = diff;
   }
-  for (int i = 0; i < 40; i++) {
-    Comm_Telemetry_Process(&g_foc_controller);
-    HAL_Delay(10);
+
+  // STEP 3: Sweep 1 full mechanical revolution in Backward direction (128 sample points with 10 microsteps each)
+  for (int k = 127; k >= 0; k--) {
+    for (int s = 0; s < 10; s++) {
+      if (run_calibration != 1 || g_foc_controller.fault != MC_FAULT_NONE) goto calibration_abort;
+      float theta_mech = (2.0f * (float)M_PI * ((float)k + (float)(10 - s) / 10.0f)) / 128.0f;
+      float theta_elec = theta_mech * pole_pairs;
+      Apply_SvmVector(vd_cal, theta_elec, vbus, period);
+      Comm_Telemetry_Process(&g_foc_controller);
+      HAL_Delay(8);
+    }
+    
+    uint16_t r_val = 0;
+    AS5048A_ReadRawAngle(&g_foc_controller.encoder, &r_val);
+    AS5048A_ReadRawAngle(&g_foc_controller.encoder, &r_val);
+
+    int32_t step_counts = (int32_t)r_val - (int32_t)previous_raw;
+    while (step_counts > 8192) step_counts -= 16384;
+    while (step_counts < -8192) step_counts += 16384;
+    backward_progress += step_counts;
+    previous_raw = r_val;
+    
+    int32_t count_ideal = ((int32_t)raw_start + ((k * 16384) / 128)) % 16384;
+    int32_t diff = (int32_t)r_val - count_ideal;
+    while (diff > 8192)  diff -= 16384;
+    while (diff < -8192) diff += 16384;
+    err_bwd[k] = diff;
   }
 
-  // STEP 3: Auto-detect encoder_direction (+1 or -1) dựa trên tổng 1 vòng quay cơ học (2*PI rad)
-  if (total_mech_delta > 1.0f) {
-    g_foc_controller.conf.encoder_direction = 1;
-    test_result = 2; // Direction +1 detected
-  } else if (total_mech_delta < -1.0f) {
-    g_foc_controller.conf.encoder_direction = -1;
-    test_result = 3; // Direction -1 detected
+  // STEP 4: Compute combined offset_lut
+  int32_t sum_err = 0;
+  for (int k = 0; k < 128; k++) {
+    int32_t avg_err = (err_fwd[k] + err_bwd[k]) / 2;
+    sum_err += avg_err;
+  }
+  int32_t ezero_offset = sum_err / 128;
+
+  int32_t max_abs_comp = 0;
+  for (int k = 0; k < 128; k++) {
+    int32_t avg_err = (err_fwd[k] + err_bwd[k]) / 2;
+    int32_t comp = -(avg_err - ezero_offset);
+    int32_t abs_comp = (comp < 0) ? -comp : comp;
+    if (abs_comp > max_abs_comp) max_abs_comp = abs_comp;
+
+    int lut_idx = ((((int32_t)raw_start + (k * 128)) % 16384) >> 7) & 0x7F;
+    candidate_lut[lut_idx] = (int16_t)comp;
+  }
+
+  calibration_valid = forward_progress > 14745 && forward_progress < 18022 &&
+                      backward_progress < -14745 && backward_progress > -18022 &&
+                      max_abs_comp <= 128;
+  if (calibration_valid) {
+    for (int k = 0; k < 128; k++) {
+      g_foc_controller.encoder.offset_lut[k] = candidate_lut[k];
+    }
+    g_foc_controller.encoder.use_lut = 1U;
   } else {
-    test_result = -1; // Error: motor didn't move
+    /* A failed retry must not destroy a previously validated calibration. */
+    EncoderCalStore_Load(&g_foc_controller.encoder);
   }
 
-  g_dbg_align.vbus = vbus;
-  g_dbg_align.enc_dir = g_foc_controller.conf.encoder_direction;
-
-  // STEP 4: Rotate smoothly back to Electrical Zero (theta_e = 0)
-  for (int step = 0; step <= 400; step++) {
-    float angle = (42.0f * 3.14159265f) * (1.0f - (float)step / 400.0f);
-    float sin_a, cos_a;
-    utils_fast_sincos(angle, &sin_a, &cos_a);
-    float valpha = (vd_align / vbus) * cos_a;
-    float vbeta  = (vd_align / vbus) * sin_a;
-    uint32_t ta, tb, tc, sector;
-    foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
-    if (g_foc_controller.phase_swap_bc) {
-      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tc * period) / 1000);
-      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tb * period) / 1000);
-    } else {
-      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
-      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
-    }
-    Comm_Telemetry_Process(&g_foc_controller);
-    HAL_Delay(5);
-  }
-  for (int i = 0; i < 80; i++) {
+  // STEP 5: Return near electrical zero before removing calibration voltage.
+  Ramp_SvmVector(vd_cal, vd_cal, 0.0f, vbus, period, 40, 5);
+  for (int i = 0; i < 60; i++) {
+    if (run_calibration != 1 || g_foc_controller.fault != MC_FAULT_NONE) goto calibration_abort;
+    Apply_SvmVector(vd_cal, 0.0f, vbus, period);
     Comm_Telemetry_Process(&g_foc_controller);
     HAL_Delay(10);
   }
 
-  float enc_zero = 0.0f;
-  AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_zero);
-  AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_zero);
-
-  // Lưu Offset ở Miền Góc Điện (Electrical Domain) theo Chuẩn VESC [-PI, +PI]
-  float elec_offset = (float)(g_foc_controller.conf.encoder_direction * g_foc_controller.conf.foc_motor_pole_pairs) * enc_zero;
-  utils_norm_angle_rad(&elec_offset);
-  g_foc_controller.zero_electric_angle = elec_offset;
-  g_foc_controller.aligned = true;
-
-  // Log debug
-  g_dbg_align.zero_electric_angle = enc_zero;
-  g_dbg_align.encoder_rad = enc_zero;
-  g_dbg_align.aligned = 1;
-
-  // STEP 5: Smooth ramp down to 0V
-  for (int i = 30; i >= 0; i--) {
-    float vd = (vd_align * (float)i / 30.0f);
-    float valpha = vd / vbus, vbeta = 0.0f;
-    uint32_t ta, tb, tc, sector;
-    foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
-    if (g_foc_controller.phase_swap_bc) {
-      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tc * period) / 1000);
-      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tb * period) / 1000);
-    } else {
-      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
-      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
-    }
-    Comm_Telemetry_Process(&g_foc_controller);
-    HAL_Delay(4);
-  }
+  // STEP 6: Ramp down to 0V
+  Ramp_SvmVector(vd_cal, 0.0f, 0.0f, vbus, period, 40, 5);
 
   // Safe state
   __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, period / 2);
@@ -545,10 +864,32 @@ void Run_EncoderAlignment(void)
   g_foc_controller.duty_a = g_foc_controller.duty_b = g_foc_controller.duty_c = 0.5f;
 
   HAL_Delay(50);
+  if (calibration_valid) {
+    g_encoder_calibration_result =
+        EncoderCalStore_Save(candidate_lut) ? 2 : -2;
+  } else {
+    g_encoder_calibration_result = -1;
+  }
   g_foc_controller.fault = MC_FAULT_NONE;
   g_foc_controller.motor.m_state = old_state;
-  align_result = 2; // OK
-  run_alignment = 0;
+  /* A long rotating calibration can finish with the rotor lagging the field.
+   * A fresh zero-voltage-to-lock alignment is required before closed-loop FOC. */
+  g_foc_controller.aligned = false;
+  align_result = calibration_valid ? 1 : -1;
+  run_calibration = 0;
+  run_alignment = 1;
+  return;
+
+calibration_abort:
+  EncoderCalStore_Load(&g_foc_controller.encoder);
+  g_encoder_calibration_result = -1;
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, period / 2);
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, period / 2);
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, period / 2);
+  g_foc_controller.duty_a = g_foc_controller.duty_b = g_foc_controller.duty_c = 0.5f;
+  g_foc_controller.motor.m_state = MC_STATE_OFF;
+  align_result = -1;
+  run_calibration = 0;
 }
 
 
@@ -712,10 +1053,17 @@ int main(void)
 
   /* 1. Initialize FOC Engine, DRV8353RS Gate Driver & AS5048A Encoder */
   motor_init(&hspi1, &hspi3);
+  g_encoder_calibration_result =
+      EncoderCalStore_Load(&g_foc_controller.encoder) ? 3 : 0;
 
   /* 2. Calibrate ADC hardware (internal offset calibration) */
   HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
   HAL_ADCEx_Calibration_Start(&hadc2, ADC_SINGLE_ENDED);
+
+  /* Cycle-accurate dt keeps the 10 kHz ADC/FOC math independent of PWM rate. */
+  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+  DWT->CYCCNT = 0U;
+  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
 
   /* 3. Start PWM on all 6 channels (3 High-side + 3 Low-side complementary) */
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
@@ -730,18 +1078,32 @@ int main(void)
   __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, htim1.Init.Period / 2);
   __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, htim1.Init.Period / 2);
 
-  /* 5. Start Injected ADC conversions (triggered by TIM1 TRGO at 20kHz) */
+  /* 5. Start Injected ADC conversions (triggered by TIM1 CC4 inside the PWM low-side window) */
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4,
+                        htim1.Init.Period - ADC_INJECTED_SAMPLE_TICKS_FROM_TOP);
+  if (HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4) != HAL_OK) {
+    Error_Handler();
+  }
   HAL_ADCEx_InjectedStart_IT(&hadc2);  // Slave ADC2 start first
   HAL_ADCEx_InjectedStart_IT(&hadc1);  // Master ADC1 start (triggers both)
 
   /* 6. Wait for ADC zero-current offset calibration to truly complete.
-   * Calibration timeline: 10000 ISR warmup (500ms) + 2048 samples (102ms) = ~602ms total.
+   * Calibration timeline at 10 kHz: 10000 ISR warmup + 2048 samples = ~1.205 s.
    * HAL_Delay(150) cũ KHÔNG ĐỦ -> offset chưa xong khi main loop chạy.
    * Poll flag thực để đảm bảo offset đúng trước khi gửi telemetry. */
-  while (!g_foc_controller.calibrated_offsets) {
+  g_adc_calib_wait_ms = 0;
+  g_adc_calib_timeout = 0;
+  while (!g_foc_controller.calibrated_offsets && g_adc_calib_wait_ms < 1500U) {
       HAL_Delay(10);
+      g_adc_calib_wait_ms += 10U;
   }
-  HAL_Delay(10); /* Buffer thêm 10ms sau khi offset xong */
+  if (!g_foc_controller.calibrated_offsets) {
+      g_adc_calib_timeout = 1;
+      g_foc_controller.motor.m_state = MC_STATE_OFF;
+      g_foc_controller.fault |= MC_FAULT_ENCODER;
+  } else {
+      HAL_Delay(10); /* Buffer thêm 10ms sau khi offset xong */
+  }
 
   /* 7. Đọc VBUS thực và cập nhật g_adc_readings sau khi offset calibration hoàn tất
    * AN TOÀN gọi từ main loop: ADC1 Regular = SOFTWARE_START (Fix 1) -> không xung đột T1_TRGO */
@@ -776,6 +1138,9 @@ int main(void)
 
     /* 0b. Chạy encoder alignment nếu được kích hoạt */
     Run_EncoderAlignment();
+
+    /* 0c. Chạy 1-turn Ben Katz LUT calibration nếu được kích hoạt */
+    Run_EncoderCalibration();
 
     /* Đảm bảo giải phóng khóa Break PWM ở Timer1 (tránh kẹt lúc khởi động) */
     TIM1_EnsureMoeEnabled();
@@ -814,17 +1179,21 @@ int main(void)
         g_foc_controller.motor.m_state = MC_STATE_RUNNING;
         g_foc_controller.motor.m_control_mode = CONTROL_MODE_DUTY;
       }
-    } else if (run_direction_test != 1 && run_alignment != 1) {
-      // Khi run_foc_mode == 0, chỉ tắt động cơ nếu USB App cũng không yêu cầu chạy
-      if (g_foc_controller.motor.m_state == MC_STATE_OFF) {
-        g_foc_controller.motor.m_motor_state.iq_target = 0.0f;
-        g_foc_controller.motor.m_motor_state.id_target = 0.0f;
-        pos_target_dbg = g_foc_controller.motor.m_joint_angle;
-        speed_target_dbg = 0.0f;
-        g_foc_controller.motor.m_speed_command_rpm = 0.0f;
-        g_foc_controller.motor.m_speed_pid_set_rpm = 0.0f;
-        g_foc_controller.fault = MC_FAULT_NONE;
-      }
+    } else if (run_direction_test != 1 && run_alignment != 1 &&
+               run_calibration != 1 && run_open_loop != 1) {
+      g_foc_controller.motor.m_state = MC_STATE_OFF;
+      g_foc_controller.motor.m_iq_set = 0.0f;
+      g_foc_controller.motor.m_motor_state.iq_target = 0.0f;
+      g_foc_controller.motor.m_motor_state.id_target = 0.0f;
+      pos_target_dbg = g_foc_controller.motor.m_joint_angle;
+      speed_target_dbg = 0.0f;
+      g_foc_controller.motor.m_speed_command_rpm = 0.0f;
+      g_foc_controller.motor.m_speed_pid_set_rpm = 0.0f;
+      g_foc_controller.duty_a = 0.5f;
+      g_foc_controller.duty_b = 0.5f;
+      g_foc_controller.duty_c = 0.5f;
+      /* Keep safety faults latched for telemetry and diagnosis. STOP/CLEAR or
+       * a new explicit run command clears the fault. */
     }
 
     /* 1. Đọc VBUS qua ADC1 Regular (SOFTWARE_START, an toàn) + DRV status ở 2Hz
@@ -1000,7 +1369,7 @@ static void MX_ADC1_Init(void)
   sConfigInjected.InjectedDiscontinuousConvMode = DISABLE;
   sConfigInjected.AutoInjectedConv = DISABLE;
   sConfigInjected.QueueInjectedContext = DISABLE;
-  sConfigInjected.ExternalTrigInjecConv = ADC_EXTERNALTRIGINJEC_T1_TRGO;
+  sConfigInjected.ExternalTrigInjecConv = ADC_EXTERNALTRIGINJEC_T1_CC4;
   sConfigInjected.ExternalTrigInjecConvEdge = ADC_EXTERNALTRIGINJECCONV_EDGE_RISING;
   sConfigInjected.InjecOversamplingMode = DISABLE;
   if (HAL_ADCEx_InjectedConfigChannel(&hadc1, &sConfigInjected) != HAL_OK)
@@ -1387,7 +1756,7 @@ static void MX_TIM1_Init(void)
   {
     Error_Handler();
   }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
   sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_RESET;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
@@ -1432,6 +1801,17 @@ static void MX_TIM1_Init(void)
     Error_Handler();
   }
   if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM2;
+  sConfigOC.Pulse = htim1.Init.Period - ADC_INJECTED_SAMPLE_TICKS_FROM_TOP;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
+  sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
+  if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_4) != HAL_OK)
   {
     Error_Handler();
   }
@@ -1632,12 +2012,32 @@ static void MX_GPIO_Init(void)
  *
  * @param  hadc: ADC handle pointer (ADC1 hoặc ADC2)
  * @note   Chỉ xử lý khi ADC1 (Master) báo xong conversion
- * @note   Thời gian thực thi mục tiêu: < 12µs (trong chu kỳ 50µs)
+ * @note   Hardware configuration generates this ADC/FOC callback at 10 kHz.
  */
 void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
   if (hadc->Instance != ADC1)
     return; // Chỉ xử lý Master ADC1
 
+  static uint32_t previous_isr_cycle = 0U;
+  uint32_t isr_cycle = DWT->CYCCNT;
+  float dt = 1.0f / 10000.0f;
+  if (previous_isr_cycle != 0U && SystemCoreClock > 0U) {
+    uint32_t elapsed_cycles = isr_cycle - previous_isr_cycle;
+    float measured_dt = (float)elapsed_cycles / (float)SystemCoreClock;
+    if (measured_dt >= 0.000020f && measured_dt <= 0.000500f) {
+      dt = measured_dt;
+      uint32_t nominal_cycles = SystemCoreClock / 10000U;
+      if (nominal_cycles > 0U && elapsed_cycles > (nominal_cycles * 3U) / 2U) {
+        uint32_t elapsed_periods = (elapsed_cycles + nominal_cycles / 2U) /
+                                   nominal_cycles;
+        if (elapsed_periods > 1U) {
+          g_foc_isr_missed_periods += elapsed_periods - 1U;
+        }
+      }
+    }
+  }
+  previous_isr_cycle = isr_cycle;
+  g_foc_isr_dt_s = dt;
   g_adc_isr_counter++; // Đếm số lần ISR chạy để debug
 
   // ===== 1. ĐỌC GIÁ TRỊ DÒNG ĐIỆN THẬT TỪ ADC =====
@@ -1653,14 +2053,40 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
     return; // Không chạy FOC khi đang calibrate
   }
 
-  // Chuyển đổi dòng điện 3 pha chuẩn theo cấu trúc Low-Side Shunt (Dòng vào pha = -(ADC - offset))
+  bool motor_driven = (run_foc_mode != 0) || (run_open_loop == 1) ||
+                      (run_direction_test == 1) ||
+                      (run_alignment == 1) || (run_calibration == 1);
+
+  if (!motor_driven) {
+    g_foc_controller.offset_ia += CURRENT_IDLE_OFFSET_ALPHA *
+                                  ((float)raw_ic - g_foc_controller.offset_ia);
+    g_foc_controller.offset_ib += CURRENT_IDLE_OFFSET_ALPHA *
+                                  ((float)raw_ib - g_foc_controller.offset_ib);
+  }
+
+  // Chuyển đổi dòng điện 3 pha. Dữ kiện thực nghiệm: +Vq tạo RPM dương nhưng Iq đo âm,
+  // nên dấu current sense phải là +(ADC - offset), không phải đảo âm.
+  static float current_b_f = 0.0f;
+  static float current_c_f = 0.0f;
   float current_b, current_c;
   if (g_foc_controller.phase_swap_bc) {
-    current_b = -((float)raw_ic - g_foc_controller.offset_ia) * ADC_TO_AMPS;
-    current_c = -((float)raw_ib - g_foc_controller.offset_ib) * ADC_TO_AMPS;
+    current_b = ((float)raw_ic - g_foc_controller.offset_ia) * ADC_TO_AMPS;
+    current_c = ((float)raw_ib - g_foc_controller.offset_ib) * ADC_TO_AMPS;
   } else {
-    current_b = -((float)raw_ib - g_foc_controller.offset_ib) * ADC_TO_AMPS;
-    current_c = -((float)raw_ic - g_foc_controller.offset_ia) * ADC_TO_AMPS;
+    current_b = ((float)raw_ib - g_foc_controller.offset_ib) * ADC_TO_AMPS;
+    current_c = ((float)raw_ic - g_foc_controller.offset_ia) * ADC_TO_AMPS;
+  }
+
+  if (!motor_driven) {
+    current_b_f = 0.0f;
+    current_c_f = 0.0f;
+    current_b = 0.0f;
+    current_c = 0.0f;
+  } else {
+    current_b_f += CURRENT_RUN_FILTER_ALPHA * (current_b - current_b_f);
+    current_c_f += CURRENT_RUN_FILTER_ALPHA * (current_c - current_c_f);
+    current_b = Current_Deadband(current_b_f);
+    current_c = Current_Deadband(current_c_f);
   }
   float current_a = -(current_b + current_c); // Kirchhoff: Ia + Ib + Ic = 0
 
@@ -1677,30 +2103,37 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
   float temp_fet = g_adc_readings.fet_temp;
   if (temp_fet < -20.0f || temp_fet > 150.0f) temp_fet = 25.0f;
 
+  /* ALIGN/CALIB drive PWM from the main loop, so the normal FOC ISR below is
+   * intentionally skipped. Still publish real phase currents and run the
+   * safety supervisor instead of showing stale zeros during those tests. */
+  if (run_open_loop == 1 || run_direction_test == 1 || run_alignment == 1 ||
+      run_calibration == 1) {
+    motor_state_t *state_m = &g_foc_controller.motor.m_motor_state;
+    state_m->i_alpha = current_a;
+    state_m->i_beta = (current_a + 2.0f * current_b) * ONE_BY_SQRT3;
+    if (run_open_loop != 1) {
+      state_m->id_filter = current_a;
+      state_m->iq_filter = state_m->i_beta;
+    }
+    if (!FOC_Control_CheckSafety(&g_foc_controller, current_a, current_b,
+                                 vbus, temp_fet)) {
+      return;
+    }
+  }
+
   // ===== 5. CHẠY FOC CURRENT CONTROL ISR =====
-  const float dt = 1.0f / 20000.0f; // 50µs = 1/20kHz
   if (run_open_loop == 1) {
     TIM1_EnsureMoeEnabled();
 
-    /* Đọc Encoder realtime trong Open-Loop để telemetry nhận góc thực */
-    float raw_enc_rad = 0.0f;
-    AS5048A_ReadRadians(&g_foc_controller.encoder, &raw_enc_rad);
-    foc_update_cycloidal_joint_angle(&g_foc_controller.motor, raw_enc_rad);
+    AS5048A_Sample(&g_foc_controller.encoder, dt);
+    foc_update_cycloidal_joint_angle(&g_foc_controller.motor,
+                                     g_foc_controller.encoder.angle_singleturn);
 
-    /* === 1. SMOOTH ACCELERATION RAMP (80 RPM/s) ===
-     * Hỗ trợ mượt mà cả chiều quay thuận (+) và nghịch (-).
-     * 100ms đầu giữ 0 RPM để rotor khóa êm vào góc 0 điện, sau đó tăng tốc từ từ. */
-    static uint32_t s_openloop_start_tick = 0;
+    /* === 1. SMOOTH ACCELERATION RAMP (80 RPM/s) === */
     if (fabsf(open_loop_target_rpm) > 0.1f) {
-      if (s_openloop_start_tick == 0) {
-        s_openloop_start_tick = g_adc_isr_counter;
-      }
-      /* Giữ 100ms (2000 chu kỳ 20kHz) lúc mới bắt đầu để rotor định hướng êm */
-      if ((g_adc_isr_counter - s_openloop_start_tick) >= 2000) {
-        utils_step_towards((float*)&open_loop_current_rpm, open_loop_target_rpm, 80.0f * dt);
-      }
+      utils_step_towards((float*)&open_loop_current_rpm, open_loop_target_rpm,
+                         80.0f * dt);
     } else {
-      s_openloop_start_tick = 0;
       open_loop_current_rpm = 0.0f;
     }
 
@@ -1710,8 +2143,23 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
     open_loop_angle += elec_rad_s * dt;
     /* Wrap angle [-PI, +PI] mỗi ISR cycle để tránh drift/overflow float */
     utils_norm_angle_rad((float*)&open_loop_angle);
-    /* Cập nhật PLL speed cho telemetry hiển thị RPM */
-    g_foc_controller.motor.m_speed_est_fast = elec_rad_s;
+    motor_state_t *state_m = &g_foc_controller.motor.m_motor_state;
+    state_m->phase = open_loop_angle;
+    float sin_current, cos_current;
+    sincos_lut(open_loop_angle, &sin_current, &cos_current);
+    state_m->id = cos_current * state_m->i_alpha +
+                  sin_current * state_m->i_beta;
+    state_m->iq = cos_current * state_m->i_beta -
+                  sin_current * state_m->i_alpha;
+    UTILS_LP_FAST(state_m->id_filter, state_m->id,
+                  g_foc_controller.conf.foc_current_filter_const);
+    UTILS_LP_FAST(state_m->iq_filter, state_m->iq,
+                  g_foc_controller.conf.foc_current_filter_const);
+    /* Report measured rotor speed; elec_rad_s is only the field command. */
+    g_foc_controller.motor.m_speed_est_fast =
+        (float)(g_foc_controller.conf.encoder_direction *
+                g_foc_controller.conf.foc_motor_pole_pairs) *
+        g_foc_controller.encoder.velocity_rad_s;
 
     /* === 3. TÍNH ĐIỆN ÁP V/f CHUẨN (Mô-men Giữ Đồng Bộ Vững) ===
      * Duy trì V_boost = open_loop_voltage (Mặc định 9.0V = ~2.31A / ~25Nm ngõ ra hộp số)
@@ -1723,6 +2171,8 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
     /* Clamp tổng điện áp ≤ Vbus/√3 × max_duty */
     float v_max = ONE_BY_SQRT3 * g_foc_controller.conf.l_max_duty * vbus;
     if (v_open > v_max) v_open = v_max;
+    state_m->vd = v_open;
+    state_m->vq = 0.0f;
 
     /* === 4. SINH SÓNG SIN CHUẨN → SVPWM === */
     float sin_val, cos_val;
@@ -1752,7 +2202,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
     return;
   }
 
-  if (run_direction_test != 1 && run_alignment != 1) {
+  if (run_direction_test != 1 && run_alignment != 1 && run_calibration != 1) {
     FOC_Control_Current_ISR(&g_foc_controller, current_a, current_b, vbus, temp_fet, dt);
 
     // ===== 6. CẬP NHẬT PWM DUTY CYCLE TRỰC TIẾP VÀO TIMER =====
@@ -1765,12 +2215,12 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3,
                           (uint32_t)(g_foc_controller.duty_c * (float)period));
 
-    // ===== 7. SLOW LOOP 1kHz (chia 20 lần từ 20kHz) =====
-    // Cũng chỉ chạy khi FOC active - SlowLoop đọc SPI3 encoder sẽ xung đột với alignment SPI reads
-    slow_loop_divider++;
-    if (slow_loop_divider >= 20) {
-      slow_loop_divider = 0;
-      FOC_Control_SlowLoop(&g_foc_controller, 0.001f); // dt = 1ms
+    // ===== 7. SLOW LOOP 1kHz, scheduled from real elapsed time =====
+    slow_loop_elapsed_s += dt;
+    if (slow_loop_elapsed_s >= 0.001f) {
+      float slow_dt = slow_loop_elapsed_s;
+      slow_loop_elapsed_s = 0.0f;
+      FOC_Control_SlowLoop(&g_foc_controller, slow_dt);
     }
   }
 }
