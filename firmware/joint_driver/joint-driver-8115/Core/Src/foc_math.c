@@ -9,6 +9,35 @@
 #include "foc_math.h"
 #include "vesc_utils.h"
 #include <math.h>
+#include <stddef.h>
+
+#define GB8115_KV_RPM_PER_V             14.8f
+#define SPEED_VQ_ABS_MAX_V              6.25f
+#define SPEED_DELTA_V_CONT_MAX          1.50f
+#define SPEED_DELTA_V_BREAKAWAY         2.20f
+#define SPEED_DELTA_V_I_MAX             1.10f
+#define SPEED_DELTA_V_P_MAX             1.30f
+#define SPEED_DELTA_V_D_MAX             0.20f
+#define SPEED_IQ_BREAKAWAY_A            1.50f
+#define SPEED_IQ_FRICTION_A             0.35f
+#define SPEED_IQ_CONT_MAX_A             4.50f
+#define SPEED_IQ_STALL_BOOST_A          4.50f
+#define SPEED_IQ_STALL_BOOST_RATE_A_S   35.0f
+#define SPEED_IQ_CMD_RATE_A_S           15.00f
+#define SPEED_IQ_I_MAX_A                2.50f
+#define SPEED_IQ_D_MAX_A                0.50f
+#define SPEED_IQ_BRAKE_MAX_A            0.30f
+#define SPEED_OVERSPEED_BAND_RPM        3.00f
+#define SPEED_IQ_BRAKE_MIN_A            0.04f
+#define SPEED_IQ_BRAKE_GAIN_A_PER_RPM   0.004f
+#define SPEED_IQ_BRAKE_FLOOR_MAX_A      0.18f
+#define SPEED_STALL_BOOST_DELAY_S       0.08f
+#define SPEED_STALL_ENTER_RATIO         0.08f
+#define SPEED_STALL_START_RATIO         0.05f
+#define SPEED_STALL_EXIT_RATIO          0.92f
+#define SPEED_STALL_MIN_HOLD_S          0.25f
+#define SPEED_STALL_MOTION_WINDOW_S     0.50f
+#define SPEED_STALL_MOTION_RATIO        0.08f
 
 /**
   * @brief  VESC Flux Linkage Observer (Ortega / MxLemming)
@@ -309,11 +338,11 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 	float vel_error = target_vel_rad_s - actual_joint_vel;
 
 	// 3. Smooth Cycloid Friction Feedforward
-	float iq_friction_ff = 0.50f * tanhf(target_vel_rad_s / 0.05f);
+	float iq_friction_ff = 0.35f * tanhf(target_vel_rad_s / 0.05f);
 
 	// 4. MIT Impedance PD Controller: Iq_cmd = Kp * e_pos + Kd * e_vel + Iq_ff
-	float p_gain = conf_now->p_pid_kp; // 15.0 A/rad (Virtual joint stiffness)
-	float d_gain = conf_now->p_pid_kd; // 0.50 A/(rad/s) (Virtual joint damping)
+	float p_gain = conf_now->p_pid_kp; // 10.0 A/rad (Virtual joint stiffness)
+	float d_gain = conf_now->p_pid_kd; // 0.30 A/(rad/s) (Virtual joint damping)
 	float p_term = error * p_gain;
 	float d_term = vel_error * d_gain;
 	motor->m_pos_i_term = 0.0f;        // Zero I-term (No windup, elastic impact absorption)
@@ -328,69 +357,150 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 }
 
 /**
-  * @brief  Speed Controller Loop (Cascaded Current-Mode FOC: Output = Iq in Amperes)
-  *         Speed PI + Zero-Crossing Tanh Friction Feedforward + Anti-Windup.
+  * @brief  Speed Controller Loop (Cascaded Current-Mode FOC: Output = Iq in A)
   */
 void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *motor) {
 	mc_configuration *conf_now = motor->m_conf;
+	if (conf_now == NULL) return;
+
+	float pole_pairs = (float)conf_now->foc_motor_pole_pairs;
+	if (pole_pairs < 1.0f) {
+		pole_pairs = 21.0f;
+	}
+
+	if (dt < 0.0001f || dt > 0.01f) {
+		dt = 0.001f;
+	}
+
+	float erpm_raw = RADPS2RPM_f(motor->m_speed_est_fast);
+	static float s_speed_iq_cmd = 0.0f;
 
 	if (motor->m_control_mode != CONTROL_MODE_SPEED) {
 		motor->m_speed_i_term = 0.0f;
 		motor->m_speed_prev_error = 0.0f;
-		motor->m_speed_d_filter = RADPS2RPM_f(motor->m_speed_est_fast);
+		motor->m_speed_d_filter = erpm_raw;
+		motor->m_speed_d_filter_proc = erpm_raw;
+		motor->m_openloop_spinup_active = false;
+		motor->m_openloop_spinup_time = 0.0f;
+		s_speed_iq_cmd = 0.0f;
 		return;
 	}
 
-	// 1. Smooth Acceleration Ramp (3000 ERPM/s ~ 142 RPM/s)
-	float ramp_rate = (conf_now->s_pid_ramp_erpms_s > 10.0f) ? conf_now->s_pid_ramp_erpms_s : 3000.0f;
+	float speed_filter = conf_now->s_pid_kd_filter;
+	utils_truncate_number(&speed_filter, 0.005f, 0.10f);
+	UTILS_LP_FAST(motor->m_speed_d_filter, erpm_raw, speed_filter);
+
+	float erpm = motor->m_speed_d_filter;
+	float actual_mech_rpm = erpm / pole_pairs;
+
+	if (SIGN(motor->m_speed_command_rpm) != SIGN(motor->m_speed_pid_set_rpm)) {
+		motor->m_speed_i_term = 0.0f;
+		s_speed_iq_cmd = 0.0f;
+	}
+
+	static float s_stuck_time = 0.0f;
+
+	/* Breakaway spinup: small Iq pulse to overcome stiction at startup or when stuck */
+	bool is_stuck_at_startup = (fabsf(motor->m_speed_command_rpm) > 5.0f &&
+			fabsf(motor->m_speed_pid_set_rpm) < pole_pairs &&
+			fabsf(actual_mech_rpm) < 10.0f &&
+			motor->m_openloop_spinup_time <= 0.0f);
+
+	bool is_stuck_mid_run = false;
+	if (fabsf(motor->m_speed_command_rpm / pole_pairs) >= 15.0f && fabsf(actual_mech_rpm) < 4.0f) {
+		s_stuck_time += dt;
+		if (s_stuck_time >= 0.150f && !motor->m_openloop_spinup_active) {
+			is_stuck_mid_run = true;
+			s_stuck_time = 0.0f;
+		}
+	} else {
+		s_stuck_time = 0.0f;
+	}
+
+	if (is_stuck_at_startup || is_stuck_mid_run) {
+		motor->m_openloop_spinup_active = true;
+		motor->m_openloop_spinup_time = 0.0f;
+	}
+
+	if (motor->m_openloop_spinup_active) {
+		motor->m_openloop_spinup_time += dt;
+		float spin_dir = (motor->m_speed_command_rpm > 0.0f) ? 1.0f : -1.0f;
+		float command_abs_rpm = fabsf(motor->m_speed_command_rpm / pole_pairs);
+		float spinup_rpm = command_abs_rpm;
+		utils_truncate_number(&spinup_rpm, 0.5f, 15.0f);
+		float spinup_iq = 0.35f + 0.010f * command_abs_rpm;
+		utils_truncate_number(&spinup_iq, 0.50f, SPEED_IQ_BREAKAWAY_A);
+
+		motor->m_iq_set = spin_dir * spinup_iq;
+		motor->m_speed_pid_set_rpm = spin_dir * spinup_rpm * pole_pairs;
+		s_speed_iq_cmd = motor->m_iq_set;
+
+		/* Handover when motor is spinning cleanly (> 8 RPM) or 120ms elapsed */
+		if (motor->m_openloop_spinup_time >= 0.120f || fabsf(actual_mech_rpm) > 10.0f) {
+			motor->m_openloop_spinup_active = false;
+			motor->m_speed_i_term = spin_dir * SPEED_IQ_FRICTION_A;
+			motor->m_speed_d_filter_proc = erpm;
+		}
+		return;
+	}
+
+	/* Acceleration ramp (5000 ERPM/s ~ 240 RPM/s) */
+	float ramp_rate = (conf_now->s_pid_ramp_erpms_s > 100.0f) ? conf_now->s_pid_ramp_erpms_s : 5000.0f;
 	utils_step_towards((float*)&motor->m_speed_pid_set_rpm, motor->m_speed_command_rpm, ramp_rate * dt);
 
-	float target_erpm = motor->m_speed_pid_set_rpm; // Ramped Target ERPM
+	float target_erpm = motor->m_speed_pid_set_rpm;
+	float target_mech_rpm = target_erpm / pole_pairs;
+	float error_erpm = target_erpm - erpm;
 
-	// 2. Direct zero-lag PLL electrical speed feedback (20kHz 2nd-order PLL)
-	float erpm = RADPS2RPM_f(motor->m_speed_est_fast);
-	float error = target_erpm - erpm;
-
-	// Deadband when stopping
-	if (fabsf(target_erpm) < conf_now->s_pid_min_erpm && fabsf(motor->m_speed_command_rpm) < conf_now->s_pid_min_erpm) {
+	/* Deadband when stopping */
+	if (fabsf(target_mech_rpm) < 1.0f && fabsf(motor->m_speed_command_rpm / pole_pairs) < 1.0f) {
 		motor->m_speed_i_term = 0.0f;
-		motor->m_speed_prev_error = error;
+		motor->m_speed_prev_error = 0.0f;
 		motor->m_iq_set = 0.0f;
+		motor->m_openloop_spinup_active = false;
+		motor->m_openloop_spinup_time = 0.0f;
+		s_speed_iq_cmd = 0.0f;
 		return;
 	}
 
-	// 3. Smooth Zero-Crossing Friction Feedforward for 1:17 Cycloid Gearbox
-	float target_mech_rpm = target_erpm / (float)conf_now->foc_motor_pole_pairs;
-	float iq_friction_ff = 0.50f * tanhf(target_mech_rpm / 0.80f) + 0.0005f * target_mech_rpm;
+	/* PI controller */
+	float speed_kp = conf_now->s_pid_kp;
+	float p_term = speed_kp * error_erpm;
 
-	// 4. Proportional Term (Active Stiffness)
-	float kp = conf_now->s_pid_kp; // 0.0050 A/ERPM
-	float iq_p = error * kp;
+	float erpm_diff = erpm - motor->m_speed_d_filter_proc;
+	motor->m_speed_d_filter_proc += 0.20f * erpm_diff;
+	float d_term = -conf_now->s_pid_kd * erpm_diff / dt;
+	utils_truncate_number_abs(&d_term, SPEED_IQ_D_MAX_A);
 
-	// 5. Anti-Windup Integral Term (Zero steady-state error)
-	float ki = conf_now->s_pid_ki; // 0.0500 A/(ERPM*s)
-	if (ki > 0.00001f) {
-		motor->m_speed_i_term += (error * ki * dt);
-		utils_truncate_number_abs(&motor->m_speed_i_term, 3.0f); // Max 3.0A I-term authority
-	} else {
-		motor->m_speed_i_term = 0.0f;
+	/* Friction feedforward */
+	float iq_friction = 0.0f;
+	if (target_mech_rpm > 1.0f) {
+		iq_friction = SPEED_IQ_FRICTION_A;
+	} else if (target_mech_rpm < -1.0f) {
+		iq_friction = -SPEED_IQ_FRICTION_A;
 	}
 
-	// 6. Active Derivative Damping
-	float d_error = (error - motor->m_speed_prev_error) / dt;
-	motor->m_speed_prev_error = error;
-	float kd = conf_now->s_pid_kd; // 0.0001 A/(ERPM/s)
-	float iq_d = d_error * kd;
-	utils_truncate_number_abs(&iq_d, 1.50f);
+	/* Anti-windup conditional integration */
+	float iq_temp = iq_friction + p_term + motor->m_speed_i_term + d_term;
+	float iq_limit = conf_now->l_current_max;
+	if (iq_limit < 0.1f || iq_limit > SPEED_IQ_CONT_MAX_A) {
+		iq_limit = SPEED_IQ_CONT_MAX_A;
+	}
+	bool is_saturated = (fabsf(iq_temp) >= (iq_limit - 0.02f));
+	bool pushing_further = (error_erpm * iq_temp > 0.0f);
+	if (!(is_saturated && pushing_further)) {
+		motor->m_speed_i_term += conf_now->s_pid_ki * error_erpm * dt;
+		utils_truncate_number_abs(&motor->m_speed_i_term, SPEED_IQ_I_MAX_A);
+	}
 
-	// 7. Total Commanded Current (Amperes)
-	float iq_cmd = iq_p + motor->m_speed_i_term + iq_d + iq_friction_ff;
+	float iq_cmd = iq_friction + p_term + motor->m_speed_i_term + d_term;
+	utils_truncate_number_abs(&iq_cmd, iq_limit);
 
-	// 8. Safe Stall Current Clamping
-	float i_max = (conf_now->l_current_max > 0.1f) ? conf_now->l_current_max : 6.60f;
-	utils_truncate_number_abs(&iq_cmd, i_max);
+	/* Rate-limit the output to avoid current spikes */
+	utils_step_towards(&s_speed_iq_cmd, iq_cmd, SPEED_IQ_CMD_RATE_A_S * dt);
+	utils_truncate_number_abs(&s_speed_iq_cmd, iq_limit);
 
-	motor->m_iq_set = iq_cmd; // Target Iq current in Amperes -> 20kHz Current Loop
+	motor->m_iq_set = s_speed_iq_cmd;
 }
 
 /**
