@@ -478,7 +478,19 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		utils_truncate_number_abs(&motor->m_speed_i_term, SPEED_IQ_I_MAX_A);
 	}
 
+	/* Prevent I-term and command from driving in reverse direction against target */
+	if (target_mech_rpm > 1.0f) {
+		if (motor->m_speed_i_term < 0.0f) motor->m_speed_i_term = 0.0f;
+	} else if (target_mech_rpm < -1.0f) {
+		if (motor->m_speed_i_term > 0.0f) motor->m_speed_i_term = 0.0f;
+	}
+
 	float iq_cmd = iq_friction + p_term + motor->m_speed_i_term + d_term;
+	if (target_mech_rpm > 1.0f && iq_cmd < 0.0f) {
+		iq_cmd = 0.0f;
+	} else if (target_mech_rpm < -1.0f && iq_cmd > 0.0f) {
+		iq_cmd = 0.0f;
+	}
 	utils_truncate_number_abs(&iq_cmd, iq_limit);
 
 	/* Rate-limit the output to avoid current spikes */
