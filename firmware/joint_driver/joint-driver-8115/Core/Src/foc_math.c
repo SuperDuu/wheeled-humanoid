@@ -399,8 +399,10 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	}
 
 	static float s_stuck_time = 0.0f;
+	static float s_stuck_cooldown = 0.0f;
+	if (s_stuck_cooldown > 0.0f) s_stuck_cooldown -= dt;
 
-	/* Breakaway spinup: small Iq pulse to overcome stiction at startup or when stuck */
+	/* Breakaway spinup: 1.8A Iq pulse to overcome stiction at startup or when stuck */
 	bool is_stuck_at_startup = (fabsf(motor->m_speed_command_rpm) > 5.0f &&
 			fabsf(motor->m_speed_pid_set_rpm) < pole_pairs &&
 			fabsf(actual_mech_rpm) < 10.0f &&
@@ -409,9 +411,10 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	bool is_stuck_mid_run = false;
 	if (fabsf(motor->m_speed_command_rpm / pole_pairs) >= 15.0f && fabsf(actual_mech_rpm) < 4.0f) {
 		s_stuck_time += dt;
-		if (s_stuck_time >= 0.150f && !motor->m_openloop_spinup_active) {
+		if (s_stuck_time >= 0.200f && s_stuck_cooldown <= 0.0f && !motor->m_openloop_spinup_active) {
 			is_stuck_mid_run = true;
 			s_stuck_time = 0.0f;
+			s_stuck_cooldown = 0.800f; /* 800ms cooldown before allowing another kick */
 		}
 	} else {
 		s_stuck_time = 0.0f;
@@ -427,18 +430,18 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		float spin_dir = (motor->m_speed_command_rpm > 0.0f) ? 1.0f : -1.0f;
 		float command_abs_rpm = fabsf(motor->m_speed_command_rpm / pole_pairs);
 		float spinup_rpm = command_abs_rpm;
-		utils_truncate_number(&spinup_rpm, 0.5f, 15.0f);
-		float spinup_iq = 0.35f + 0.010f * command_abs_rpm;
-		utils_truncate_number(&spinup_iq, 0.50f, SPEED_IQ_BREAKAWAY_A);
+		utils_truncate_number(&spinup_rpm, 0.5f, 20.0f);
+		float spinup_iq = 1.80f + 0.005f * command_abs_rpm;
+		utils_truncate_number(&spinup_iq, 1.80f, SPEED_IQ_CONT_MAX_A);
 
 		motor->m_iq_set = spin_dir * spinup_iq;
 		motor->m_speed_pid_set_rpm = spin_dir * spinup_rpm * pole_pairs;
 		s_speed_iq_cmd = motor->m_iq_set;
 
-		/* Handover when motor is spinning cleanly (> 8 RPM) or 120ms elapsed */
-		if (motor->m_openloop_spinup_time >= 0.120f || fabsf(actual_mech_rpm) > 10.0f) {
+		/* Handover when motor is spinning cleanly (> 10 RPM) or 150ms elapsed */
+		if (motor->m_openloop_spinup_time >= 0.150f || fabsf(actual_mech_rpm) > 10.0f) {
 			motor->m_openloop_spinup_active = false;
-			motor->m_speed_i_term = spin_dir * SPEED_IQ_FRICTION_A;
+			motor->m_speed_i_term = spin_dir * 0.55f;
 			motor->m_speed_d_filter_proc = erpm;
 		}
 		return;
