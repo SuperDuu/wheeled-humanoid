@@ -53,9 +53,26 @@ HAL_StatusTypeDef AS5048A_Init(AS5048A_t *enc, SPI_HandleTypeDef *hspi, GPIO_Typ
     enc->cs_port = cs_port;
     enc->cs_pin = cs_pin;
     enc->raw_angle = 0;
+    enc->count = 0;
+    enc->use_lut = 0;
     enc->angle_rad = 0.0f;
     enc->angle_deg = 0.0f;
+    enc->angle_singleturn = 0.0f;
+    enc->angle_multiturn = 0.0f;
+    enc->old_angle = 0.0f;
+    enc->turns = 0;
+    enc->first_sample = 0;
+    enc->velocity_rad_s = 0.0f;
+    enc->velocity_rpm = 0.0f;
     enc->error_flag = 0;
+    enc->consecutive_errors = 0;
+    enc->error_count = 0;
+    for (int i = 0; i < AS5048A_N_POS_SAMPLES; i++) {
+        enc->count_buff[i] = 0;
+    }
+    for (int i = 0; i < AS5048A_LUT_SIZE; i++) {
+        enc->offset_lut[i] = 0;
+    }
 
     // Set CS high initially
     HAL_GPIO_WritePin(enc->cs_port, enc->cs_pin, GPIO_PIN_SET);
@@ -64,9 +81,121 @@ HAL_StatusTypeDef AS5048A_Init(AS5048A_t *enc, SPI_HandleTypeDef *hspi, GPIO_Typ
     AS5048A_ClearError(enc);
     AS5048A_ClearError(enc);
 
-    // Initial read
-    uint16_t dummy;
-    return AS5048A_ReadRawAngle(enc, &dummy);
+    /* Prime the AS5048A pipelined response. A response belongs to the previous
+     * command, so two angle commands are required after CLEAR_ERROR. */
+    uint16_t primed_angle = 0;
+    AS5048A_ReadRawAngle(enc, &primed_angle);
+    AS5048A_ReadRawAngle(enc, &primed_angle);
+
+    // Initial tracked sample
+    return AS5048A_Sample(enc, 0.000050f);
+}
+
+/**
+  * @brief  Sample AS5048A Position & Velocity via Ben Katz Integer-Count Differencing
+  */
+HAL_StatusTypeDef AS5048A_Sample(AS5048A_t *enc, float dt)
+{
+    if (enc == NULL || enc->hspi == NULL) return HAL_ERROR;
+
+    // 1. Shift around previous samples
+    enc->old_angle = enc->angle_singleturn;
+    for (int i = AS5048A_N_POS_SAMPLES - 1; i > 0; i--) {
+        enc->count_buff[i] = enc->count_buff[i - 1];
+    }
+
+    // 2. SPI Read Raw Angle
+    uint16_t previous_raw = enc->raw_angle;
+    uint16_t raw = 0;
+    HAL_StatusTypeDef status = AS5048A_ReadRawAngle(enc, &raw);
+
+    /* At the 10 kHz closed-loop sample rate, even 2000 RPM advances less than
+     * 55 encoder counts per sample. Reject isolated EMI frames before they can
+     * corrupt electrical angle, velocity, and the speed PI. */
+    if (status == HAL_OK && enc->first_sample && dt <= 0.0002f) {
+        int32_t raw_step = (int32_t)enc->raw_angle - (int32_t)previous_raw;
+        if (raw_step > (AS5048A_CPR / 2)) raw_step -= AS5048A_CPR;
+        if (raw_step < -(AS5048A_CPR / 2)) raw_step += AS5048A_CPR;
+        if (raw_step > 96 || raw_step < -96) {
+            enc->raw_angle = previous_raw;
+            enc->error_flag = 1;
+            status = HAL_ERROR;
+        }
+    }
+
+    if (status == HAL_OK) {
+        enc->consecutive_errors = 0;
+    } else {
+        if (enc->consecutive_errors < UINT16_MAX) {
+            enc->consecutive_errors++;
+        }
+        enc->error_count++;
+    }
+
+    // 3. Linearization (128-point LUT bit-shift interpolation, AS5048A 14-bit: 16384 >> 7 = 128)
+    int32_t off_interp = 0;
+    if (enc->use_lut) {
+        int idx = (enc->raw_angle >> 7) & 0x7F; // 0..127
+        int off_1 = enc->offset_lut[idx];
+        int off_2 = enc->offset_lut[(idx + 1) & 0x7F];
+        int frac = enc->raw_angle - (idx << 7); // 0..127
+        off_interp = off_1 + (((off_2 - off_1) * frac) >> 7);
+    }
+    enc->count = (int32_t)enc->raw_angle + off_interp;
+
+    // 4. Single-turn count & angle [0, 2*PI)
+    int32_t count_wrapped = enc->count % AS5048A_CPR;
+    if (count_wrapped < 0) { count_wrapped += AS5048A_CPR; }
+    enc->angle_singleturn = (2.0f * (float)M_PI) * ((float)count_wrapped) / (float)AS5048A_CPR;
+    enc->angle_rad = enc->angle_singleturn;
+    enc->angle_deg = enc->angle_singleturn * (180.0f / (float)M_PI);
+
+    // 5. Turn Rollover Tracking
+    int32_t rollover = 0;
+    float angle_diff = enc->angle_singleturn - enc->old_angle;
+    if (angle_diff > (float)M_PI) { rollover = -1; }
+    else if (angle_diff < -(float)M_PI) { rollover = 1; }
+    enc->turns += rollover;
+
+    int first_sample = !enc->first_sample;
+    if (first_sample) {
+        enc->turns = 0;
+        if (enc->angle_singleturn > (0.5f * (float)M_PI)) { enc->turns = -1; }
+        enc->first_sample = 1;
+    }
+
+    // 6. Multi-turn position exact in integer counts
+    enc->count_buff[0] = count_wrapped + (AS5048A_CPR * enc->turns);
+    enc->angle_multiturn = (2.0f * (float)M_PI) * ((float)enc->count_buff[0]) / (float)AS5048A_CPR;
+
+    if (first_sample) {
+        for (int i = 1; i < AS5048A_N_POS_SAMPLES; i++) {
+            enc->count_buff[i] = enc->count_buff[0];
+        }
+    }
+
+    // 7. Velocity: Finite difference of integer counts + low-speed count deadband.
+    float dt_total = dt * (float)(AS5048A_N_POS_SAMPLES - 1);
+    if (dt_total > 0.000001f) {
+        int32_t vel_counts = enc->count_buff[0] - enc->count_buff[AS5048A_N_POS_SAMPLES - 1];
+        float raw_vel = 0.0f;
+        /* Reject multi-turn wrap-around glitch spikes (> 3000 counts in 12ms = > 900 RPM) */
+        if ((vel_counts > 2 && vel_counts < 3000) || (vel_counts < -2 && vel_counts > -3000)) {
+            raw_vel = (2.0f * (float)M_PI) * ((float)vel_counts)
+                      / ((float)AS5048A_CPR * dt_total);
+        }
+        if (first_sample) {
+            enc->velocity_rad_s = 0.0f;
+        } else {
+            enc->velocity_rad_s += 0.05f * (raw_vel - enc->velocity_rad_s);
+            if (fabsf(enc->velocity_rad_s) < 0.10f && raw_vel == 0.0f) {
+                enc->velocity_rad_s = 0.0f;
+            }
+        }
+        enc->velocity_rpm = enc->velocity_rad_s * (60.0f / (2.0f * (float)M_PI));
+    }
+
+    return status;
 }
 
 /**
@@ -93,21 +222,23 @@ HAL_StatusTypeDef AS5048A_ReadRawAngle(AS5048A_t *enc, uint16_t *raw_angle)
     if (status == HAL_OK) {
         // Verify Even Parity on 16-bit frame
         uint16_t expected_parity_frame = AS5048A_CalculateEvenParity(response & 0x7FFF);
-        if (response == expected_parity_frame) {
+        if (response == expected_parity_frame && (response & (1 << 14)) == 0) {
             // Valid frame: Extract 14-bit absolute angle (bits 13:0)
             uint16_t angleData = response & 0x3FFF;
             enc->raw_angle = angleData;
             enc->angle_rad = ((float)angleData / 16384.0f) * (2.0f * (float)M_PI);
             enc->angle_deg = ((float)angleData / 16384.0f) * 360.0f;
-            enc->error_flag = (response & (1 << 14)) ? 1 : 0;
+            enc->error_flag = 0;
         } else {
-            // Parity mismatch on this cycle: retain last valid angle for 1 sample (50µs)
+            // Parity/sensor error: retain the last valid angle.
             enc->error_flag = 1;
+            status = HAL_ERROR;
         }
     } else {
         // Clear SPI state on error to prevent latchup
         enc->hspi->State = HAL_SPI_STATE_READY;
         __HAL_SPI_CLEAR_OVRFLAG(enc->hspi);
+        enc->error_flag = 1;
     }
 
     *raw_angle = enc->raw_angle;
