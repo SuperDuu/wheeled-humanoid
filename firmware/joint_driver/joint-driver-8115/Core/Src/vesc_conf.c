@@ -48,8 +48,8 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_cc_decoupling = FOC_CC_DECOUPLING_BEMF; // Bù khử ghép chéo d-q
 
     // Speed Controller (Cascaded Current-Mode FOC: Outputs Iq command in Amperes)
-    conf->s_pid_kp = 0.00035f;             // Well-damped; loop crossover at ~2.5 Hz (high phase margin)
-    conf->s_pid_ki = 0.00012f;             // Zero at 0.054 Hz eliminates steady-state droop smoothly
+    conf->s_pid_kp = 0.00050f;             // Well-damped; fast torque response without oscillation
+    conf->s_pid_ki = 0.00020f;             // Eliminates steady-state droop smoothly in < 0.5s
     conf->s_pid_kd = 0.0f;                 // Disable D until encoder speed is clean
     conf->s_pid_kd_filter = 0.020f;        // ~3.5 Hz; smooth velocity feedback with low phase delay
     conf->s_pid_min_erpm = 10.0f;          // 10 ERPM deadband (~0.48 RPM motor)
