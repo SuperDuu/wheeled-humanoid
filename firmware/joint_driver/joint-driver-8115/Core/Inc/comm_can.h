@@ -37,12 +37,26 @@ typedef enum {
 /* Node Configuration */
 #define DEFAULT_CAN_NODE_ID     1       /* Default Joint Node ID (1..254) */
 #define CAN_BROADCAST_ID        255     /* Broadcast ID */
+#define CAN_MASTER_ID           0x00    /* Host PC / Master Controller ID */
+
+/* MIT Mini Cheetah CAN Protocol Standard Ranges */
+#define MIT_P_MIN               (-12.5f)    /* rad */
+#define MIT_P_MAX               (+12.5f)    /* rad */
+#define MIT_V_MIN               (-45.0f)    /* rad/s */
+#define MIT_V_MAX               (+45.0f)    /* rad/s */
+#define MIT_KP_MIN              (0.0f)      /* N*m/rad */
+#define MIT_KP_MAX              (500.0f)    /* N*m/rad */
+#define MIT_KD_MIN              (0.0f)      /* N*m*s/rad */
+#define MIT_KD_MAX              (5.0f)      /* N*m*s/rad */
+#define MIT_T_MIN               (-18.0f)    /* N*m */
+#define MIT_T_MAX               (+18.0f)    /* N*m */
 
 /* Function Prototypes */
 void comm_can_init(FDCAN_HandleTypeDef *hfdcan, uint8_t node_id);
 void comm_can_process_rx_frame(FDCAN_RxHeaderTypeDef *rx_header, uint8_t *rx_data);
 void comm_can_send_status1(void);
 void comm_can_send_status5(void);
+void comm_can_send_mit_reply(float p_actual, float v_actual, float t_actual);
 void comm_can_set_node_id(uint8_t node_id);
 uint8_t comm_can_get_node_id(void);
 
