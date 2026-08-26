@@ -250,28 +250,43 @@
           <button id="btn-align" class="btn btn-align">
             🎯 ALIGN
           </button>
+          <button id="btn-calib" class="btn btn-calib" data-cmd="CALIB" title="Hiệu chuẩn 128 điểm Ben Katz (MIT Mini Cheetah) quay 1 vòng (~7s)">
+            💎 CALIB (1 VÒNG)
+          </button>
           <button id="btn-reset-err" class="btn btn-reseterr" data-cmd="RESET_ERR">
             🧹 RESET ERR
           </button>
         </div>
-        <div class="action-btn-row secondary-row">
+        <div class="action-btn-row secondary-row" style="flex-wrap: wrap; gap: 4px;">
           <button class="btn btn-chip-speed" data-cmd="SPEED 100">
-            ⚡ +100
+            ⚡+100
           </button>
           <button class="btn btn-chip-speed" data-cmd="SPEED 200">
-            ⚡ +200
+            ⚡+200
+          </button>
+          <button class="btn btn-chip-open" data-cmd="OPENLOOP 200 9.0" title="Open-Loop 200 RPM">
+            🟢OP200
+          </button>
+          <button class="btn btn-chip-turbo" data-cmd="OPENLOOP 350 10.5" title="Turbo Open-Loop 350 RPM (10.5V)">
+            🚀OP350
+          </button>
+          <button class="btn btn-chip-max" data-cmd="OPENLOOP 500 12.0" title="Max Speed Open-Loop 500 RPM (12.0V)">
+            🔥OP500
           </button>
           <button class="btn btn-chip-speed rev" data-cmd="SPEED -100">
-            🔄 -100
+            🔄-100
           </button>
           <button class="btn btn-chip-speed rev" data-cmd="SPEED -200">
-            🔄 -200
+            🔄-200
           </button>
-          <button id="btn-openloop-fwd" class="btn btn-chip-open">
-            OPEN+
+          <button class="btn btn-chip-open rev" data-cmd="OPENLOOP -200 9.0" title="Open-Loop -200 RPM">
+            🔴-200
           </button>
-          <button id="btn-openloop-rev" class="btn btn-chip-open rev">
-            OPEN-
+          <button class="btn btn-chip-turbo rev" data-cmd="OPENLOOP -350 10.5" title="Turbo Open-Loop -350 RPM">
+            🚀-350
+          </button>
+          <button class="btn btn-chip-max" data-cmd="OPENLOOP -500 12.0" title="Max Speed Open-Loop -500 RPM">
+            🔥-500
           </button>
         </div>
       </div>
@@ -359,7 +374,7 @@
       <div class="panel-card" style="border: 1px solid rgba(14, 165, 233, 0.4);">
         <div class="panel-header" style="background: rgba(14, 165, 233, 0.1);">
           <span class="panel-icon">🏎️</span>
-          <h4 style="color: #38bdf8;">TEST VẬN TỐC & TỐC ĐỘ (SPEED CONTROLLER)</h4>
+          <h4 style="color: #38bdf8;">TEST VẬN TỐC & TỐC ĐỘ (CLOSED-LOOP SPEED)</h4>
         </div>
         <div class="panel-body">
           <div class="control-row" style="margin-bottom: 6px;">
@@ -386,6 +401,49 @@
               <button class="btn-preset" data-speed="-200">-200</button>
               <button class="btn-preset" data-speed="-300">-300</button>
               <button class="btn-preset" data-speed="-500">-500</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 🌀 TEST OPEN-LOOP V/F (TỐC ĐỘ CAO & BÙ ĐIỆN ÁP) -->
+      <div class="panel-card" style="border: 1px solid rgba(234, 179, 8, 0.4); background: linear-gradient(180deg, rgba(30, 27, 10, 0.3) 0%, rgba(15, 23, 42, 0.6) 100%);">
+        <div class="panel-header" style="background: rgba(234, 179, 8, 0.15);">
+          <span class="panel-icon">🌀</span>
+          <h4 style="color: #facc15;">TEST OPEN-LOOP V/F (TỐC ĐỘ CAO & BÙ ÁP)</h4>
+        </div>
+        <div class="panel-body">
+          <div class="control-row" style="margin-bottom: 6px;">
+            <div class="label-with-val">
+              <label style="color: #fde047; font-weight: bold;">🌀 Đặt Tốc Độ & Áp Open-Loop:</label>
+              <span class="slider-display" id="openloop-display" style="color: #fde047;">350 RPM @ 10.0V</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1.2fr 1fr 1.2fr; gap: 6px; margin-bottom: 6px;">
+              <div>
+                <label style="font-size: 0.68rem; color: #94a3b8;">RPM Mục Tiêu:</label>
+                <input type="number" id="input-openloop-rpm" value="350" step="50" min="-1000" max="1000" style="width: 100%; font-weight: bold; font-size: 0.95rem; padding: 6px; background: #0f172a; border: 1px solid #334155; color: #fde047; border-radius: 4px;">
+              </div>
+              <div>
+                <label style="font-size: 0.68rem; color: #94a3b8;">Áp Boost (V):</label>
+                <input type="number" id="input-openloop-volt" value="10.0" step="0.5" min="2.0" max="15.0" style="width: 100%; font-weight: bold; font-size: 0.95rem; padding: 6px; background: #0f172a; border: 1px solid #334155; color: #38bdf8; border-radius: 4px;">
+              </div>
+              <div style="display: flex; align-items: flex-end;">
+                <button id="btn-run-openloop" class="btn btn-action" style="width: 100%; background: #eab308; color: #000; font-weight: 800; font-size: 0.80rem; padding: 7px 4px;">
+                  🚀 CHẠY OPEN
+                </button>
+              </div>
+            </div>
+            <input type="range" id="slider-openloop" min="-600" max="600" step="50" value="0" style="margin-top: 4px;">
+            <div class="quick-speed-presets" style="margin-top: 6px;">
+              <button class="btn-open-preset" data-rpm="100" data-volt="9.0">+100</button>
+              <button class="btn-open-preset" data-rpm="200" data-volt="9.0">+200</button>
+              <button class="btn-open-preset" data-rpm="350" data-volt="10.5" style="background: rgba(249, 115, 22, 0.3); color: #fb923c; font-weight: bold;">🚀+350</button>
+              <button class="btn-open-preset" data-rpm="500" data-volt="12.0" style="background: rgba(217, 70, 239, 0.3); color: #e879f9; font-weight: bold;">🔥+500</button>
+              <button class="btn-open-preset" data-rpm="0" data-volt="0" style="background: #dc2626; color: #fff; font-weight: bold;">0 (Stop)</button>
+              <button class="btn-open-preset" data-rpm="-100" data-volt="9.0">-100</button>
+              <button class="btn-open-preset" data-rpm="-200" data-volt="9.0">-200</button>
+              <button class="btn-open-preset" data-rpm="-350" data-volt="10.5" style="background: rgba(239, 68, 68, 0.3); color: #f87171; font-weight: bold;">🚀-350</button>
+              <button class="btn-open-preset" data-rpm="-500" data-volt="12.0" style="background: rgba(217, 70, 239, 0.3); color: #e879f9; font-weight: bold;">🔥-500</button>
             </div>
           </div>
         </div>
