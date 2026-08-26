@@ -463,18 +463,13 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		iq_friction = -SPEED_IQ_FRICTION_A;
 	}
 
-	/* Anti-windup conditional integration */
+	/* 4-quadrant symmetric current limits for clean speed regulation */
 	float iq_limit = conf_now->l_current_max;
 	if (iq_limit < 0.1f || iq_limit > SPEED_IQ_CONT_MAX_A) {
 		iq_limit = SPEED_IQ_CONT_MAX_A;
 	}
 	float iq_min = -iq_limit;
 	float iq_max = iq_limit;
-	if (target_mech_rpm > 1.0f) {
-		iq_min = -SPEED_IQ_BRAKE_MAX_A;
-	} else if (target_mech_rpm < -1.0f) {
-		iq_max = SPEED_IQ_BRAKE_MAX_A;
-	}
 
 	float iq_temp = iq_friction + p_term + motor->m_speed_i_term + d_term;
 	bool pushing_high = iq_temp >= iq_max && error_erpm > 0.0f;
