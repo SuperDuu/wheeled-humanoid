@@ -319,13 +319,6 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
         float id_target = -motor->m_i_fw_set;
         state_m->id_target = id_target;
         utils_truncate_number_abs((float*)&state_m->iq_target, conf_now->l_current_max);
-        bool iq_target_sign_flip = (state_m->iq_target * s_prev_iq_target) < -0.0001f;
-        if (iq_target_sign_flip) {
-            state_m->vq_int = 0.0f;
-        } else if (fabsf(state_m->iq_target) < 0.05f) {
-            state_m->vq_int *= 0.98f;
-        }
-        s_prev_iq_target = state_m->iq_target;
 
         float Ierr_d = id_target - state_m->id;
         float Ierr_q = state_m->iq_target - state_m->iq;
