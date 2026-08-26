@@ -18,8 +18,8 @@
 #define SPEED_DELTA_V_I_MAX             1.10f
 #define SPEED_DELTA_V_P_MAX             1.30f
 #define SPEED_DELTA_V_D_MAX             0.20f
-#define SPEED_IQ_BREAKAWAY_A            2.00f
-#define SPEED_IQ_FRICTION_A             1.00f
+#define SPEED_IQ_BREAKAWAY_A            0.25f
+#define SPEED_IQ_FRICTION_A             0.10f
 #define SPEED_IQ_CONT_MAX_A             5.50f
 #define SPEED_IQ_STALL_BOOST_A          5.50f
 #define SPEED_IQ_STALL_BOOST_RATE_A_S   35.0f
@@ -413,17 +413,15 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		float command_abs_rpm = fabsf(motor->m_speed_command_rpm / pole_pairs);
 		float spinup_rpm = command_abs_rpm;
 		utils_truncate_number(&spinup_rpm, 0.5f, 15.0f);
-		float spinup_iq = 0.35f + 0.010f * command_abs_rpm;
-		utils_truncate_number(&spinup_iq, 0.50f, SPEED_IQ_BREAKAWAY_A);
 
-		motor->m_iq_set = spin_dir * spinup_iq;
+		motor->m_iq_set = spin_dir * SPEED_IQ_BREAKAWAY_A;
 		motor->m_speed_pid_set_rpm = spin_dir * spinup_rpm * pole_pairs;
 		s_speed_iq_cmd = motor->m_iq_set;
 
 		/* Handover when motor is spinning cleanly (> 8 RPM) or 100ms elapsed */
 		if (motor->m_openloop_spinup_time >= 0.100f || fabsf(actual_mech_rpm) > 8.0f) {
 			motor->m_openloop_spinup_active = false;
-			motor->m_speed_i_term = spin_dir * SPEED_IQ_FRICTION_A;
+			motor->m_speed_i_term = 0.0f;
 			motor->m_speed_d_filter_proc = erpm;
 		}
 		return;
@@ -466,32 +464,28 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	}
 
 	/* Anti-windup conditional integration */
-	float iq_temp = iq_friction + p_term + motor->m_speed_i_term + d_term;
 	float iq_limit = conf_now->l_current_max;
 	if (iq_limit < 0.1f || iq_limit > SPEED_IQ_CONT_MAX_A) {
 		iq_limit = SPEED_IQ_CONT_MAX_A;
 	}
-	bool is_saturated = (fabsf(iq_temp) >= (iq_limit - 0.02f));
-	bool pushing_further = (error_erpm * iq_temp > 0.0f);
-	if (!(is_saturated && pushing_further)) {
+	float iq_min = -iq_limit;
+	float iq_max = iq_limit;
+	if (target_mech_rpm > 1.0f) {
+		iq_min = -SPEED_IQ_BRAKE_MAX_A;
+	} else if (target_mech_rpm < -1.0f) {
+		iq_max = SPEED_IQ_BRAKE_MAX_A;
+	}
+
+	float iq_temp = iq_friction + p_term + motor->m_speed_i_term + d_term;
+	bool pushing_high = iq_temp >= iq_max && error_erpm > 0.0f;
+	bool pushing_low = iq_temp <= iq_min && error_erpm < 0.0f;
+	if (!pushing_high && !pushing_low) {
 		motor->m_speed_i_term += conf_now->s_pid_ki * error_erpm * dt;
 		utils_truncate_number_abs(&motor->m_speed_i_term, SPEED_IQ_I_MAX_A);
 	}
 
-	/* Prevent I-term and command from driving in reverse direction against target */
-	if (target_mech_rpm > 1.0f) {
-		if (motor->m_speed_i_term < 0.0f) motor->m_speed_i_term = 0.0f;
-	} else if (target_mech_rpm < -1.0f) {
-		if (motor->m_speed_i_term > 0.0f) motor->m_speed_i_term = 0.0f;
-	}
-
 	float iq_cmd = iq_friction + p_term + motor->m_speed_i_term + d_term;
-	if (target_mech_rpm > 1.0f && iq_cmd < 0.0f) {
-		iq_cmd = 0.0f;
-	} else if (target_mech_rpm < -1.0f && iq_cmd > 0.0f) {
-		iq_cmd = 0.0f;
-	}
-	utils_truncate_number_abs(&iq_cmd, iq_limit);
+	utils_truncate_number(&iq_cmd, iq_min, iq_max);
 
 	/* Rate-limit the output to avoid current spikes */
 	utils_step_towards(&s_speed_iq_cmd, iq_cmd, SPEED_IQ_CMD_RATE_A_S * dt);
