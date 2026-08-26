@@ -149,15 +149,9 @@ bool Comm_Telemetry_Send(FOC_Controller_t *foc)
     packet.vd = state_m->vd;
     packet.vq = state_m->vq;
     packet.zero_elec_angle = foc->zero_electric_angle;
-    /* Temporary observer diagnostic: expose the actual observer-minus-encoder
-     * phase error in the otherwise-zero Id target field. */
-    float encoder_phase = pole_pairs * (float)conf->encoder_direction *
-                          foc->encoder.angle_singleturn -
-                          foc->zero_electric_angle;
-    utils_norm_angle_rad(&encoder_phase);
-    float observer_encoder_error = motor->m_phase_now_observer - encoder_phase;
-    utils_norm_angle_rad(&observer_encoder_error);
-    packet.id_target = observer_encoder_error;
+    /* Restore proper id_target telemetry for current loop diagnostics.
+     * Observer-encoder error is still computed internally in the slow loop. */
+    packet.id_target = state_m->id_target;
     packet.encoder_lut_enabled = foc->encoder.use_lut ? 1U : 0U;
     packet.calibration_result = g_encoder_calibration_result;
 
