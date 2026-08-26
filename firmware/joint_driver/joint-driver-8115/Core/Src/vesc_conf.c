@@ -75,7 +75,7 @@ void vesc_conf_set_defaults(mc_configuration *conf)
 
     // Field Weakening
     conf->foc_fw_current_max = 5.0f;       // 5A max field weakening
-    conf->foc_fw_duty_start = 0.90f;       // Start FW at 90% duty
+    conf->foc_fw_duty_start = 0.70f;       // Start FW at 70% duty (was 0.90, unreachable with l_max_duty=0.80)
     conf->foc_fw_ramp_time = 0.2f;         // 200ms ramp time
     conf->foc_fw_backoff = 0.5f;
 
