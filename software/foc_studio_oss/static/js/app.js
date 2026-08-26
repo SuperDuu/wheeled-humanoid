@@ -632,6 +632,29 @@ const App = {
       });
     });
 
+    // Scale Range selector dropdown for each scope
+    document.querySelectorAll('.scope-range-select').forEach(sel => {
+      sel.addEventListener('change', (e) => {
+        const scopeKey = e.target.dataset.scope;
+        const val = e.target.value;
+        if (this.scopes[scopeKey]) {
+          if (val === 'auto_sym') {
+            this.scopes[scopeKey].symmetricZero = true;
+            this.scopes[scopeKey].autoScale = true;
+            this.scopes[scopeKey].minSymmetricRange = 60;
+          } else {
+            const num = parseFloat(val);
+            if (!isNaN(num)) {
+              this.scopes[scopeKey].symmetricZero = false;
+              this.scopes[scopeKey].autoScale = false;
+              this.scopes[scopeKey].yMin = -num;
+              this.scopes[scopeKey].yMax = num;
+            }
+          }
+        }
+      });
+    });
+
     // Master Pause All / Resume All
     const masterPauseBtn = document.getElementById('btn-master-pause');
     if (masterPauseBtn) {
