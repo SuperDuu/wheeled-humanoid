@@ -3,345 +3,566 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>STM32 FOC Telemetry Studio OSS</title>
-  <!-- Bootstrap 5 CSS (Open Source - MIT) -->
+  <title>FOC Studio OSS</title>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
-  <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-  <!-- Studio Custom CSS -->
-  <link rel="stylesheet" href="/static/css/studio.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/studio.css?v=20260826-speed">
 </head>
 <body>
-
-  <!-- Top App Navigation & Hardware Bar -->
-  <nav class="app-navbar d-flex flex-wrap align-items-center justify-content-between gap-3">
-    <div class="d-flex align-items-center gap-2">
-      <div>
-        <div class="d-flex align-items-center gap-2">
-          <span class="fw-bold tracking-tight fs-6">FOC STUDIO OSS</span>
-          <span class="brand-badge">FastAPI & NumPy</span>
-          <span class="brand-badge">Pandas & WebSockets</span>
+  <header class="topbar">
+    <div class="topbar-main">
+      <div class="brand-lockup">
+        <div class="brand-mark">FOC</div>
+        <div>
+          <h1>FOC Studio OSS</h1>
+          <p>STM32 BLDC telemetry, oscilloscope, control, and CSV capture</p>
         </div>
-        <small class="text-secondary" style="font-size: 0.75rem;">STM32 BLDC Telemetry & Multi-Channel Oscilloscope</small>
+      </div>
+
+      <div class="topbar-actions">
+        <div class="status-pill" aria-live="polite">
+          <span id="conn-dot" class="status-dot"></span>
+          <span id="conn-text">Disconnected</span>
+          <span id="telemetry-hz" class="hz-badge">0 Hz</span>
+        </div>
+
+        <button id="btn-master-pause" class="quiet-button" type="button" title="Pause or resume all scopes">
+          Pause all
+        </button>
+
+        <button id="btn-theme-toggle" class="theme-toggle" type="button" title="Switch light or dark theme" aria-label="Switch theme">
+          <span class="theme-toggle-track"><span class="theme-toggle-knob"></span></span>
+          <span class="theme-toggle-text">Dark</span>
+        </button>
+
+        <a href="/docs" target="_blank" class="quiet-button link-button" title="Open API documentation">API docs</a>
       </div>
     </div>
 
-    <!-- Serial Port & Connection Form -->
-    <div class="d-flex align-items-center gap-2 flex-wrap">
-      <div class="input-group input-group-sm" style="width: 250px;">
-        <span class="input-group-text custom-input text-secondary">Port</span>
+    <div class="connection-strip">
+      <label class="field field-port">
+        <span>Port</span>
         <select id="port-select" class="form-select form-select-sm custom-input">
           <option value="">Scanning ports...</option>
         </select>
-        <button id="btn-refresh-ports" class="btn btn-outline-secondary btn-sm" title="Refresh USB Ports">Refresh</button>
-      </div>
+      </label>
 
-      <div class="input-group input-group-sm" style="width: 160px;">
-        <span class="input-group-text custom-input text-secondary">Baud</span>
+      <label class="field field-baud">
+        <span>Baud</span>
         <select id="baud-select" class="form-select form-select-sm custom-input">
           <option value="115200" selected>115,200</option>
           <option value="460800">460,800</option>
           <option value="921600">921,600</option>
           <option value="2000000">2,000,000</option>
         </select>
-      </div>
+      </label>
 
-      <button id="btn-connect" class="btn btn-primary btn-sm px-3 fw-semibold">
-        Connect
-      </button>
-
-      <div class="d-flex align-items-center gap-2 custom-input px-2 py-1 rounded border">
-        <span id="conn-dot" class="status-dot"></span>
-        <span id="conn-text" class="small fw-semibold text-secondary">Disconnected</span>
-        <span class="badge bg-secondary ms-1" id="telemetry-hz">0 Hz</span>
-      </div>
-
-      <!-- Master Pause All / Resume All Button -->
-      <button id="btn-master-pause" class="btn btn-outline-warning btn-sm" title="Pause / Resume all scopes">
-        Pause All
-      </button>
-
-      <!-- Theme Switcher Button -->
-      <button id="btn-theme-toggle" class="btn btn-outline-secondary btn-sm" title="Toggle Light/Dark Theme">
-        Theme: Dark
-      </button>
-
-      <a href="/docs" target="_blank" class="btn btn-outline-info btn-sm" title="OpenAPI / Swagger Documentation">
-        API Docs
-      </a>
+      <button id="btn-refresh-ports" class="quiet-button" type="button" title="Refresh USB ports">Refresh</button>
+      <button id="btn-connect" class="primary-button" type="button">Connect</button>
     </div>
-  </nav>
+  </header>
 
-  <!-- Metrics Overview Bar -->
-  <div class="container-fluid px-3 py-2">
-    <div class="row g-2">
-      <div class="col-6 col-md-2">
-        <div class="metric-card">
-          <span class="metric-label">VBUS Voltage</span>
-          <div class="metric-value"><span id="val-vbus">0.0</span><span class="metric-unit">V</span></div>
-        </div>
-      </div>
-      <div class="col-6 col-md-2">
-        <div class="metric-card">
-          <span class="metric-label">Iq Moment Current</span>
-          <div class="metric-value" style="color: var(--color-iq);"><span id="val-iq">0.00</span><span class="metric-unit">A</span></div>
-        </div>
-      </div>
-      <div class="col-6 col-md-2">
-        <div class="metric-card">
-          <span class="metric-label">Peak Phase Current</span>
-          <div class="metric-value" style="color: var(--color-phase-a);"><span id="val-ipeak">0.00</span><span class="metric-unit">A</span></div>
-        </div>
-      </div>
-      <div class="col-6 col-md-2">
-        <div class="metric-card">
-          <span class="metric-label">Motor Velocity</span>
-          <div class="metric-value" style="color: var(--color-speed);"><span id="val-rpm">0</span><span class="metric-unit">RPM</span></div>
-        </div>
-      </div>
-      <div class="col-6 col-md-2">
-        <div class="metric-card">
-          <span class="metric-label">Electrical Power</span>
-          <div class="metric-value"><span id="val-power">0.0</span><span class="metric-unit">W</span></div>
-        </div>
-      </div>
-      <div class="col-6 col-md-2">
-        <div class="metric-card">
-          <span class="metric-label">FET Temperature</span>
-          <div class="metric-value"><span id="val-temp">0.0</span><span class="metric-unit">°C</span></div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <main class="workspace">
+    <section class="metrics-grid" aria-label="Telemetry overview">
+      <article class="metric-card">
+        <span class="metric-label">VBUS</span>
+        <div class="metric-value"><span id="val-vbus">0.0</span><span class="metric-unit">V</span></div>
+      </article>
+      <article class="metric-card accent-iq">
+        <span class="metric-label">Iq Current</span>
+        <div class="metric-value"><span id="val-iq">0.00</span><span class="metric-unit">A</span></div>
+      </article>
+      <article class="metric-card accent-phase">
+        <span class="metric-label">Peak Phase</span>
+        <div class="metric-value"><span id="val-ipeak">0.00</span><span class="metric-unit">A</span></div>
+      </article>
+      <article class="metric-card accent-speed">
+        <span class="metric-label">Velocity</span>
+        <div class="metric-value"><span id="val-rpm">0</span><span class="metric-unit">RPM</span></div>
+      </article>
+      <article class="metric-card">
+        <span class="metric-label">Power</span>
+        <div class="metric-value"><span id="val-power">0.0</span><span class="metric-unit">W</span></div>
+      </article>
+      <article class="metric-card">
+        <span class="metric-label">FET Temp</span>
+        <div class="metric-value"><span id="val-temp">0.0</span><span class="metric-unit">degC</span></div>
+      </article>
+    </section>
 
-  <!-- Main Grid Workspace -->
-  <div class="container-fluid px-3 pb-3">
-    <div class="row g-2">
-
-      <!-- Left Column: Oscilloscope Streams (4 Scopes with Independent Zoom & Pan & Pause) -->
-      <div class="col-12 col-xl-8 d-flex flex-column gap-2">
-
-        <!-- Scope 1: 3-Phase Sinusoidal Waveforms (Ia, Ib, Ic) -->
-        <div class="scope-card" id="scope-card-phase">
+    <div class="content-grid">
+      <section class="scope-stack" aria-label="Realtime scopes">
+        <article class="scope-card" id="scope-card-phase">
           <div class="scope-header">
-            <div class="scope-title">
-              <span>Scope 1: 3-Phase Currents (Ia, Ib, Ic)</span>
+            <div class="scope-heading">
+              <span class="scope-index">01</span>
+              <div>
+                <h2>3-phase current</h2>
+                <p>Ia, Ib, Ic and phase balance</p>
+              </div>
             </div>
-
-            <!-- Per-Scope Independent Controls -->
             <div class="scope-controls-group">
-              <button class="btn btn-outline-warning btn-scope-tool btn-pause-toggle" data-scope="phase">Pause</button>
-              <button class="btn btn-outline-secondary btn-scope-tool btn-pan-left" data-scope="phase">&laquo; Pan</button>
-              <button class="btn btn-outline-secondary btn-scope-tool btn-pan-right" data-scope="phase">Pan &raquo;</button>
-              <button class="btn btn-outline-primary btn-scope-tool btn-pan-live" data-scope="phase">Live</button>
-
-              <!-- Zoom 100 levels -->
-              <span class="small text-secondary ms-1" style="font-size:0.68rem;">Zoom:</span>
-              <input type="range" class="form-range zoom-slider-mini scope-zoom-slider" data-scope="phase" min="1" max="100" step="1" value="25">
-              <span class="small font-monospace text-info scope-zoom-label" data-scope="phase" style="font-size:0.68rem; min-width:45px;">L25</span>
+              <button class="tool-button btn-pause-toggle" data-scope="phase" type="button">Pause</button>
+              <button class="tool-button btn-pan-left" data-scope="phase" type="button">Back</button>
+              <button class="tool-button btn-pan-right" data-scope="phase" type="button">Forward</button>
+              <button class="tool-button btn-pan-live" data-scope="phase" type="button">Live</button>
+              <label class="zoom-control">
+                <span>Zoom</span>
+                <input type="range" class="form-range zoom-slider-mini scope-zoom-slider" data-scope="phase" min="1" max="100" step="1" value="25">
+                <span class="scope-zoom-label" data-scope="phase">L25</span>
+              </label>
+              <label class="vertical-control">
+                <span>Amp</span>
+                <input type="range" class="form-range scope-gain-slider" data-scope="phase" min="25" max="400" step="5" value="100">
+                <span class="scope-gain-label" data-scope="phase">1.00x</span>
+              </label>
+              <label class="vertical-control">
+                <span>Y</span>
+                <input type="range" class="form-range scope-offset-slider" data-scope="phase" min="-100" max="100" step="1" value="0">
+                <span class="scope-offset-label" data-scope="phase">0%</span>
+              </label>
+              <button class="tool-button btn-y-reset" data-scope="phase" type="button">Y reset</button>
             </div>
-
             <div class="scope-badges">
-              <span class="scope-badge" style="background:rgba(239,68,68,0.12); color:var(--color-phase-a);">Ia: <b id="val-ia">0.00A</b></span>
-              <span class="scope-badge" style="background:rgba(16,185,129,0.12); color:var(--color-phase-b);">Ib: <b id="val-ib">0.00A</b></span>
-              <span class="scope-badge" style="background:rgba(59,130,246,0.12); color:var(--color-phase-c);">Ic: <b id="val-ic">0.00A</b></span>
-              <span class="scope-badge" style="background:rgba(107,114,128,0.12); color:var(--text-muted);">Sum: <b id="val-isum">0.00A</b></span>
+              <span class="scope-badge phase-a">Ia <b id="val-ia">0.00A</b></span>
+              <span class="scope-badge phase-b">Ib <b id="val-ib">0.00A</b></span>
+              <span class="scope-badge phase-c">Ic <b id="val-ic">0.00A</b></span>
+              <span class="scope-badge neutral">Sum <b id="val-isum">0.00A</b></span>
             </div>
           </div>
-          <div class="canvas-container" title="Roll mouse wheel to zoom (100 levels) | Click & drag to pan history">
+          <div class="canvas-container" title="Mouse wheel zooms, drag pans history">
             <canvas id="canvas-scope-phase" class="scope-canvas"></canvas>
-            <div class="scope-hint-badge">Scroll = Zoom | Drag = Pan</div>
+            <div class="scope-hint-badge">wheel zoom - drag pan</div>
           </div>
-        </div>
+        </article>
 
-        <!-- Scope 2: Space Vector Currents (Id, Iq, Target) -->
-        <div class="scope-card" id="scope-card-dq">
+        <article class="scope-card" id="scope-card-dq">
           <div class="scope-header">
-            <div class="scope-title">
-              <span>Scope 2: Vector D-Q (Id ~ 0A, Iq vs Target)</span>
+            <div class="scope-heading">
+              <span class="scope-index">02</span>
+              <div>
+                <h2>D-Q vector current</h2>
+                <p>Id, Iq, and commanded torque current</p>
+              </div>
             </div>
-
-            <!-- Per-Scope Independent Controls -->
             <div class="scope-controls-group">
-              <button class="btn btn-outline-warning btn-scope-tool btn-pause-toggle" data-scope="dq">Pause</button>
-              <button class="btn btn-outline-secondary btn-scope-tool btn-pan-left" data-scope="dq">&laquo; Pan</button>
-              <button class="btn btn-outline-secondary btn-scope-tool btn-pan-right" data-scope="dq">Pan &raquo;</button>
-              <button class="btn btn-outline-primary btn-scope-tool btn-pan-live" data-scope="dq">Live</button>
-
-              <!-- Zoom 100 levels -->
-              <span class="small text-secondary ms-1" style="font-size:0.68rem;">Zoom:</span>
-              <input type="range" class="form-range zoom-slider-mini scope-zoom-slider" data-scope="dq" min="1" max="100" step="1" value="25">
-              <span class="small font-monospace text-info scope-zoom-label" data-scope="dq" style="font-size:0.68rem; min-width:45px;">L25</span>
+              <button class="tool-button btn-pause-toggle" data-scope="dq" type="button">Pause</button>
+              <button class="tool-button btn-pan-left" data-scope="dq" type="button">Back</button>
+              <button class="tool-button btn-pan-right" data-scope="dq" type="button">Forward</button>
+              <button class="tool-button btn-pan-live" data-scope="dq" type="button">Live</button>
+              <label class="zoom-control">
+                <span>Zoom</span>
+                <input type="range" class="form-range zoom-slider-mini scope-zoom-slider" data-scope="dq" min="1" max="100" step="1" value="25">
+                <span class="scope-zoom-label" data-scope="dq">L25</span>
+              </label>
+              <label class="vertical-control">
+                <span>Amp</span>
+                <input type="range" class="form-range scope-gain-slider" data-scope="dq" min="25" max="400" step="5" value="100">
+                <span class="scope-gain-label" data-scope="dq">1.00x</span>
+              </label>
+              <label class="vertical-control">
+                <span>Y</span>
+                <input type="range" class="form-range scope-offset-slider" data-scope="dq" min="-100" max="100" step="1" value="0">
+                <span class="scope-offset-label" data-scope="dq">0%</span>
+              </label>
+              <button class="tool-button btn-y-reset" data-scope="dq" type="button">Y reset</button>
             </div>
-
             <div class="scope-badges">
-              <span class="scope-badge" style="background:rgba(245,158,11,0.12); color:var(--color-id);">Id: <b id="val-id">0.00A</b></span>
-              <span class="scope-badge" style="background:rgba(139,92,246,0.12); color:var(--color-iq);">Iq: <b id="val-iq-badge">0.00A</b></span>
-              <span class="scope-badge" style="background:rgba(6,182,212,0.12); color:var(--color-target);">Target: <b id="val-iq-target">0.00A</b></span>
+              <span class="scope-badge id-current">Id <b id="val-id">0.00A</b></span>
+              <span class="scope-badge iq-current">Iq <b id="val-iq-badge">0.00A</b></span>
+              <span class="scope-badge target-current">Target <b id="val-iq-target">0.00A</b></span>
             </div>
           </div>
-          <div class="canvas-container" title="Roll mouse wheel to zoom (100 levels) | Click & drag to pan history">
+          <div class="canvas-container" title="Mouse wheel zooms, drag pans history">
             <canvas id="canvas-scope-dq" class="scope-canvas"></canvas>
-            <div class="scope-hint-badge">Scroll = Zoom | Drag = Pan</div>
+            <div class="scope-hint-badge">wheel zoom - drag pan</div>
           </div>
-        </div>
+        </article>
 
-        <!-- Scope 3: Electrical & Mechanical Angle -->
-        <div class="scope-card" id="scope-card-angle">
+        <article class="scope-card" id="scope-card-angle">
           <div class="scope-header">
-            <div class="scope-title">
-              <span>Scope 3: Electrical Angle (&theta;e) & Rotor Angle</span>
+            <div class="scope-heading">
+              <span class="scope-index">03</span>
+              <div>
+                <h2>Electrical and rotor angle</h2>
+                <p>Electrical phase and mechanical position</p>
+              </div>
             </div>
-
-            <!-- Per-Scope Independent Controls -->
             <div class="scope-controls-group">
-              <button class="btn btn-outline-warning btn-scope-tool btn-pause-toggle" data-scope="angle">Pause</button>
-              <button class="btn btn-outline-secondary btn-scope-tool btn-pan-left" data-scope="angle">&laquo; Pan</button>
-              <button class="btn btn-outline-secondary btn-scope-tool btn-pan-right" data-scope="angle">Pan &raquo;</button>
-              <button class="btn btn-outline-primary btn-scope-tool btn-pan-live" data-scope="angle">Live</button>
-
-              <!-- Zoom 100 levels -->
-              <span class="small text-secondary ms-1" style="font-size:0.68rem;">Zoom:</span>
-              <input type="range" class="form-range zoom-slider-mini scope-zoom-slider" data-scope="angle" min="1" max="100" step="1" value="25">
-              <span class="small font-monospace text-info scope-zoom-label" data-scope="angle" style="font-size:0.68rem; min-width:45px;">L25</span>
+              <button class="tool-button btn-pause-toggle" data-scope="angle" type="button">Pause</button>
+              <button class="tool-button btn-pan-left" data-scope="angle" type="button">Back</button>
+              <button class="tool-button btn-pan-right" data-scope="angle" type="button">Forward</button>
+              <button class="tool-button btn-pan-live" data-scope="angle" type="button">Live</button>
+              <label class="zoom-control">
+                <span>Zoom</span>
+                <input type="range" class="form-range zoom-slider-mini scope-zoom-slider" data-scope="angle" min="1" max="100" step="1" value="25">
+                <span class="scope-zoom-label" data-scope="angle">L25</span>
+              </label>
+              <label class="vertical-control">
+                <span>Amp</span>
+                <input type="range" class="form-range scope-gain-slider" data-scope="angle" min="25" max="400" step="5" value="100">
+                <span class="scope-gain-label" data-scope="angle">1.00x</span>
+              </label>
+              <label class="vertical-control">
+                <span>Y</span>
+                <input type="range" class="form-range scope-offset-slider" data-scope="angle" min="-100" max="100" step="1" value="0">
+                <span class="scope-offset-label" data-scope="angle">0%</span>
+              </label>
+              <button class="tool-button btn-y-reset" data-scope="angle" type="button">Y reset</button>
             </div>
-
             <div class="scope-badges">
-              <span class="scope-badge" style="background:rgba(236,72,153,0.12); color:var(--color-angle);">&theta;e: <b id="val-theta">0.00 rad</b></span>
-              <span class="scope-badge" style="background:rgba(99,102,241,0.12); color:#818cf8;">Mech: <b id="val-mech">0.00 rad</b></span>
+              <span class="scope-badge angle-current">Theta <b id="val-theta">0.00 rad</b></span>
+              <span class="scope-badge mech-current">Mech <b id="val-mech">0.00 rad</b></span>
             </div>
           </div>
-          <div class="canvas-container" title="Roll mouse wheel to zoom (100 levels) | Click & drag to pan history">
+          <div class="canvas-container" title="Mouse wheel zooms, drag pans history">
             <canvas id="canvas-scope-angle" class="scope-canvas"></canvas>
-            <div class="scope-hint-badge">Scroll = Zoom | Drag = Pan</div>
+            <div class="scope-hint-badge">wheel zoom - drag pan</div>
           </div>
-        </div>
+        </article>
 
-        <!-- Scope 4: Speed Response (RPM Actual vs Target) -->
-        <div class="scope-card" id="scope-card-speed">
+        <article class="scope-card" id="scope-card-speed">
           <div class="scope-header">
-            <div class="scope-title">
-              <span>Scope 4: Speed Step Response (RPM Actual vs Target)</span>
+            <div class="scope-heading">
+              <span class="scope-index">04</span>
+              <div>
+                <h2>Speed response</h2>
+                <p>Measured RPM against target RPM</p>
+              </div>
             </div>
-
-            <!-- Per-Scope Independent Controls -->
             <div class="scope-controls-group">
-              <button class="btn btn-outline-warning btn-scope-tool btn-pause-toggle" data-scope="speed">Pause</button>
-              <button class="btn btn-outline-secondary btn-scope-tool btn-pan-left" data-scope="speed">&laquo; Pan</button>
-              <button class="btn btn-outline-secondary btn-scope-tool btn-pan-right" data-scope="speed">Pan &raquo;</button>
-              <button class="btn btn-outline-primary btn-scope-tool btn-pan-live" data-scope="speed">Live</button>
-
-              <!-- Zoom 100 levels -->
-              <span class="small text-secondary ms-1" style="font-size:0.68rem;">Zoom:</span>
-              <input type="range" class="form-range zoom-slider-mini scope-zoom-slider" data-scope="speed" min="1" max="100" step="1" value="25">
-              <span class="small font-monospace text-info scope-zoom-label" data-scope="speed" style="font-size:0.68rem; min-width:45px;">L25</span>
+              <button class="tool-button btn-pause-toggle" data-scope="speed" type="button">Pause</button>
+              <button class="tool-button btn-pan-left" data-scope="speed" type="button">Back</button>
+              <button class="tool-button btn-pan-right" data-scope="speed" type="button">Forward</button>
+              <button class="tool-button btn-pan-live" data-scope="speed" type="button">Live</button>
+              <label class="zoom-control">
+                <span>Zoom</span>
+                <input type="range" class="form-range zoom-slider-mini scope-zoom-slider" data-scope="speed" min="1" max="100" step="1" value="25">
+                <span class="scope-zoom-label" data-scope="speed">L25</span>
+              </label>
+              <label class="vertical-control">
+                <span>Scale</span>
+                <select class="scope-range-select" data-scope="speed" title="Scale Range">
+                  <option value="auto_sym" selected>±Auto (0 mốc)</option>
+                  <option value="60">±60 RPM</option>
+                  <option value="100">±100 RPM</option>
+                  <option value="200">±200 RPM</option>
+                  <option value="500">±500 RPM</option>
+                </select>
+              </label>
+              <label class="vertical-control">
+                <span>Amp</span>
+                <input type="range" class="form-range scope-gain-slider" data-scope="speed" min="25" max="400" step="5" value="100">
+                <span class="scope-gain-label" data-scope="speed">1.00x</span>
+              </label>
+              <label class="vertical-control">
+                <span>Y</span>
+                <input type="range" class="form-range scope-offset-slider" data-scope="speed" min="-100" max="100" step="1" value="0">
+                <span class="scope-offset-label" data-scope="speed">0%</span>
+              </label>
+              <button class="tool-button btn-y-reset" data-scope="speed" type="button">Y reset</button>
             </div>
-
             <div class="scope-badges">
-              <span class="scope-badge" style="background:rgba(16,185,129,0.12); color:var(--color-speed);">Actual: <b id="val-rpm-actual">0 RPM</b></span>
-              <span class="scope-badge" style="background:rgba(6,182,212,0.12); color:var(--color-target);">Target: <b id="val-rpm-target">0 RPM</b></span>
+              <span class="scope-badge speed-current">Actual <b id="val-rpm-actual">0 RPM</b></span>
+              <span class="scope-badge target-current">Target <b id="val-rpm-target">0 RPM</b></span>
             </div>
           </div>
-          <div class="canvas-container" title="Roll mouse wheel to zoom (100 levels) | Click & drag to pan history">
+          <div class="canvas-container" title="Mouse wheel zooms, drag pans history">
             <canvas id="canvas-scope-speed" class="scope-canvas"></canvas>
-            <div class="scope-hint-badge">Scroll = Zoom | Drag = Pan</div>
+            <div class="scope-hint-badge">wheel zoom - drag pan</div>
           </div>
-        </div>
+        </article>
+      </section>
 
-      </div>
-
-      <!-- Right Column: Control Panels & Visuals & Logging -->
-      <div class="col-12 col-xl-4 d-flex flex-column gap-2">
-
-        <!-- Space Vector Diagram (Polar / Circle Vector) -->
-        <div class="panel-card text-center">
+      <aside class="side-stack" aria-label="Controls and diagnostics">
+        <section class="panel-card vector-panel">
           <div class="panel-header">
-            <span>Space Vector Diagram (Id - Iq)</span>
-            <span class="badge bg-secondary font-monospace" id="vector-mag">|I| = 0.00A</span>
-          </div>
-          <div class="d-flex justify-content-center my-1">
-            <canvas id="canvas-vector-polar" width="200" height="200" style="background:var(--canvas-bg); border-radius:50%; border:1px solid var(--border-color);"></canvas>
-          </div>
-          <small class="text-secondary" style="font-size:0.75rem;">Rotating stator current space vector</small>
-        </div>
-
-        <!-- Motor Control Panel -->
-        <div class="panel-card">
-          <div class="panel-header">
-            <span>Motor Direct Control</span>
-            <span class="badge bg-primary font-monospace" id="active-mode-badge">SPEED (3)</span>
-          </div>
-
-          <div class="mode-grid">
-            <button class="btn-mode" data-mode="0">0: IDLE</button>
-            <button class="btn-mode" data-mode="1">1: CURRENT</button>
-            <button class="btn-mode" data-mode="2">2: BRAKE</button>
-            <button class="btn-mode active" data-mode="3">3: SPEED</button>
-            <button class="btn-mode" data-mode="4">4: POS</button>
-          </div>
-
-          <div class="mb-2">
-            <div class="d-flex justify-content-between mb-1">
-              <label for="speed-slider" class="form-label small text-secondary">Target Speed:</label>
-              <span class="small font-monospace text-info"><b id="slider-val-text">800</b> RPM</span>
+            <div>
+              <h2>Space vector</h2>
+              <p>Id/Iq polar view</p>
             </div>
-            <input type="range" class="form-range" id="speed-slider" min="-3000" max="3000" step="50" value="800">
-            <div class="d-flex gap-1 justify-content-between mt-1">
-              <button class="btn btn-sm btn-outline-secondary py-0" onclick="setQuickRpm(0)">0 RPM</button>
-              <button class="btn btn-sm btn-outline-secondary py-0" onclick="setQuickRpm(500)">500</button>
-              <button class="btn btn-sm btn-outline-secondary py-0" onclick="setQuickRpm(1000)">1000</button>
-              <button class="btn btn-sm btn-outline-secondary py-0" onclick="setQuickRpm(2000)">2000</button>
-            </div>
+            <span class="data-badge" id="vector-mag">|I| = 0.00A</span>
           </div>
+          <div class="vector-stage">
+            <canvas id="canvas-vector-polar" width="220" height="220"></canvas>
+          </div>
+        </section>
 
-          <button id="btn-estop" class="btn-estop">
-            EMERGENCY STOP
-          </button>
-        </div>
-
-        <!-- Pandas Telemetry Recorder & CSV Export -->
-        <div class="panel-card">
+        <section class="panel-card joint-panel">
           <div class="panel-header">
-            <span>Telemetry Recorder & CSV Export</span>
+            <div>
+              <h2>Joint status</h2>
+              <p>Position, fault, and quick homing</p>
+            </div>
+            <span class="data-badge fault-ok" id="val-fault">NO FAULT</span>
           </div>
-          <p class="small text-secondary mb-2" style="font-size:0.75rem;">
-            Captures streaming buffer into Pandas DataFrames. Exports MATLAB and Python-ready CSV files.
-          </p>
-          <div class="d-flex gap-2 mb-2">
-            <button id="btn-record-toggle" class="btn btn-outline-danger btn-sm w-50 fw-semibold">
-              Start Recording
+          <div class="joint-readout">
+            <span>Joint angle</span>
+            <strong id="val-joint-deg">0.0 deg</strong>
+            <small id="val-joint-rad">0.000 rad</small>
+          </div>
+          <div class="mini-metrics">
+            <div><span>Speed</span><b><span id="val-rpm-disp">0.0</span> RPM</b></div>
+            <div><span>Iq</span><b><span id="val-iq-disp">0.00</span> A</b></div>
+            <div><span>Mode</span><b id="val-mode">SPEED</b></div>
+          </div>
+          <div class="command-grid two">
+            <button class="quiet-button" id="btn-quick-sethome" type="button">Set home</button>
+            <button class="quiet-button" id="btn-quick-gohome" type="button">Go home</button>
+          </div>
+        </section>
+
+        <section class="panel-card control-panel">
+          <div class="panel-header">
+            <div>
+              <h2>Motor control</h2>
+              <p>Direct mode and target command</p>
+            </div>
+            <span class="data-badge active-mode" id="active-mode-badge">SPEED (3)</span>
+          </div>
+
+          <div class="mode-grid" role="group" aria-label="Motor mode">
+            <button class="btn-mode" data-mode="0" type="button">Idle</button>
+            <button class="btn-mode" data-mode="1" type="button">Current</button>
+            <button class="btn-mode" data-mode="2" type="button">Brake</button>
+            <button class="btn-mode active" data-mode="3" type="button">Speed</button>
+            <button class="btn-mode" data-mode="4" type="button">Position</button>
+          </div>
+
+          <div class="calibration-row">
+            <button id="btn-calib-lut" class="quiet-button" type="button" title="128-point full revolution encoder calibration">
+              Calibrate LUT
             </button>
-            <button id="btn-download-csv" class="btn btn-outline-success btn-sm w-50 fw-semibold" disabled>
-              Download CSV
+            <button id="btn-align-zero" class="quiet-button" type="button" title="Fast electrical zero alignment">
+              Align zero
             </button>
           </div>
-          <div class="small font-monospace text-secondary d-flex justify-content-between" style="font-size:0.75rem;">
-            <span>Recorded Samples: <b id="recorded-count" class="text-primary">0</b></span>
-            <span id="recording-indicator" class="text-danger d-none fw-bold">RECORDING</span>
-          </div>
-        </div>
 
-        <!-- Throttled Diagnostic Console -->
-        <div class="panel-card">
+          <label class="target-control" for="speed-slider">
+            <span>Target speed</span>
+            <strong><span id="slider-val-text">150</span> RPM</strong>
+          </label>
+          <input type="range" class="form-range" id="speed-slider" min="-300" max="300" step="10" value="150">
+
+          <div class="quick-rpm-grid" aria-label="Quick RPM presets">
+            <button type="button" onclick="setQuickRpm(0)">0</button>
+            <button type="button" onclick="setQuickRpm(50)">50</button>
+            <button type="button" onclick="setQuickRpm(100)">100</button>
+            <button type="button" onclick="setQuickRpm(150)">150</button>
+            <button type="button" onclick="setQuickRpm(180)">180</button>
+            <button type="button" onclick="setQuickRpm(200)">200</button>
+          </div>
+
+          <button id="btn-estop" class="danger-button" type="button">Emergency stop</button>
+        </section>
+
+        <section class="panel-card driver-actions-panel">
           <div class="panel-header">
-            <span>Diagnostic Console (Throttled)</span>
-            <div class="d-flex gap-1">
-              <button id="btn-clear-log" class="btn btn-sm btn-outline-secondary py-0 px-2">Clear</button>
+            <div>
+              <h2>Driver actions</h2>
+              <p>Fast commands from app_driver</p>
+            </div>
+          </div>
+          <div class="command-grid three">
+            <button class="quiet-button danger-outline" data-cmd="STOP" type="button">Stop</button>
+            <button class="quiet-button" data-cmd="RESET_ERR" type="button">Reset error</button>
+            <button class="quiet-button" data-cmd="RESET" type="button">Reset driver</button>
+            <button class="quiet-button" data-cmd="ALIGN" type="button">Align</button>
+            <button class="quiet-button" data-cmd="CALIB" type="button">Calib LUT</button>
+            <button class="quiet-button" id="btn-auto-tune" type="button">Auto tune</button>
+          </div>
+          <div class="command-grid five compact-grid">
+            <button data-cmd="SPEED 100" type="button">+100</button>
+            <button data-cmd="SPEED 200" type="button">+200</button>
+            <button data-cmd="SPEED 0" type="button">0</button>
+            <button data-cmd="SPEED -100" type="button">-100</button>
+            <button data-cmd="SPEED -200" type="button">-200</button>
+            <button data-cmd="OPENLOOP 200 9.0" type="button">OP 200</button>
+            <button data-cmd="OPENLOOP 350 10.5" type="button">OP 350</button>
+            <button data-cmd="OPENLOOP 0 0" type="button">OP 0</button>
+            <button data-cmd="OPENLOOP -200 9.0" type="button">OP -200</button>
+            <button data-cmd="OPENLOOP -350 10.5" type="button">OP -350</button>
+          </div>
+        </section>
+
+        <section class="panel-card cli-panel">
+          <div class="panel-header">
+            <div>
+              <h2>Command console</h2>
+              <p>ASCII command path used by app_driver</p>
+            </div>
+          </div>
+          <div class="cli-row">
+            <input id="input-cli" class="control-input mono-input" type="text" placeholder="SPEED 100, IQ 1.0, POS 90, ALIGN, STOP">
+            <button id="btn-send-cli" class="primary-button" type="button">Send</button>
+          </div>
+          <div class="command-grid four compact-grid">
+            <button class="btn-cli-chip" data-cmd="HOLD" type="button">HOLD</button>
+            <button class="btn-cli-chip" data-cmd="FREE" type="button">FREE</button>
+            <button class="btn-cli-chip" data-cmd="SETHOME" type="button">SETHOME</button>
+            <button class="btn-cli-chip" data-cmd="GOHOME 1.5" type="button">GOHOME</button>
+          </div>
+        </section>
+
+        <section class="panel-card advanced-control-panel">
+          <div class="panel-header">
+            <div>
+              <h2>Advanced control</h2>
+              <p>Speed, current, position, open-loop V/F</p>
+            </div>
+          </div>
+
+          <div class="control-block">
+            <label class="target-control" for="input-speed">
+              <span>Closed-loop speed</span>
+              <strong id="speed-display">0 RPM</strong>
+            </label>
+            <div class="input-action-row">
+              <input id="input-speed" class="control-input" type="number" value="200" step="50" min="-3000" max="3000">
+              <button id="btn-set-speed" class="quiet-button success-outline" type="button">Run speed</button>
+            </div>
+            <input id="slider-speed" class="form-range" type="range" min="-1000" max="1000" step="50" value="0">
+            <div class="command-grid six compact-grid">
+              <button class="btn-preset" data-speed="50" type="button">+50</button>
+              <button class="btn-preset" data-speed="100" type="button">+100</button>
+              <button class="btn-preset" data-speed="200" type="button">+200</button>
+              <button class="btn-preset" data-speed="0" type="button">0</button>
+              <button class="btn-preset" data-speed="-100" type="button">-100</button>
+              <button class="btn-preset" data-speed="-200" type="button">-200</button>
+            </div>
+          </div>
+
+          <div class="control-block">
+            <label class="target-control" for="input-openloop-rpm">
+              <span>Open-loop V/F</span>
+              <strong id="openloop-display">350 RPM @ 10.0V</strong>
+            </label>
+            <div class="triple-input-row">
+              <input id="input-openloop-rpm" class="control-input" type="number" value="350" step="50" min="-1000" max="1000">
+              <input id="input-openloop-volt" class="control-input" type="number" value="10.0" step="0.5" min="0" max="15">
+              <button id="btn-run-openloop" class="quiet-button" type="button">Run open</button>
+            </div>
+            <input id="slider-openloop" class="form-range" type="range" min="-600" max="600" step="50" value="0">
+            <div class="command-grid five compact-grid">
+              <button class="btn-open-preset" data-rpm="100" data-volt="9.0" type="button">+100</button>
+              <button class="btn-open-preset" data-rpm="350" data-volt="10.5" type="button">+350</button>
+              <button class="btn-open-preset" data-rpm="0" data-volt="0" type="button">0</button>
+              <button class="btn-open-preset" data-rpm="-100" data-volt="9.0" type="button">-100</button>
+              <button class="btn-open-preset" data-rpm="-350" data-volt="10.5" type="button">-350</button>
+            </div>
+          </div>
+
+          <div class="control-block">
+            <label class="target-control" for="input-iq">
+              <span>Target Iq</span>
+              <strong id="iq-display">0.00 A</strong>
+            </label>
+            <div class="input-action-row">
+              <input id="input-iq" class="control-input" type="number" value="1.00" step="0.1" min="-15" max="15">
+              <button id="btn-set-iq" class="quiet-button" type="button">Run Iq</button>
+            </div>
+            <input id="slider-iq" class="form-range" type="range" min="-5" max="5" step="0.1" value="0">
+            <div class="command-grid five compact-grid">
+              <button class="btn-iq-preset" data-iq="0.5" type="button">+0.5</button>
+              <button class="btn-iq-preset" data-iq="1.0" type="button">+1.0</button>
+              <button class="btn-iq-preset" data-iq="2.0" type="button">+2.0</button>
+              <button class="btn-iq-preset" data-iq="0" type="button">0</button>
+              <button class="btn-iq-preset" data-iq="-1.0" type="button">-1.0</button>
+            </div>
+          </div>
+
+          <div class="control-block">
+            <label class="target-control" for="input-pos">
+              <span>Position target</span>
+              <strong id="pos-display">0.0 deg</strong>
+            </label>
+            <div class="input-action-row">
+              <input id="input-pos" class="control-input" type="number" value="90" step="5" min="-360" max="360">
+              <button id="btn-set-pos" class="quiet-button" type="button">Run position</button>
+            </div>
+            <div class="command-grid five compact-grid">
+              <button class="btn-pos-preset" data-deg="-90" type="button">-90</button>
+              <button class="btn-pos-preset" data-deg="0" type="button">0</button>
+              <button class="btn-pos-preset" data-deg="90" type="button">90</button>
+              <button class="btn-pos-preset" data-deg="180" type="button">180</button>
+              <button class="btn-pos-preset" data-deg="360" type="button">360</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel-card tune-panel">
+          <div class="panel-header">
+            <div>
+              <h2>FOC tuning</h2>
+              <p>PID and commutation overrides</p>
+            </div>
+          </div>
+          <div class="tune-grid">
+            <label><span>Speed Kp</span><input id="tune-skp" class="control-input" type="number" value="0.00200" step="0.00020"></label>
+            <label><span>Speed Ki</span><input id="tune-ski" class="control-input" type="number" value="0.00100" step="0.00010"></label>
+            <label><span>Ramp</span><input id="tune-sramp" class="control-input" type="number" value="2500" step="500"></label>
+            <button id="btn-apply-speed-pid" class="quiet-button" type="button">Apply speed PI</button>
+            <label><span>Pos Kp</span><input id="tune-pkp" class="control-input" type="number" value="20.00" step="1"></label>
+            <label><span>Pos Kd</span><input id="tune-pkd" class="control-input" type="number" value="0.10" step="0.01"></label>
+            <button id="btn-apply-pos-pid" class="quiet-button" type="button">Apply position PD</button>
+          </div>
+          <div class="command-grid three">
+            <button id="btn-toggle-dir" class="quiet-button" type="button">Dir <b id="display-dir">+1</b></button>
+            <button id="btn-toggle-swap" class="quiet-button" type="button">Swap <b id="display-swap">OFF</b></button>
+            <button class="quiet-button btn-ramp-preset" data-ramp="2500" type="button">Ramp 2500</button>
+          </div>
+          <div class="offset-row">
+            <span>Offset <b id="display-offset">0.00 rad</b></span>
+            <span>LUT <b id="display-lut">OFF</b></span>
+            <div class="command-grid four compact-grid">
+              <button class="btn-offset-nudge" data-nudge="-0.10" type="button">-0.10</button>
+              <button class="btn-offset-nudge" data-nudge="+0.10" type="button">+0.10</button>
+              <button class="btn-offset-nudge" data-nudge="-1.57" type="button">-90</button>
+              <button class="btn-offset-nudge" data-nudge="+1.57" type="button">+90</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel-card recorder-panel">
+          <div class="panel-header">
+            <div>
+              <h2>Recorder</h2>
+              <p>Pandas CSV capture</p>
+            </div>
+            <span id="recording-indicator" class="recording-chip d-none">Recording</span>
+          </div>
+          <div class="recorder-actions">
+            <button id="btn-record-toggle" class="quiet-button danger-outline" type="button">Start recording</button>
+            <button id="btn-download-csv" class="quiet-button success-outline" type="button" disabled>Download CSV</button>
+          </div>
+          <div class="sample-row">
+            <span>Recorded samples</span>
+            <strong id="recorded-count">0</strong>
+          </div>
+        </section>
+
+        <section class="panel-card console-panel">
+          <div class="panel-header">
+            <div>
+              <h2>Diagnostic console</h2>
+              <p>Throttled telemetry log</p>
+            </div>
+            <div class="log-actions">
+              <button id="btn-copy-log" class="quiet-button compact" type="button">Copy</button>
+              <button id="btn-clear-log" class="quiet-button compact" type="button">Clear</button>
             </div>
           </div>
           <div class="log-terminal" id="log-terminal">
-            <div class="log-line system">[SYSTEM] FOC Studio OSS Initialized. Ready to connect.</div>
+            <div class="log-line system">[SYSTEM] FOC Studio OSS initialized. Ready to connect.</div>
           </div>
-        </div>
-
-      </div>
-
+        </section>
+      </aside>
     </div>
-  </div>
+  </main>
 
-  <!-- Frontend Client Logic -->
-  <script src="/static/js/app.js"></script>
+  <script src="/static/js/app.js?v=20260826-speed"></script>
 </body>
 </html>
