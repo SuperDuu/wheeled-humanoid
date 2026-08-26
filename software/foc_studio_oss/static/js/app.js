@@ -245,8 +245,9 @@ class DeepOscilloscope {
   resize() {
     if (!this.canvas) return;
     const rect = this.canvas.getBoundingClientRect();
-    this.width = this.canvas.width = rect.width * (window.devicePixelRatio || 1);
-    this.height = this.canvas.height = rect.height * (window.devicePixelRatio || 1);
+    const dpr = window.devicePixelRatio || 1;
+    this.width = this.canvas.width = Math.round((rect.width || 600) * dpr);
+    this.height = this.canvas.height = Math.round((rect.height || 212) * dpr);
   }
 
   push(data) {
@@ -264,10 +265,11 @@ class DeepOscilloscope {
   }
 
   render(isDarkTheme = true) {
-    if (!this.ctx || this.totalSamples === 0) return;
+    if (!this.ctx) return;
     const ctx = this.ctx;
-    const w = this.width;
-    const h = this.height;
+    const w = this.width || this.canvas.width;
+    const h = this.height || this.canvas.height;
+    if (w <= 0 || h <= 0) return;
 
     // Palette based on theme
     const bgColor = isDarkTheme ? '#0b0e11' : '#ffffff';
@@ -278,66 +280,70 @@ class DeepOscilloscope {
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, w, h);
 
+    // Default bounds when idle / before samples
+    let min = this.symmetricZero ? -this.minSymmetricRange : this.yMin;
+    let max = this.symmetricZero ? this.minSymmetricRange : this.yMax;
+
     // Determine visible samples based on windowSize & available samples
     const availableSamples = Math.min(this.totalSamples, this.maxHistory);
     const viewSize = Math.min(this.windowSize, availableSamples);
-    if (viewSize < 2) return;
 
     // Determine baseline write pointer:
-    // If paused or looking back into history, use locked frozenWriteIndex
-    // If running live, use active writeIndex
     const baseIndex = (this.isPaused || this.panOffset > 0) ? this.frozenWriteIndex : this.writeIndex;
-
-    // Clamp pan offset
     const maxOffset = Math.max(0, availableSamples - viewSize);
     const clampedOffset = Math.min(this.panOffset, maxOffset);
 
-    // Calculate start index in circular ring buffer
-    let startIdx = (baseIndex - clampedOffset - viewSize) % this.maxHistory;
-    if (startIdx < 0) startIdx += this.maxHistory;
+    let startIdx = 0;
+    if (viewSize >= 2) {
+      startIdx = (baseIndex - clampedOffset - viewSize) % this.maxHistory;
+      if (startIdx < 0) startIdx += this.maxHistory;
 
-    // Auto-scale calculation across visible window
-    let min = this.yMin;
-    let max = this.yMax;
-    if (this.symmetricZero) {
-      let absMax = 0;
-      for (const ch of this.channels) {
-        const buf = this.buffers[ch.key];
-        for (let i = 0; i < viewSize; i++) {
-          const idx = (startIdx + i) % this.maxHistory;
-          const v = buf[idx];
-          const a = Math.abs(v);
-          if (a > absMax) absMax = a;
+      // Auto-scale calculation across visible window
+      if (this.symmetricZero) {
+        let absMax = 0;
+        for (const ch of this.channels) {
+          const buf = this.buffers[ch.key];
+          for (let i = 0; i < viewSize; i++) {
+            const idx = (startIdx + i) % this.maxHistory;
+            const v = buf[idx];
+            const a = Math.abs(v);
+            if (a > absMax) absMax = a;
+          }
         }
-      }
-      const minRange = this.minSymmetricRange !== undefined ? this.minSymmetricRange : 60;
-      let bound = Math.max(minRange, absMax * 1.25);
-      if (bound <= 100) bound = Math.ceil(bound / 10) * 10;
-      else if (bound <= 500) bound = Math.ceil(bound / 25) * 25;
-      else bound = Math.ceil(bound / 50) * 50;
-
-      min = -bound;
-      max = bound;
-    } else if (this.autoScale) {
-      let localMin = Infinity;
-      let localMax = -Infinity;
-      for (const ch of this.channels) {
-        const buf = this.buffers[ch.key];
-        for (let i = 0; i < viewSize; i++) {
-          const idx = (startIdx + i) % this.maxHistory;
-          const v = buf[idx];
-          if (v < localMin) localMin = v;
-          if (v > localMax) localMax = v;
+        const minRange = this.minSymmetricRange !== undefined ? this.minSymmetricRange : 60;
+        let bound = Math.max(minRange, absMax * 1.25);
+        if (bound < 10) {
+          bound = Math.ceil(bound * 2) / 2;
+        } else if (bound <= 100) {
+          bound = Math.ceil(bound / 10) * 10;
+        } else if (bound <= 500) {
+          bound = Math.ceil(bound / 25) * 25;
+        } else {
+          bound = Math.ceil(bound / 50) * 50;
         }
-      }
-      if (localMin !== Infinity && localMax !== -Infinity) {
-        if (this.alwaysIncludeZero) {
-          if (localMin > 0) localMin = 0;
-          if (localMax < 0) localMax = 0;
+        min = -bound;
+        max = bound;
+      } else if (this.autoScale) {
+        let localMin = Infinity;
+        let localMax = -Infinity;
+        for (const ch of this.channels) {
+          const buf = this.buffers[ch.key];
+          for (let i = 0; i < viewSize; i++) {
+            const idx = (startIdx + i) % this.maxHistory;
+            const v = buf[idx];
+            if (v < localMin) localMin = v;
+            if (v > localMax) localMax = v;
+          }
         }
-        const margin = Math.max(0.3, (localMax - localMin) * 0.15);
-        min = localMin - margin;
-        max = localMax + margin;
+        if (localMin !== Infinity && localMax !== -Infinity) {
+          if (this.alwaysIncludeZero) {
+            if (localMin > 0) localMin = 0;
+            if (localMax < 0) localMax = 0;
+          }
+          const margin = Math.max(0.3, (localMax - localMin) * 0.15);
+          min = localMin - margin;
+          max = localMax + margin;
+        }
       }
     }
 
