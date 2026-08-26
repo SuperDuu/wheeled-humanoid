@@ -74,8 +74,11 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 /* Exported functions prototypes ---------------------------------------------*/
 void Error_Handler(void);
 
-/* USER CODE BEGIN EFP */
 void TIM1_EnsureMoeEnabled(void);
+void Run_EncoderCalibration(void);
+void Run_EncoderAlignment(void);
+extern volatile int run_calibration;
+extern volatile int run_alignment;
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
