@@ -8,7 +8,7 @@ import struct
 import numpy as np
 from typing import Optional, Dict, Any
 
-# Binary Packet Format (94 bytes):
+# Binary Packet Format (96 bytes; 94-byte firmware remains supported):
 # typedef struct {
 #     uint8_t  magic1;             // 0xAA (offset 0)
 #     uint8_t  magic2;             // 0x55 (offset 1)
@@ -24,15 +24,21 @@ from typing import Optional, Dict, Any
 #     uint8_t  control_mode, motor_state, fault_code; // (offset 72, 73, 74)
 #     int8_t   encoder_dir;        //      (offset 75)
 #     float    vd, vq, zero_elec_angle, id_target; // (offset 76, 80, 84, 88)
-#     uint16_t checksum;           //      (offset 92)
-# } telemetry_packet_t; Total = 94 bytes.
+#     uint8_t  encoder_lut_enabled;//      (offset 92)
+#     int8_t   calibration_result; //      (offset 93)
+#     uint16_t checksum;           //      (offset 94)
+# } telemetry_packet_t; Total = 96 bytes.
+PACKET_FORMAT_96 = "<BBBB I 16f 3B b 4f B b H"
+PACKET_SIZE_96 = struct.calcsize(PACKET_FORMAT_96)
+
 PACKET_FORMAT_94 = "<BBBB I 16f 3B b 4f H"
 PACKET_SIZE_94 = struct.calcsize(PACKET_FORMAT_94)
 
 PACKET_FORMAT_78 = "<BBBB I 16f BBBB H"
 PACKET_SIZE_78 = struct.calcsize(PACKET_FORMAT_78)
 
-PACKET_SIZE = PACKET_SIZE_94
+PACKET_SIZE = PACKET_SIZE_96
+PACKET_SIZES = frozenset((PACKET_SIZE_78, PACKET_SIZE_94, PACKET_SIZE_96))
 MAGIC1 = 0xAA
 MAGIC2 = 0x55
 
@@ -49,7 +55,7 @@ class TelemetryParser:
     def parse_packet(cls, raw_bytes: bytes) -> Optional[Dict[str, Any]]:
         """
         Unpack binary bytes and compute vector/telemetry metrics via NumPy.
-        Supports both 94-byte and legacy 78-byte packets.
+        Supports 96-byte packets and the legacy 94/78-byte formats.
         """
         if len(raw_bytes) < PACKET_SIZE_78:
             return None
@@ -58,7 +64,27 @@ class TelemetryParser:
         if raw_bytes[0] != MAGIC1 or raw_bytes[1] != MAGIC2:
             return None
 
-        if len(raw_bytes) >= PACKET_SIZE_94:
+        packet_length = raw_bytes[3] + 4
+        if packet_length == PACKET_SIZE_96 and len(raw_bytes) >= PACKET_SIZE_96:
+            unpacked = struct.unpack(PACKET_FORMAT_96, raw_bytes[:PACKET_SIZE_96])
+            magic1, magic2, pkt_type, payload_len = unpacked[0:4]
+            timestamp_ms = unpacked[4]
+            (i_a, i_b, i_c,
+             i_d, i_q, i_q_target,
+             duty_a, duty_b, duty_c,
+             phase_elec, mech_angle, joint_angle,
+             speed_rpm, speed_target_rpm,
+             v_bus, temp_fet) = unpacked[5:21]
+            control_mode, motor_state, fault_code = unpacked[21:24]
+            encoder_dir = unpacked[24]
+            vd, vq, zero_elec_angle, id_target = unpacked[25:29]
+            encoder_lut_enabled, calibration_result = unpacked[29:31]
+            checksum = unpacked[31]
+
+            expected_cs = cls.calculate_checksum(raw_bytes, PACKET_SIZE_96 - 2)
+            if checksum != expected_cs:
+                return None
+        elif packet_length == PACKET_SIZE_94 and len(raw_bytes) >= PACKET_SIZE_94:
             unpacked = struct.unpack(PACKET_FORMAT_94, raw_bytes[:PACKET_SIZE_94])
             magic1, magic2, pkt_type, payload_len = unpacked[0:4]
             timestamp_ms = unpacked[4]
@@ -71,12 +97,13 @@ class TelemetryParser:
             control_mode, motor_state, fault_code = unpacked[21:24]
             encoder_dir = unpacked[24]
             vd, vq, zero_elec_angle, id_target = unpacked[25:29]
+            encoder_lut_enabled, calibration_result = 0, 0
             checksum = unpacked[29]
 
             expected_cs = cls.calculate_checksum(raw_bytes, PACKET_SIZE_94 - 2)
             if checksum != expected_cs:
                 return None
-        else:
+        elif packet_length == PACKET_SIZE_78 and len(raw_bytes) >= PACKET_SIZE_78:
             unpacked = struct.unpack(PACKET_FORMAT_78, raw_bytes[:PACKET_SIZE_78])
             magic1, magic2, pkt_type, payload_len = unpacked[0:4]
             timestamp_ms = unpacked[4]
@@ -89,11 +116,14 @@ class TelemetryParser:
             control_mode, motor_state, fault_code, reserved = unpacked[21:25]
             encoder_dir = -1
             vd, vq, zero_elec_angle, id_target = 0.0, 0.0, 0.0, 0.0
+            encoder_lut_enabled, calibration_result = 0, 0
             checksum = unpacked[25]
 
             expected_cs = sum(raw_bytes[:PACKET_SIZE_78 - 2]) & 0xFFFF
             if checksum != expected_cs:
                 return None
+        else:
+            return None
 
         # -------------------------------------------------------------
         # NumPy Vector Mathematics & Scientific Processing
@@ -139,4 +169,6 @@ class TelemetryParser:
             "vq": round(float(vq), 4),
             "zero_elec_angle": round(float(zero_elec_angle), 4),
             "id_target": round(float(id_target), 4),
+            "encoder_lut_enabled": int(encoder_lut_enabled),
+            "calibration_result": int(calibration_result),
         }
