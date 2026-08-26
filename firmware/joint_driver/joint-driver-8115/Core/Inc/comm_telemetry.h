@@ -66,6 +66,8 @@ typedef struct {
     float    vq;                 // Q-axis PI voltage output (V)
     float    zero_elec_angle;    // Electrical zero offset from ALIGN (rad)
     float    id_target;          // D-axis target current (A)
+    uint8_t  encoder_lut_enabled;// 1 when the validated 128-point LUT is active
+    int8_t   calibration_result; // 0:none, 1:running, 2:saved, 3:loaded, negative:error
     
     uint16_t checksum;           // 16-bit XOR/Sum CRC
 } telemetry_packet_t;
