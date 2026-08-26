@@ -48,12 +48,12 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_cc_decoupling = FOC_CC_DECOUPLING_BEMF; // Bù khử ghép chéo d-q
 
     // Speed Controller (Cascaded Current-Mode FOC: Outputs Iq command in Amperes)
-    conf->s_pid_kp = 0.0015f;              // Stiff proportional drive to punch through cycloid detents
-    conf->s_pid_ki = 0.0015f;              // Fast integral recovery without reverse windup
-    conf->s_pid_kd = 0.00002f;             // Active derivative damping
-    conf->s_pid_kd_filter = 0.080f;        // ~13 Hz cutoff; ~12ms phase lag for crisp speed tracking
+    conf->s_pid_kp = 0.00045f;             // Smooth, critically damped proportional drive
+    conf->s_pid_ki = 0.00025f;             // Clean integral tracking without hunting
+    conf->s_pid_kd = 0.0f;                 // Zero D-term for noise-free response
+    conf->s_pid_kd_filter = 0.050f;        // ~8 Hz cutoff; smooth speed feedback
     conf->s_pid_min_erpm = 10.0f;          // 10 ERPM deadband (~0.48 RPM motor)
-    conf->s_pid_ramp_erpms_s = 5000.0f;    // 5000 ERPM/s (~240 RPM/s motor, 0-200 in ~0.8s)
+    conf->s_pid_ramp_erpms_s = 2500.0f;    // 2500 ERPM/s (~120 RPM/s motor, smooth ramp to 50 in 0.4s)
 
     // Position Controller (MIT Mini Cheetah Impedance PD: Outputs Iq command in Amperes)
     conf->p_pid_kp = 8.0f;                 // Kp_pos = 8.0 A/rad (Virtual Joint Stiffness)
