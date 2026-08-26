@@ -24,6 +24,7 @@ class DeepOscilloscope {
     this.minSymmetricRange = options.minSymmetricRange !== undefined ? options.minSymmetricRange : 60;
     this.alwaysIncludeZero = options.alwaysIncludeZero !== undefined ? options.alwaysIncludeZero : false;
     this.unit = options.unit || '';
+    this.maxHistory = options.maxHistory || 10000;
 
     // Independent state
     this.zoomLevel = options.zoomLevel || 25; // 1 to 100
