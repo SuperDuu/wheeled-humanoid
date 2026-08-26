@@ -191,6 +191,35 @@ extern volatile float speed_target_dbg;
 extern volatile float iq_target_dbg;
 extern volatile float pos_target_dbg;
 
+static void StartClosedLoopSpeed(FOC_Controller_t *foc, float mech_rpm)
+{
+    motor_all_state_t *motor = &foc->motor;
+    float pole_pairs = (motor->m_conf != NULL &&
+                        motor->m_conf->foc_motor_pole_pairs > 0U)
+                           ? (float)motor->m_conf->foc_motor_pole_pairs
+                           : 21.0f;
+    float erpm_now = RADPS2RPM_f(motor->m_speed_est_fast);
+
+    run_open_loop = 0;
+    open_loop_target_rpm = 0.0f;
+    open_loop_current_rpm = 0.0f;
+    speed_target_dbg = mech_rpm;
+    motor->m_speed_command_rpm = mech_rpm * pole_pairs;
+    motor->m_speed_pid_set_rpm = erpm_now;
+    motor->m_speed_d_filter = erpm_now;
+    motor->m_speed_d_filter_proc = erpm_now;
+    motor->m_speed_i_term = 0.0f;
+    motor->m_speed_prev_error = 0.0f;
+    motor->m_iq_set = 0.0f;
+    motor->m_openloop_spinup_active = false;
+    motor->m_openloop_spinup_time = 0.0f;
+    motor->m_control_mode = CONTROL_MODE_SPEED;
+    motor->m_state = MC_STATE_RUNNING;
+    run_foc_mode = 3;
+    foc->fault = MC_FAULT_NONE;
+    TIM1_EnsureMoeEnabled();
+}
+
 static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
 {
     if (foc == NULL || cmd == NULL) return;
@@ -326,35 +355,11 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         float rpm = 100.0f;
         if (strncmp(cmd, "CLOSELOOP ", 10) == 0) rpm = atof(&cmd[10]);
         else if (strncmp(cmd, "CLOSE_LOOP ", 11) == 0) rpm = atof(&cmd[11]);
-        speed_target_dbg = rpm;
-        motor->m_speed_command_rpm = rpm * 21.0f;
-        motor->m_speed_pid_set_rpm = RADPS2RPM_f(motor->m_speed_est_fast);
-        motor->m_speed_d_filter = motor->m_speed_pid_set_rpm;
-        motor->m_speed_i_term = 0.0f;
-        motor->m_speed_prev_error = 0.0f;
-        motor->m_speed_d_filter_proc = 0.0f;
-        motor->m_openloop_spinup_active = false;
-        motor->m_openloop_spinup_time = 0.0f;
-        motor->m_control_mode = CONTROL_MODE_SPEED;
-        motor->m_state = MC_STATE_RUNNING;
-        run_foc_mode = 3;
-        foc->fault = MC_FAULT_NONE;
-        TIM1_EnsureMoeEnabled();
+        StartClosedLoopSpeed(foc, rpm);
     }
     else if (strncmp(cmd, "SPEED ", 6) == 0) {
         float mech_rpm = atof(&cmd[6]);
-        float pole_pairs = (motor->m_conf != NULL) ? (float)motor->m_conf->foc_motor_pole_pairs : 21.0f;
-        speed_target_dbg = mech_rpm;
-        open_loop_target_rpm = mech_rpm;
-        if (open_loop_voltage < 3.0f) {
-            open_loop_voltage = 8.5f; /* 8.5V boost maintains stiff holding torque */
-        }
-        run_open_loop = 1;
-        motor->m_control_mode = CONTROL_MODE_DUTY;
-        motor->m_state = MC_STATE_RUNNING;
-        motor->m_speed_command_rpm = mech_rpm * pole_pairs;
-        foc->fault = MC_FAULT_NONE;
-        TIM1_EnsureMoeEnabled();
+        StartClosedLoopSpeed(foc, mech_rpm);
     }
     else if (strncmp(cmd, "IQ ", 3) == 0 || strncmp(cmd, "CURRENT ", 8) == 0 || strncmp(cmd, "TORQUE ", 7) == 0 || strncmp(cmd, "FORCE ", 6) == 0) {
         float iq = 0.0f;
