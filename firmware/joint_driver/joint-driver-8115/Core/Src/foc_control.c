@@ -184,7 +184,6 @@ void FOC_Control_AlignEncoder(FOC_Controller_t *foc)
 void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float current_b, float vbus, float temp_fet, float dt)
 {
     if (foc == NULL) return;
-    static float s_prev_iq_target = 0.0f;
 
     motor_all_state_t *motor = &foc->motor;
     motor_state_t *state_m = &motor->m_motor_state;
@@ -298,7 +297,6 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
             foc->duty_b = 0.5f;
             foc->duty_c = 0.5f;
         }
-        s_prev_iq_target = 0.0f;
         return;
     }
 
