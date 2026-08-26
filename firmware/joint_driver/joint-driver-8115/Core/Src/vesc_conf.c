@@ -51,7 +51,7 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->s_pid_kp = 0.00035f;             // Smooth proportional drive (no overshoot)
     conf->s_pid_ki = 0.00030f;             // Active forward integrator without reverse windup
     conf->s_pid_kd = 0.0f;                 // Disable D until encoder speed is clean
-    conf->s_pid_kd_filter = 0.030f;        // ~5 Hz cutoff; low phase lag (eliminates 68ms delay)
+    conf->s_pid_kd_filter = 0.080f;        // ~13 Hz cutoff; ~12ms phase lag for crisp speed tracking
     conf->s_pid_min_erpm = 10.0f;          // 10 ERPM deadband (~0.48 RPM motor)
     conf->s_pid_ramp_erpms_s = 5000.0f;    // 5000 ERPM/s (~240 RPM/s motor, 0-200 in ~0.8s)
 
