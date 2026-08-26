@@ -334,17 +334,27 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
         float ki = conf_now->foc_current_ki;
 
         // Decoupling Feedforward terms (-w_e*L*Iq on d-axis, +w_e*L*Id + w_e*lambda on q-axis)
-        float vq_ff = motor->m_speed_est_fast * conf_now->foc_motor_flux_linkage + motor->m_speed_est_fast * conf_now->foc_motor_l * state_m->id;
-        float vd_ff = -motor->m_speed_est_fast * conf_now->foc_motor_l * state_m->iq;
+        // Use filtered d-q currents for cross-coupling feedforward to prevent
+        // noise amplification from offset-induced oscillations in raw Id/Iq.
+        float vq_ff = motor->m_speed_est_fast * conf_now->foc_motor_flux_linkage + motor->m_speed_est_fast * conf_now->foc_motor_l * state_m->id_filter;
+        float vd_ff = -motor->m_speed_est_fast * conf_now->foc_motor_l * state_m->iq_filter;
 
         state_m->vd = kp * Ierr_d + state_m->vd_int + vd_ff;
         state_m->vq = kp * Ierr_q + state_m->vq_int + vq_ff;
 
-        // Anti-windup conditional integration: Allow integration if not saturated OR if error is discharging saturation
-        if (!((state_m->vd >= max_v_mag && Ierr_d > 0.0f) || (state_m->vd <= -max_v_mag && Ierr_d < 0.0f))) {
+        // Circle-based anti-windup: check combined Vd²+Vq² against the voltage
+        // circle, not each axis independently. Per-axis check allows one axis to
+        // wind up unchecked while the other is saturated, causing Vd to steal
+        // Vq headroom and eventual loss of synchronous torque.
+        float v_mag_sq = state_m->vd * state_m->vd + state_m->vq * state_m->vq;
+        float v_limit_sq = max_v_mag * max_v_mag;
+        bool voltage_saturated = v_mag_sq >= v_limit_sq * 0.95f;
+
+        // Only integrate if not saturated, or if error would reduce saturation
+        if (!voltage_saturated || (state_m->vd * Ierr_d < 0.0f)) {
             state_m->vd_int += ki * Ierr_d * dt_fast;
         }
-        if (!((state_m->vq >= max_v_mag && Ierr_q > 0.0f) || (state_m->vq <= -max_v_mag && Ierr_q < 0.0f))) {
+        if (!voltage_saturated || (state_m->vq * Ierr_q < 0.0f)) {
             state_m->vq_int += ki * Ierr_q * dt_fast;
         }
 
