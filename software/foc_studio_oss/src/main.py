@@ -14,7 +14,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
-from .models import PortInfo, ConnectRequest, MotorCommand, SystemStatus, TelemetryFrame
+from .models import PortInfo, ConnectRequest, MotorCommand, TextCommand, SystemStatus, TelemetryFrame
 from .serial_manager import SerialManager
 from .data_recorder import TelemetryRecorder
 
@@ -99,7 +99,9 @@ async def get_system_status():
         telemetry_hz=serial_mgr.telemetry_hz,
         samples_received=serial_mgr.sample_count,
         recorded_samples=recorder.get_sample_count(),
-        is_recording=recorder.is_recording
+        is_recording=recorder.is_recording,
+        error_count=serial_mgr.error_count,
+        diagnostic_logs=serial_mgr.diagnostic_logs[-20:]
     )
 
 
@@ -138,6 +140,21 @@ async def send_motor_control(cmd: MotorCommand):
 
     ok = serial_mgr.send_motor_control(cmd.control_mode, target)
     return {"success": ok, "mode": cmd.control_mode, "target": target}
+
+
+@app.post("/api/command", tags=["Motor Control"])
+async def send_text_command(cmd: TextCommand):
+    """Send raw ASCII text command (CALIB, ALIGN, SPEED, VOLT, STOP) to STM32."""
+    if not serial_mgr.is_connected:
+        raise HTTPException(status_code=400, detail="Device is not connected.")
+    ok = serial_mgr.send_ascii_command(cmd.command)
+    return {"success": ok, "command": cmd.command}
+
+
+@app.post("/api/auto_tune", tags=["Motor Control"])
+async def run_auto_tune():
+    """Run the OSS motor identification and PID auto-tune workflow."""
+    return serial_mgr.run_auto_tune()
 
 
 @app.post("/api/record/start", tags=["Analysis & Recording"])
