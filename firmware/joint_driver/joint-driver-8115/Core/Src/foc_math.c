@@ -373,7 +373,6 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	}
 
 	float erpm_raw = RADPS2RPM_f(motor->m_speed_est_fast);
-	static float s_speed_iq_cmd = 0.0f;
 
 	if (motor->m_control_mode != CONTROL_MODE_SPEED) {
 		motor->m_speed_i_term = 0.0f;
@@ -382,7 +381,6 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		motor->m_speed_d_filter_proc = erpm_raw;
 		motor->m_openloop_spinup_active = false;
 		motor->m_openloop_spinup_time = 0.0f;
-		s_speed_iq_cmd = 0.0f;
 		return;
 	}
 
@@ -395,7 +393,6 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 
 	if (SIGN(motor->m_speed_command_rpm) != SIGN(motor->m_speed_pid_set_rpm)) {
 		motor->m_speed_i_term = 0.0f;
-		s_speed_iq_cmd = 0.0f;
 	}
 
 	/* Breakaway spinup: small Iq pulse only at initial start from 0 RPM */
@@ -416,7 +413,6 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 
 		motor->m_iq_set = spin_dir * SPEED_IQ_BREAKAWAY_A;
 		motor->m_speed_pid_set_rpm = spin_dir * spinup_rpm * pole_pairs;
-		s_speed_iq_cmd = motor->m_iq_set;
 
 		/* Handover when motor is spinning cleanly (> 8 RPM) or 100ms elapsed */
 		if (motor->m_openloop_spinup_time >= 0.100f || fabsf(actual_mech_rpm) > 8.0f) {
@@ -442,7 +438,6 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		motor->m_iq_set = 0.0f;
 		motor->m_openloop_spinup_active = false;
 		motor->m_openloop_spinup_time = 0.0f;
-		s_speed_iq_cmd = 0.0f;
 		return;
 	}
 
