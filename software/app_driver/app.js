@@ -22,6 +22,7 @@ class FOCOscilloscopeStudio {
 
     // Telemetry Buffers (Circular time-series arrays, max 3000 samples)
     this.maxSamples = 3000;
+    this.trimSamples = 500;
     this.buffer = {
       time: [],
       i_a: [],
@@ -58,7 +59,14 @@ class FOCOscilloscopeStudio {
     // Telemetry rate tracking
     this.packetCount = 0;
     this.lastPacketTime = performance.now();
+    this.lastTelemetryTime = 0;
+    this.lastHudUpdate = 0;
+    this.hudUpdateInterval = 100;
     this.fps = 0;
+
+    // Four canvases at 60 FPS saturate the browser when telemetry is at 100 Hz.
+    this.renderInterval = 1000 / 30;
+    this.lastRenderTime = 0;
 
     // Recording State
     this.isRecording = false;
@@ -356,22 +364,75 @@ class FOCOscilloscopeStudio {
       });
     });
 
-    // Open-Loop Quick Test Buttons
-    const btnOpenloopFwd = document.getElementById('btn-openloop-fwd');
-    if (btnOpenloopFwd) {
-      btnOpenloopFwd.addEventListener('click', () => {
-        this.sendCommand('OPENLOOP 200');
-        this.appendLog('Open-loop Forward 200 ERPM started.', 'warn');
+    // 🌀 Interactive Open-Loop V/f Multi-Speed Controls
+    const inputOpenRpm = document.getElementById('input-openloop-rpm');
+    const inputOpenVolt = document.getElementById('input-openloop-volt');
+    const sliderOpen = document.getElementById('slider-openloop');
+    const openDisplay = document.getElementById('openloop-display');
+    const btnRunOpen = document.getElementById('btn-run-openloop');
+
+    const triggerOpenLoop = (rpm, volt) => {
+      const targetRpm = parseFloat(rpm) || 0;
+      const targetVolt = parseFloat(volt) || 9.0;
+      if (Math.abs(targetRpm) < 0.1) {
+        this.sendCommand('MODE 0');
+        this.appendLog('🛑 Đã dừng Open-Loop.', 'info');
+      } else {
+        this.sendCommand(`OPENLOOP ${targetRpm} ${targetVolt}`);
+        this.appendLog(`🌀 Đang chạy Open-Loop: ${targetRpm} RPM @ ${targetVolt}V`, 'warn');
+      }
+      if (inputOpenRpm) inputOpenRpm.value = targetRpm;
+      if (inputOpenVolt) inputOpenVolt.value = targetVolt;
+      if (sliderOpen) sliderOpen.value = targetRpm;
+      if (openDisplay) openDisplay.innerText = `${targetRpm} RPM @ ${targetVolt}V`;
+    };
+
+    if (btnRunOpen && inputOpenRpm && inputOpenVolt) {
+      btnRunOpen.addEventListener('click', () => {
+        triggerOpenLoop(inputOpenRpm.value, inputOpenVolt.value);
+      });
+      inputOpenRpm.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') triggerOpenLoop(inputOpenRpm.value, inputOpenVolt.value);
+      });
+      inputOpenVolt.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') triggerOpenLoop(inputOpenRpm.value, inputOpenVolt.value);
       });
     }
 
-    const btnOpenloopRev = document.getElementById('btn-openloop-rev');
-    if (btnOpenloopRev) {
-      btnOpenloopRev.addEventListener('click', () => {
-        this.sendCommand('OPENLOOP -200');
-        this.appendLog('Open-loop Reverse -200 ERPM started.', 'warn');
+    if (sliderOpen) {
+      sliderOpen.addEventListener('input', (e) => {
+        const rpm = e.target.value;
+        const volt = (inputOpenVolt ? parseFloat(inputOpenVolt.value) : 9.0) || 9.0;
+        if (openDisplay) openDisplay.innerText = `${rpm} RPM @ ${volt}V`;
+        if (inputOpenRpm) inputOpenRpm.value = rpm;
+      });
+      sliderOpen.addEventListener('change', (e) => {
+        const rpm = e.target.value;
+        const volt = (inputOpenVolt ? parseFloat(inputOpenVolt.value) : 9.0) || 9.0;
+        triggerOpenLoop(rpm, volt);
       });
     }
+
+    document.querySelectorAll('.btn-open-preset').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const rpm = btn.dataset.rpm;
+        const volt = btn.dataset.volt || '9.0';
+        if (rpm !== undefined) {
+          triggerOpenLoop(rpm, volt);
+        }
+      });
+    });
+
+    // Handle all toolbar and action buttons with data-cmd
+    document.querySelectorAll('[data-cmd]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const cmd = btn.getAttribute('data-cmd');
+        if (cmd) {
+          this.sendCommand(cmd);
+          this.appendLog(`> ${cmd}`, 'warn');
+        }
+      });
+    });
 
     // Direct D-Axis Encoder Alignment
     const btnAlign = document.getElementById('btn-align');
@@ -379,6 +440,15 @@ class FOCOscilloscopeStudio {
       btnAlign.addEventListener('click', () => {
         this.sendCommand('ALIGN');
         this.appendLog('Aligning encoder zero angle... Please wait 2 seconds.', 'warn');
+      });
+    }
+
+    // 🎯 Ben Katz MIT Cheetah 1-Revolution Encoder Calibration
+    const btnCalib = document.getElementById('btn-calib');
+    if (btnCalib) {
+      btnCalib.addEventListener('click', () => {
+        this.sendCommand('CALIB');
+        this.appendLog('🎯 Đang quét hiệu chuẩn 128 điểm Ben Katz (1 vòng tới, 1 vòng lui ~7s)... Vui lòng đợi!', 'warn');
       });
     }
 
@@ -647,10 +717,17 @@ class FOCOscilloscopeStudio {
     // Log actions
     const btnCopyLog = document.getElementById('btn-copy-log');
     if (btnCopyLog) {
-      btnCopyLog.addEventListener('click', () => {
-        const text = document.getElementById('log-console').innerText;
-        navigator.clipboard.writeText(text);
-        alert('Logs copied to clipboard!');
+      btnCopyLog.addEventListener('click', async () => {
+        const text = document.getElementById('log-console').innerText.trim();
+        if (!text) return;
+        try {
+          await this.copyTextToClipboard(text);
+          const oldText = btnCopyLog.innerText;
+          btnCopyLog.innerText = 'Copied';
+          setTimeout(() => { btnCopyLog.innerText = oldText; }, 1000);
+        } catch (err) {
+          this.appendLog(`Copy log failed: ${err.message}`, 'error');
+        }
       });
     }
 
@@ -660,6 +737,39 @@ class FOCOscilloscopeStudio {
         document.getElementById('log-console').innerHTML = '';
       });
     }
+  }
+
+  async copyTextToClipboard(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '0';
+    ta.style.left = '0';
+    ta.style.width = '1px';
+    ta.style.height = '1px';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    ta.setSelectionRange(0, ta.value.length);
+
+    let copied = false;
+    try {
+      copied = document.execCommand('copy');
+    } catch (e) {
+      copied = false;
+    }
+    document.body.removeChild(ta);
+
+    if (copied) return;
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+
+    throw new Error('Clipboard copy is not available in this browser context.');
   }
 
   toggleScopeFreeze(scopeId) {
@@ -862,6 +972,7 @@ class FOCOscilloscopeStudio {
   handleTelemetry(pkt) {
     const now = performance.now();
     this.packetCount++;
+    this.lastTelemetryTime = now;
 
     // Push into ring buffers
     this.buffer.time.push(now);
@@ -880,13 +991,17 @@ class FOCOscilloscopeStudio {
     this.buffer.rpm.push(pkt.speed_rpm);
     this.buffer.rpm_tgt.push(pkt.speed_target_rpm);
 
-    // Maintain max buffer capacity
+    // Trim in batches. Shifting every array for every packet becomes O(n) at
+    // 3000 samples and was the main cause of the UI freeze after ~30 seconds.
     if (this.buffer.time.length > this.maxSamples) {
-      Object.keys(this.buffer).forEach(k => this.buffer[k].shift());
+      Object.keys(this.buffer).forEach(k => this.buffer[k].splice(0, this.trimSamples));
     }
 
-    // Update Telemetry Metrics HUD
-    this.updateHUD(pkt);
+    // Human-readable values do not need 100 DOM updates per second.
+    if (now - this.lastHudUpdate >= this.hudUpdateInterval) {
+      this.lastHudUpdate = now;
+      this.updateHUD(pkt);
+    }
   }
 
   updateHUD(pkt) {
@@ -996,8 +1111,8 @@ class FOCOscilloscopeStudio {
         const recEl = document.getElementById('recorded-count');
         if (recEl) recEl.innerText = data.recorded_samples || 0;
 
-        // Fallback ingestion if SSE stream was stalled
-        if (data.latest && this.buffer.time.length < 5) {
+        // Keep the HUD alive if EventSource is temporarily reconnecting.
+        if (data.latest && performance.now() - this.lastTelemetryTime > 750) {
           this.handleTelemetry(data.latest);
         }
 
@@ -1029,11 +1144,14 @@ class FOCOscilloscopeStudio {
   }
 
   startAnimationLoop() {
-    const render = () => {
-      this.renderScope1();
-      this.renderScope2();
-      this.renderScope3();
-      this.renderScope4();
+    const render = (now) => {
+      if (!document.hidden && now - this.lastRenderTime >= this.renderInterval) {
+        this.lastRenderTime = now;
+        this.renderScope1();
+        this.renderScope2();
+        this.renderScope3();
+        this.renderScope4();
+      }
       requestAnimationFrame(render);
     };
     requestAnimationFrame(render);
