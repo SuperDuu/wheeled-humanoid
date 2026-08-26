@@ -58,9 +58,12 @@ class TelemetryManager:
         self.running = False
         self.thread = None
         self.lock = threading.Lock()
+        self.serial_write_lock = threading.Lock()
+        self.device_ready = threading.Event()
         
         # Live state
         self.latest_telemetry = None
+        self.telemetry_sequence = 0
         self.packet_count = 0
         self.error_count = 0
         self.fps = 0.0
@@ -78,10 +81,6 @@ class TelemetryManager:
         self.record_buffer = []
         self.record_start_time = 0
         
-        # SSE Clients
-        self.sse_clients = []
-        self.sse_lock = threading.Lock()
-
         # Background auto-reconnector
         self.auto_reconnect_enabled = True
         self.reconnect_thread = threading.Thread(target=self._auto_reconnect_loop, daemon=True)
@@ -132,11 +131,17 @@ class TelemetryManager:
             return False, "pyserial not installed"
 
         try:
-            self.ser = serial.Serial(port, baudrate=int(baudrate), timeout=0.05)
+            self.ser = serial.Serial(
+                port,
+                baudrate=int(baudrate),
+                timeout=0.05,
+                exclusive=True,
+            )
             self.port = port
             self.baudrate = int(baudrate)
             self.is_connected = True
             self.running = True
+            self.device_ready.clear()
             self.thread = threading.Thread(target=self._reader_loop, daemon=True)
             self.thread.start()
             self.log_diagnostic(f"Connected to {port} @ {baudrate} baud")
@@ -157,15 +162,58 @@ class TelemetryManager:
                 pass
         self.ser = None
         self.is_connected = False
+        self.device_ready.clear()
         self.log_diagnostic("Disconnected from serial port")
+
+    def _command_acknowledged(self, command_name, cmd_str):
+        with self.lock:
+            telemetry = dict(self.latest_telemetry) if self.latest_telemetry else {}
+        if not telemetry:
+            return False
+        if command_name in {"STOP", "OFF"}:
+            return telemetry.get("motor_state") == 0
+        if command_name in {"ALIGN", "CALIB", "CALIBRATE"}:
+            return telemetry.get("motor_state") == 1
+        if command_name == "SPEED":
+            try:
+                target = float(cmd_str.strip().split(maxsplit=1)[1])
+            except (IndexError, ValueError):
+                return False
+            return abs(telemetry.get("speed_target_rpm", 0.0) - target) < 0.25
+        return False
 
     def send_command(self, cmd_str):
         if not self.is_connected or not self.ser:
             return False, "Not connected"
+        # Opening ttyACM can complete before the STM32 reaches its main loop.
+        # The first valid telemetry frame proves both USB endpoints and command
+        # processing are ready, avoiding a lost first command after reset.
+        if not self.device_ready.wait(timeout=2.0):
+            return False, "Device is connected but telemetry is not ready"
         try:
             cmd = cmd_str.strip() + '\r\n'
-            self.ser.write(cmd.encode('utf-8'))
-            self.ser.flush()
+            command_name = cmd_str.strip().split(maxsplit=1)[0].upper() if cmd_str.strip() else ""
+            retry_safe = command_name not in {
+                "REL", "STEP", "MOVE", "RESET", "REBOOT", "DIRTEST"
+            }
+            payload = cmd.encode('utf-8')
+            with self.serial_write_lock:
+                self.ser.write(payload)
+                self.ser.flush()
+                if retry_safe:
+                    ack_capable = command_name in {
+                        "STOP", "OFF", "ALIGN", "CALIB", "CALIBRATE", "SPEED"
+                    }
+                    if ack_capable:
+                        deadline = time.monotonic() + 0.35
+                        while (time.monotonic() < deadline and
+                               not self._command_acknowledged(command_name, cmd_str)):
+                            time.sleep(0.01)
+                    else:
+                        time.sleep(0.15)
+                    if not ack_capable or not self._command_acknowledged(command_name, cmd_str):
+                        self.ser.write(payload)
+                        self.ser.flush()
             self.log_diagnostic(f"Sent Command: {cmd_str.strip()}")
             return True, "Command sent"
         except Exception as e:
@@ -251,6 +299,8 @@ class TelemetryManager:
                                 buffer.pop(0)
                                 continue
 
+                            self.device_ready.set()
+
                             pkt_dict = {
                                 "timestamp_ms": ts_ms,
                                 "i_a": round(ia, 4),
@@ -281,6 +331,7 @@ class TelemetryManager:
 
                             with self.lock:
                                 self.latest_telemetry = pkt_dict
+                                self.telemetry_sequence += 1
                                 self.packet_count += 1
                                 if self.is_recording:
                                     self.record_buffer.append(pkt_dict)
@@ -299,9 +350,6 @@ class TelemetryManager:
                                 if fault > 0:
                                     log_line += f" | FAULT={fault}"
                                 self.log_diagnostic(log_line)
-
-                            # Broadcast to SSE web clients
-                            self._broadcast_sse(pkt_dict)
 
                         except Exception as parse_err:
                             self.error_count += 1
@@ -333,29 +381,6 @@ class TelemetryManager:
                         pass
                     break
                     time.sleep(0.01)
-
-    def _broadcast_sse(self, pkt):
-        msg = f"data: {json.dumps(pkt)}\n\n"
-        with self.sse_lock:
-            disconnected = []
-            for client in self.sse_clients:
-                try:
-                    client.wfile.write(msg.encode('utf-8'))
-                    client.wfile.flush()
-                except Exception:
-                    disconnected.append(client)
-            for d in disconnected:
-                self.sse_clients.remove(d)
-
-    def add_sse_client(self, handler):
-        with self.sse_lock:
-            self.sse_clients.append(handler)
-
-    def remove_sse_client(self, handler):
-        with self.sse_lock:
-            if handler in self.sse_clients:
-                self.sse_clients.remove(handler)
-
 
 telemetry_mgr = TelemetryManager()
 
@@ -393,21 +418,38 @@ class TelemetryHTTPHandler(SimpleHTTPRequestHandler):
             })
 
         elif path == "/api/stream":
-            # Server-Sent Events (SSE) Stream
             self.send_response(200)
             self.send_header('Content-Type', 'text/event-stream')
             self.send_header('Cache-Control', 'no-cache')
             self.send_header('Connection', 'keep-alive')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
-            telemetry_mgr.add_sse_client(self)
+
+            # Each HTTP worker publishes the latest sample independently.
+            # A slow browser can block only its own worker, never the serial reader.
+            last_sequence = -1
+            last_keepalive = time.monotonic()
             try:
-                while telemetry_mgr.running or True:
-                    time.sleep(1)
-            except Exception:
-                pass
-            finally:
-                telemetry_mgr.remove_sse_client(self)
+                while True:
+                    with telemetry_mgr.lock:
+                        sequence = telemetry_mgr.telemetry_sequence
+                        pkt = (dict(telemetry_mgr.latest_telemetry)
+                               if telemetry_mgr.latest_telemetry else None)
+
+                    if pkt is not None and sequence != last_sequence:
+                        msg = f"data: {json.dumps(pkt, separators=(',', ':'))}\n\n"
+                        self.wfile.write(msg.encode('utf-8'))
+                        self.wfile.flush()
+                        last_sequence = sequence
+                        last_keepalive = time.monotonic()
+                    elif time.monotonic() - last_keepalive >= 5.0:
+                        self.wfile.write(b": keepalive\n\n")
+                        self.wfile.flush()
+                        last_keepalive = time.monotonic()
+
+                    time.sleep(0.01)
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                return
 
         elif path == "/api/record/start":
             telemetry_mgr.start_recording()
