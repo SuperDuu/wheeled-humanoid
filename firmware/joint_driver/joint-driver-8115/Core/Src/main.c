@@ -2085,8 +2085,18 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
   } else {
     current_b_f += CURRENT_RUN_FILTER_ALPHA * (current_b - current_b_f);
     current_c_f += CURRENT_RUN_FILTER_ALPHA * (current_c - current_c_f);
-    current_b = Current_Deadband(current_b_f);
-    current_c = Current_Deadband(current_c_f);
+
+    /* Runtime ADC offset drift compensation:
+     * DC component of AC phase currents must be zero (Kirchhoff).
+     * Any measured DC in the LP-filtered current is ADC/DRV8353 thermal drift.
+     * Track with very slow LPF (α=0.0001 @ 10kHz → BW ≈ 0.16 Hz, τ ≈ 1s)
+     * to capture only thermal drift, not actual current signal (>17 Hz @ 1 RPM). */
+    static float runtime_dc_bias_b = 0.0f;
+    static float runtime_dc_bias_c = 0.0f;
+    UTILS_LP_FAST(runtime_dc_bias_b, current_b_f, 0.0001f);
+    UTILS_LP_FAST(runtime_dc_bias_c, current_c_f, 0.0001f);
+    current_b = Current_Deadband(current_b_f - runtime_dc_bias_b);
+    current_c = Current_Deadband(current_c_f - runtime_dc_bias_c);
   }
   float current_a = -(current_b + current_c); // Kirchhoff: Ia + Ib + Ic = 0
 
