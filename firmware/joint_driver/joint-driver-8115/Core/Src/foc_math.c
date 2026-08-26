@@ -18,8 +18,8 @@
 #define SPEED_DELTA_V_I_MAX             1.10f
 #define SPEED_DELTA_V_P_MAX             1.30f
 #define SPEED_DELTA_V_D_MAX             0.20f
-#define SPEED_IQ_BREAKAWAY_A            0.35f
-#define SPEED_IQ_FRICTION_A             0.35f
+#define SPEED_IQ_BREAKAWAY_A            0.25f
+#define SPEED_IQ_FRICTION_A             0.18f
 #define SPEED_IQ_CONT_MAX_A             5.50f
 #define SPEED_IQ_STALL_BOOST_A          5.50f
 #define SPEED_IQ_STALL_BOOST_RATE_A_S   35.0f
