@@ -355,6 +355,14 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
         state_m->vd = kp * Ierr_d + state_m->vd_int + vd_ff;
         state_m->vq = kp * Ierr_q + state_m->vq_int + vq_ff;
 
+        // Strict Vd clamping: Surface PMSM has zero or negative Vd at Id=0 (-w_e*L*Iq <= 0).
+        // Positive Vd is parasitic integrator drift that steals torque headroom from Vq.
+        // Clamp positive Vd to foc_mag_vd_max * max_v_mag (~1.1V at 24V bus) to prevent runaway.
+        float max_vd_pos = max_v_mag * conf_now->foc_mag_vd_max;
+        float max_vd_neg = -max_v_mag * 0.5f;
+        utils_truncate_number(&state_m->vd_int, max_vd_neg, max_vd_pos);
+        utils_truncate_number(&state_m->vd, max_vd_neg, max_vd_pos);
+
         // Final vector circle voltage limitation (SVPWM circular headroom)
         limit_norm(&state_m->vd, &state_m->vq, max_v_mag);
     }
