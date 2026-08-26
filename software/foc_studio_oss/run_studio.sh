@@ -60,6 +60,10 @@ if ! groups | grep -q "dialout"; then
 fi
 
 PORT=1111
+echo "🧹 Cleaning up previous server instances on port $PORT..."
+fuser -k ${PORT}/tcp 2>/dev/null || true
+sleep 0.5
+
 echo "🚀 Launching FastAPI & Uvicorn ASGI Server on http://localhost:$PORT..."
 echo "📖 Swagger API Documentation available at: http://localhost:$PORT/docs"
 
