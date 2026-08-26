@@ -481,12 +481,7 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 
 	float iq_cmd = iq_friction + p_term + motor->m_speed_i_term + d_term;
 	utils_truncate_number(&iq_cmd, iq_min, iq_max);
-
-	/* Rate-limit the output to avoid current spikes */
-	utils_step_towards(&s_speed_iq_cmd, iq_cmd, SPEED_IQ_CMD_RATE_A_S * dt);
-	utils_truncate_number_abs(&s_speed_iq_cmd, iq_limit);
-
-	motor->m_iq_set = s_speed_iq_cmd;
+	motor->m_iq_set = iq_cmd;
 }
 
 /**
