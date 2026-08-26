@@ -972,6 +972,21 @@ input[type="range"] {
   border-radius: 6px;
 }
 
+.btn-calib {
+  background: linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%) !important;
+  border: 1px solid #7c3aed !important;
+  color: white !important;
+  font-weight: 700 !important;
+  font-size: 0.76rem !important;
+  padding: 8px 6px !important;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+.btn-calib:hover {
+  box-shadow: 0 0 16px rgba(168, 85, 247, 0.6) !important;
+  transform: translateY(-1px);
+}
+
 .btn-reseterr {
   background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
   border: 1px solid #4f46e5 !important;
@@ -1032,6 +1047,50 @@ input[type="range"] {
 .btn-chip-open.rev:hover {
   background: #f59e0b;
   color: #000;
+}
+
+.btn-chip-turbo {
+  background: rgba(249, 115, 22, 0.25);
+  border: 1px solid rgba(249, 115, 22, 0.5);
+  color: #fb923c;
+  font-weight: 800;
+  font-size: 0.70rem;
+  padding: 6px 2px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-chip-turbo:hover {
+  background: #f97316;
+  color: #fff;
+  box-shadow: 0 0 10px rgba(249, 115, 22, 0.5);
+}
+.btn-chip-turbo.rev {
+  background: rgba(239, 68, 68, 0.25);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #f87171;
+}
+.btn-chip-turbo.rev:hover {
+  background: #ef4444;
+  color: #fff;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+}
+
+.btn-chip-max {
+  background: rgba(217, 70, 239, 0.25);
+  border: 1px solid rgba(217, 70, 239, 0.6);
+  color: #e879f9;
+  font-weight: 900;
+  font-size: 0.70rem;
+  padding: 6px 2px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-chip-max:hover {
+  background: #d946ef;
+  color: #fff;
+  box-shadow: 0 0 12px rgba(217, 70, 239, 0.7);
 }
 
 .action-grid {
