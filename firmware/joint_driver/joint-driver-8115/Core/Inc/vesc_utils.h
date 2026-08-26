@@ -83,11 +83,17 @@
 #define SIN_MINUS_30_DEG		(-0.5)
 #define ONE_BY_SQRT2			(0.7071067811865475)
 
+#define PI_F                    3.141592653589793f
+#define TWO_PI_F                6.283185307179586f
+#define INV_TWO_PI_F            0.15915494309189535f
+#define PI_OVER_2_F             1.570796326794897f
+
 // Tables
 extern const float utils_tab_sin_32_1[];
 extern const float utils_tab_sin_32_2[];
 extern const float utils_tab_cos_32_1[];
 extern const float utils_tab_cos_32_2[];
+extern const float sin_tab[513];
 
 // ==================== Function Prototypes ====================
 float utils_fast_atan2(float y, float x);
@@ -95,6 +101,12 @@ float utils_fast_sin(float angle);
 float utils_fast_cos(float angle);
 void utils_fast_sincos(float angle, float *sin, float *cos);
 void utils_fast_sincos_better(float angle, float *sin, float *cos);
+void sincos_lut(float theta, float *s, float *c);
+float sin_lut(float theta);
+float cos_lut(float theta);
+void limit_norm(float *x, float *y, float limit);
+int float_to_uint(float x, float x_min, float x_max, int bits);
+float uint_to_float(int x_int, float x_min, float x_max, int bits);
 float utils_min_abs(float va, float vb);
 float utils_max_abs(float va, float vb);
 float utils_middle_of_3(float a, float b, float c);
