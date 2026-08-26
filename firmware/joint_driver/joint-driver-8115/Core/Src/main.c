@@ -561,59 +561,8 @@ void Run_EncoderAlignment(void)
   float elec_offset = atan2f(sinf(zero_fwd) + sinf(zero_bwd),
                              cosf(zero_fwd) + cosf(zero_bwd));
 
-  /* --- Phase 4: Polarity check (resolve π ambiguity) --- */
-  /* Re-lock rotor at discovered d-axis */
-  HAL_Delay(200);
-  AS5048A_Sample(&g_foc_controller.encoder, sample_dt);
-  float lock_phase = encoder_scale *
-                     g_foc_controller.encoder.angle_singleturn - elec_offset;
-  utils_norm_angle_rad(&lock_phase);
-  /* Apply d-axis voltage to settle rotor */
-  for (int i = 0; i <= 30; i++) {
-    Apply_SvmVector(vd_align * (float)i / 30.0f, lock_phase, vbus, period);
-    HAL_Delay(4);
-  }
-  HAL_Delay(200);
-
-  AS5048A_Sample(&g_foc_controller.encoder, 0.002f);
-  int32_t polarity_start_count = g_foc_controller.encoder.count_buff[0];
-  /* Re-read phase after rotor settled at d-axis lock */
-  float polarity_phase = encoder_scale *
-                         g_foc_controller.encoder.angle_singleturn -
-                         elec_offset;
-  utils_norm_angle_rad(&polarity_phase);
-  float polarity_q_angle = polarity_phase + 0.5f * (float)M_PI;
-  utils_norm_angle_rad(&polarity_q_angle);
-
-  const float polarity_test_v = 4.0f;
-  for (int i = 1; i <= 10; i++) {
-    if (run_alignment != 1 || g_foc_controller.fault != MC_FAULT_NONE)
-      goto alignment_abort;
-    Apply_SvmVector(polarity_test_v * (float)i / 10.0f,
-                    polarity_q_angle, vbus, period);
-    HAL_Delay(2);
-    AS5048A_Sample(&g_foc_controller.encoder, 0.002f);
-  }
-  for (int i = 0; i < 30; i++) {
-    Apply_SvmVector(polarity_test_v, polarity_q_angle, vbus, period);
-    HAL_Delay(2);
-    AS5048A_Sample(&g_foc_controller.encoder, 0.002f);
-    Comm_Telemetry_Process(&g_foc_controller);
-  }
-  int32_t polarity_delta_counts =
-      g_foc_controller.conf.encoder_direction *
-      (g_foc_controller.encoder.count_buff[0] - polarity_start_count);
-  Ramp_SvmVector(polarity_test_v, 0.0f, polarity_q_angle,
-                 vbus, period, 10, 2);
-  if (polarity_delta_counts > -4 && polarity_delta_counts < 4) {
-    goto alignment_abort;
-  }
-  if (polarity_delta_counts < 0) {
-    elec_offset += (float)M_PI;
-    utils_norm_angle_rad(&elec_offset);
-  }
-
-  /* --- Phase 5: Store result --- */
+  /* --- Phase 4: Store result --- */
+  utils_norm_angle_rad(&elec_offset);
   AS5048A_Sample(&g_foc_controller.encoder, sample_dt);
   float enc_zero = g_foc_controller.encoder.angle_singleturn;
   g_foc_controller.zero_electric_angle = elec_offset;
