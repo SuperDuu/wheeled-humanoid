@@ -208,14 +208,6 @@ volatile Align_Debug_t g_dbg_align = {0};
 volatile float g_dbg_ia = 0, g_dbg_ib = 0, g_dbg_ic = 0; /* Dòng điện realtime */
 volatile float g_dbg_offset_ia = 0, g_dbg_offset_ib = 0;  /* ADC offsets */
 
-static float Current_Deadband(float current)
-{
-  if (fabsf(current) < CURRENT_DEADBAND_A) {
-    return 0.0f;
-  }
-  return current;
-}
-
 /* ===== PHASE 3 & 4: FOC CLOSED-LOOP DEBUG ===== */
 volatile int run_foc_mode = 0;       /* 0: Dừng, 1: Torque/Current Mode, 2: Position Mode, 3: Speed Mode */
 volatile float iq_target_dbg = 0.0f; /* Dòng Iq mục tiêu (A) - ví dụ 0.5A, 1.0A */
