@@ -13,8 +13,6 @@
 #include "drv8353.h"
 #include "as5048a.h"
 
-#define ENCODER_LUT_SIZE 128
-
 /* High-Speed FOC ISR Controller Handle */
 typedef struct {
 	motor_all_state_t motor;
@@ -35,10 +33,9 @@ typedef struct {
 	// Encoder Zero Alignment
 	float zero_electric_angle;
 	bool  aligned;
-
-	// Encoder Non-Linearity Calibration Lookup Table (Ben Katz / MIT Cheetah method)
-	bool    use_encoder_lut;
-	int16_t encoder_lut[ENCODER_LUT_SIZE]; // in units of 0.0001 rad (0.1 mrad)
+	bool  observer_angle_active;
+	float observer_phase_interp;
+	float observer_angle_blend;
 
 	// Phase Mapping: Auto-detected during alignment
 	// If true, swap Phase B ↔ C at PWM output and current sensing
@@ -56,7 +53,6 @@ extern FOC_Controller_t g_foc_controller;
 void FOC_Control_Init(FOC_Controller_t *foc, SPI_HandleTypeDef *hspi1_drv, SPI_HandleTypeDef *hspi3_enc);
 void FOC_Control_AdcCalibrate(FOC_Controller_t *foc, uint16_t raw_adc_a, uint16_t raw_adc_b);
 void FOC_Control_AlignEncoder(FOC_Controller_t *foc);
-float FOC_Control_CorrectEncoderAngle(const FOC_Controller_t *foc, float raw_rad);
 void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float current_b, float vbus, float temp_fet, float dt);
 void FOC_Control_SlowLoop(FOC_Controller_t *foc, float dt);
 bool FOC_Control_CheckSafety(FOC_Controller_t *foc, float current_a, float current_b, float vbus, float temp_fet);
