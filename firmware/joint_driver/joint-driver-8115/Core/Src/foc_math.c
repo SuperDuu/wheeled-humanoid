@@ -462,13 +462,18 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		iq_friction = -SPEED_IQ_FRICTION_A;
 	}
 
-	/* 4-quadrant symmetric current limits for clean speed regulation */
+	/* Unidirectional speed clamping: prevent deep regenerative braking from bouncing against gearbox backlash */
 	float iq_limit = conf_now->l_current_max;
 	if (iq_limit < 0.1f || iq_limit > SPEED_IQ_CONT_MAX_A) {
 		iq_limit = SPEED_IQ_CONT_MAX_A;
 	}
 	float iq_min = -iq_limit;
 	float iq_max = iq_limit;
+	if (target_mech_rpm > 10.0f) {
+		iq_min = -0.30f;
+	} else if (target_mech_rpm < -10.0f) {
+		iq_max = 0.30f;
+	}
 
 	/* Dynamic Kinetic Anti-Stall Surge: When running at steady speed (>15 RPM),
 	 * if cycloid gearbox detents cause speed to dip below 80% of target, gently
