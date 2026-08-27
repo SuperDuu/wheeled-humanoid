@@ -385,8 +385,9 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	}
 
 	float speed_filter = conf_now->s_pid_kd_filter;
-	utils_truncate_number(&speed_filter, 0.005f, 0.10f);
-	UTILS_LP_FAST(motor->m_speed_d_filter, erpm_raw, speed_filter);
+	utils_truncate_number(&speed_filter, 0.05f, 0.50f);
+	/* Fast low-latency filter (~40 Hz cutoff, ~20ms response time) */
+	UTILS_LP_FAST(motor->m_speed_d_filter, erpm_raw, 0.25f);
 
 	float erpm = motor->m_speed_d_filter;
 	float actual_mech_rpm = erpm / pole_pairs;
