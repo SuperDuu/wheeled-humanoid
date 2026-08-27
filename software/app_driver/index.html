@@ -46,10 +46,13 @@
         <span class="btn-icon">🔌</span> Connect
       </button>
 
+<<<<<<< HEAD
       <button id="btn-reset-driver" class="btn" style="background: #dc2626; color: white; font-weight: bold; border-color: #b91c1c;" title="Reset Vi Điều Khiển & Xóa Lỗi">
         🔄 RESET DRIVER
       </button>
 
+=======
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
       <div class="status-badge" id="conn-status">
         <span class="dot"></span>
         <span class="text">Disconnected</span>
@@ -194,20 +197,35 @@
             <canvas id="canvas-scope3"></canvas>
           </div>
           <div class="hud-bar-compact">
+<<<<<<< HEAD
             <span>θ Joint: <b id="val-joint">0.00 rad</b></span>
             <span>θ Mech: <b id="val-mech">0.00 rad</b></span>
             <span>θ Elec: <b id="val-phase">0.00 rad</b></span>
+=======
+            <span>θ Elec: <b id="val-phase">0.00 rad</b></span>
+            <span>θ Mech: <b id="val-mech">0.00 rad</b></span>
+            <span>Joint: <b id="val-joint">0.00 rad</b></span>
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
           </div>
         </div>
 
       </div>
 
+<<<<<<< HEAD
       <!-- Scope 4: Speed & ERPM Tracking -->
       <div class="scope-card" id="card-scope4">
         <div class="scope-header">
           <div class="scope-title">
             <span class="scope-icon">⚡</span>
             <h4>Scope 4: Speed & ERPM Tracking</h4>
+=======
+      <!-- Scope 4: Speed Tracking -->
+      <div class="scope-card" id="card-scope4">
+        <div class="scope-header">
+          <div class="scope-title">
+            <span class="scope-icon">🏎️</span>
+            <h4>Scope 4: Velocity (Target vs Measured RPM)</h4>
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
             <span class="frozen-badge" id="freeze-tag-scope4" style="display:none;">⏸️ FROZEN</span>
           </div>
           <div class="scope-controls-compact">
@@ -227,14 +245,21 @@
           <canvas id="canvas-scope4"></canvas>
         </div>
         <div class="hud-bar-compact">
+<<<<<<< HEAD
           <span>Actual: <b id="val-rpm" style="color: #00d2d3;">0.0 RPM</b></span>
           <span>Target: <b id="val-rpm-tgt" style="color: #f1c40f;">0.0 RPM</b></span>
           <span>Error: <b id="val-rpm-err" style="color: #ff6b6b;">0.0 RPM</b></span>
+=======
+          <span>Actual: <b id="val-rpm" class="highlight">0.0 RPM</b></span>
+          <span>Target: <b id="val-rpm-tgt">0.0 RPM</b></span>
+          <span>Error: <b id="val-rpm-err">0.0 RPM</b></span>
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
         </div>
       </div>
 
     </section>
 
+<<<<<<< HEAD
     <!-- Right Column: Telemetry & Smart Robot Joint Controller -->
     <aside class="sidebar-column">
       
@@ -384,10 +409,71 @@
               <button class="btn-preset" data-speed="-50">-50</button>
               <button class="btn-preset" data-speed="-100">-100</button>
               <button class="btn-preset" data-speed="-200">-200</button>
+=======
+    <!-- Right Column: Telemetry Dashboard, Control & Throttled Logger -->
+    <aside class="sidebar-column">
+      
+      <!-- Metrics Overview Cards -->
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <span class="m-label">VBUS VOLTAGE</span>
+          <div class="m-value"><span id="val-vbus">0.0</span> <small>V</small></div>
+        </div>
+        <div class="metric-card">
+          <span class="m-label">TEMPERATURE</span>
+          <div class="m-value"><span id="val-temp">25.0</span> <small>°C</small></div>
+        </div>
+        <div class="metric-card">
+          <span class="m-label">CONTROL MODE</span>
+          <div class="m-value mode-badge" id="val-mode">IDLE (0)</div>
+        </div>
+        <div class="metric-card">
+          <span class="m-label">FAULT STATUS</span>
+          <div class="m-value fault-badge status-good" id="val-fault">NO FAULT</div>
+        </div>
+      </div>
+
+      <!-- Motor Control Panel -->
+      <div class="panel-card">
+        <div class="panel-header">
+          <span class="panel-icon">🕹️</span>
+          <h4>Motor Control Panel</h4>
+        </div>
+
+        <div class="panel-body">
+          <div class="control-row">
+            <label>Mode Select:</label>
+            <div class="mode-buttons">
+              <button class="btn-mode active" data-mode="0">IDLE</button>
+              <button class="btn-mode" data-mode="1">CURRENT</button>
+              <button class="btn-mode" data-mode="2">BRAKE</button>
+              <button class="btn-mode" data-mode="3">SPEED</button>
+              <button class="btn-mode" data-mode="4">POS</button>
+            </div>
+          </div>
+
+          <!-- Speed Input -->
+          <div class="control-row">
+            <div class="label-with-val">
+              <label>Target Speed (RPM):</label>
+              <span class="slider-display" id="speed-display">0 RPM</span>
+            </div>
+            <div class="input-action-row">
+              <input type="number" id="input-speed" value="0" step="50" min="-3000" max="3000">
+              <button id="btn-set-speed" class="btn btn-action">Set Speed</button>
+            </div>
+            <input type="range" id="slider-speed" min="-1000" max="1000" step="50" value="0">
+            <div class="quick-speed-presets">
+              <button class="btn-preset" data-speed="100">+100</button>
+              <button class="btn-preset" data-speed="300">+300</button>
+              <button class="btn-preset" data-speed="500">+500</button>
+              <button class="btn-preset" data-speed="0">0</button>
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
               <button class="btn-preset" data-speed="-300">-300</button>
               <button class="btn-preset" data-speed="-500">-500</button>
             </div>
           </div>
+<<<<<<< HEAD
         </div>
       </div>
 
@@ -496,6 +582,51 @@
               <button class="btn-offset-nudge btn btn-secondary" data-nudge="+1.57" style="font-size: 0.72rem; padding: 4px;">+90°</button>
             </div>
           </div>
+=======
+
+          <!-- Current Input -->
+          <div class="control-row">
+            <div class="label-with-val">
+              <label>Target Current Iq (Amps):</label>
+              <span class="slider-display" id="iq-display">0.0 A</span>
+            </div>
+            <div class="input-action-row">
+              <input type="number" id="input-iq" value="0.0" step="0.2" min="-25" max="25">
+              <button id="btn-set-iq" class="btn btn-action">Set Current</button>
+            </div>
+          </div>
+
+          <!-- Position / Angle Input -->
+          <div class="control-row">
+            <div class="label-with-val">
+              <label>Target Joint Angle (Degrees °):</label>
+              <span class="slider-display" id="pos-display">0.0° (0.00 rad)</span>
+            </div>
+            <div class="input-action-row">
+              <input type="number" id="input-pos" value="0" step="5" min="-180" max="180">
+              <button id="btn-set-pos" class="btn btn-action">Set Position</button>
+            </div>
+            <div class="quick-pos-presets">
+              <button class="btn-pos-preset" data-deg="0">0°</button>
+              <button class="btn-pos-preset" data-deg="45">+45°</button>
+              <button class="btn-pos-preset" data-deg="90">+90°</button>
+              <button class="btn-pos-preset" data-deg="180">+180°</button>
+              <button class="btn-pos-preset" data-deg="-45">-45°</button>
+              <button class="btn-pos-preset" data-deg="-90">-90°</button>
+              <button class="btn-pos-preset" data-deg="-180">-180°</button>
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="action-buttons-row" style="display: flex; gap: 8px; margin-top: 10px;">
+            <button id="btn-align" class="btn btn-action" style="flex: 1; background: #0284c7; border-color: #0369a1; color: white;">
+              🎯 ALIGN ENCODER (Zero Calib)
+            </button>
+            <button id="btn-estop" class="btn btn-danger" style="flex: 1.5;">
+              🛑 EMERGENCY STOP
+            </button>
+          </div>
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
         </div>
       </div>
 
@@ -541,6 +672,10 @@
     </aside>
   </main>
 
+<<<<<<< HEAD
   <script src="app.js?v=4"></script>
+=======
+  <script src="app.js"></script>
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
 </body>
 </html>

@@ -15,7 +15,10 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+<<<<<<< HEAD
 #include <ctype.h>
+=======
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
 
 /* USB Device Handle */
 extern USBD_HandleTypeDef hUsbDeviceFS;
@@ -25,6 +28,7 @@ static uint32_t s_last_telemetry_tx_ms = 0;
 static char s_rx_cmd_buffer[64];
 static uint8_t s_rx_cmd_idx = 0;
 
+<<<<<<< HEAD
 /* Open-Loop Test Run Control Globals */
 volatile uint8_t run_open_loop = 0;
 volatile float open_loop_target_rpm = 100.0f;
@@ -32,6 +36,8 @@ volatile float open_loop_current_rpm = 0.0f;
 volatile float open_loop_angle = 0.0f;
 volatile float open_loop_voltage = 9.0f; // 9.0V (~2.3A) - High torque for 1:17 Cycloid gearbox load
 
+=======
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
 /* Checksum calculation */
 static uint16_t CalculateChecksum(const uint8_t *data, uint16_t len)
 {
@@ -54,19 +60,29 @@ void Comm_Telemetry_Init(void)
 /**
   * @brief  Transmit high-speed binary telemetry frame over Native USB CDC
   */
+<<<<<<< HEAD
 bool Comm_Telemetry_Send(FOC_Controller_t *foc)
 {
     if (foc == NULL) return false;
+=======
+void Comm_Telemetry_Send(FOC_Controller_t *foc)
+{
+    if (foc == NULL) return;
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
 
     motor_all_state_t *motor = &foc->motor;
     motor_state_t *state_m = &motor->m_motor_state;
     mc_configuration *conf = motor->m_conf;
 
+<<<<<<< HEAD
     /* CRITICAL: packet PHẢI là static vì CDC_Transmit_FS chỉ lưu CON TRỎ.
      * Packet 78 bytes > 64 bytes (USB FS max packet) → cần 2 USB transactions.
      * Transaction thứ 2 (14 bytes cuối) xảy ra trong USB IRQ SAU KHI hàm return.
      * Nếu packet trên stack → pointer trỏ vào rác → 14 bytes cuối corrupt → checksum fail 95%. */
     static telemetry_packet_t packet;
+=======
+    telemetry_packet_t packet;
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     memset(&packet, 0, sizeof(packet));
 
     packet.magic1 = TELEMETRY_MAGIC_BYTE1;
@@ -86,9 +102,15 @@ bool Comm_Telemetry_Send(FOC_Controller_t *foc)
     packet.i_b = ib;
     packet.i_c = ic;
 
+<<<<<<< HEAD
     // 2. FOC Vector Currents (Filtered DC for smooth telemetry display)
     packet.i_d = state_m->id_filter;
     packet.i_q = state_m->iq_filter;
+=======
+    // 2. FOC Vector Currents
+    packet.i_d = state_m->id;
+    packet.i_q = state_m->iq;
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     packet.i_q_target = state_m->iq_target;
 
     // 3. 3-Phase PWM Duty Cycles
@@ -114,6 +136,7 @@ bool Comm_Telemetry_Send(FOC_Controller_t *foc)
     packet.control_mode = (uint8_t)motor->m_control_mode;
     packet.motor_state = (uint8_t)motor->m_state;
     packet.fault_code = (uint8_t)foc->fault;
+<<<<<<< HEAD
     packet.encoder_dir = (int8_t)conf->encoder_direction;
 
     // FOC Diagnostic Fields
@@ -121,6 +144,9 @@ bool Comm_Telemetry_Send(FOC_Controller_t *foc)
     packet.vq = state_m->vq;
     packet.zero_elec_angle = foc->zero_electric_angle;
     packet.id_target = state_m->id_target;
+=======
+    packet.reserved = 0;
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
 
     // Calculate Checksum over payload (excluding magic & checksum itself)
     uint8_t *raw_buf = (uint8_t*)&packet;
@@ -131,10 +157,15 @@ bool Comm_Telemetry_Send(FOC_Controller_t *foc)
         USBD_CDC_HandleTypeDef *hcdc = (USBD_CDC_HandleTypeDef*)hUsbDeviceFS.pClassData;
         if (hcdc->TxState == 0) {
             CDC_Transmit_FS((uint8_t*)&packet, sizeof(packet));
+<<<<<<< HEAD
             return true;
         }
     }
     return false;
+=======
+        }
+    }
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
 }
 
 /**
@@ -167,11 +198,16 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         p++;
     }
 
+<<<<<<< HEAD
     if (strncmp(cmd, "STOP", 4) == 0 || strncmp(cmd, "OFF", 3) == 0) {
+=======
+    if (strncmp(cmd, "STOP", 4) == 0) {
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
         motor->m_state = MC_STATE_OFF;
         motor->m_iq_set = 0.0f;
         motor->m_speed_command_rpm = 0.0f;
         motor->m_speed_pid_set_rpm = 0.0f;
+<<<<<<< HEAD
         motor->m_speed_i_term = 0.0f;
         motor->m_motor_state.duty_now = 0.0f;
         motor->m_motor_state.vd = 0.0f;
@@ -181,10 +217,17 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         iq_target_dbg = 0.0f;
         run_foc_mode = 0;
         run_open_loop = 0;
+=======
+        motor->m_pos_pid_set = motor->m_joint_angle;
+        run_foc_mode = 0;
+        speed_target_dbg = 0.0f;
+        iq_target_dbg = 0.0f;
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     }
     else if (strncmp(cmd, "ALIGN", 5) == 0) {
         extern volatile int run_alignment;
         run_alignment = 1;
+<<<<<<< HEAD
         run_open_loop = 0;
         run_foc_mode = 0;
     }
@@ -231,10 +274,16 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         int m = atoi(&cmd[5]);
         run_open_loop = 0;
         foc->fault = MC_FAULT_NONE;
+=======
+    }
+    else if (strncmp(cmd, "MODE ", 5) == 0) {
+        int m = atoi(&cmd[5]);
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
         if (m == 0) {
             motor->m_state = MC_STATE_OFF;
             motor->m_iq_set = 0.0f;
             motor->m_speed_command_rpm = 0.0f;
+<<<<<<< HEAD
             motor->m_speed_pid_set_rpm = 0.0f;
             motor->m_speed_i_term = 0.0f;
             motor->m_motor_state.duty_now = 0.0f;
@@ -244,10 +293,16 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         } else if (m >= 1 && m <= 5) {
             motor->m_state = MC_STATE_RUNNING;
             TIM1_EnsureMoeEnabled();
+=======
+            run_foc_mode = 0;
+        } else if (m >= 1 && m <= 4) {
+            motor->m_state = MC_STATE_RUNNING;
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
             if (m == 1) { motor->m_control_mode = CONTROL_MODE_CURRENT; run_foc_mode = 1; }
             else if (m == 2) { motor->m_control_mode = CONTROL_MODE_CURRENT_BRAKE; run_foc_mode = 1; }
             else if (m == 3) { motor->m_control_mode = CONTROL_MODE_SPEED; run_foc_mode = 3; }
             else if (m == 4) { motor->m_control_mode = CONTROL_MODE_POS; run_foc_mode = 2; }
+<<<<<<< HEAD
             else if (m == 5) { motor->m_control_mode = CONTROL_MODE_DUTY; run_foc_mode = 4; }
         }
     }
@@ -268,10 +323,15 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         foc->fault = MC_FAULT_NONE;
         TIM1_EnsureMoeEnabled();
     }
+=======
+        }
+    }
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     else if (strncmp(cmd, "SPEED ", 6) == 0) {
         float mech_rpm = atof(&cmd[6]);
         float pole_pairs = (motor->m_conf != NULL) ? (float)motor->m_conf->foc_motor_pole_pairs : 21.0f;
         speed_target_dbg = mech_rpm;
+<<<<<<< HEAD
         run_open_loop = 0;
         motor->m_speed_command_rpm = mech_rpm * pole_pairs;
         motor->m_speed_pid_set_rpm = RADPS2RPM_f(motor->m_speed_est_fast);
@@ -577,6 +637,28 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         motor->m_control_mode = CONTROL_MODE_DUTY;
         motor->m_motor_state.duty_now = val / motor->m_motor_state.v_bus;
         motor->m_state = MC_STATE_RUNNING;
+=======
+        motor->m_speed_command_rpm = mech_rpm * pole_pairs;
+        motor->m_control_mode = CONTROL_MODE_SPEED;
+        motor->m_state = MC_STATE_RUNNING;
+        run_foc_mode = 3;
+    }
+    else if (strncmp(cmd, "IQ ", 3) == 0 || strncmp(cmd, "CURRENT ", 8) == 0) {
+        float iq = atof((strncmp(cmd, "IQ ", 3) == 0) ? &cmd[3] : &cmd[8]);
+        iq_target_dbg = iq;
+        motor->m_iq_set = iq;
+        motor->m_control_mode = CONTROL_MODE_CURRENT;
+        motor->m_state = MC_STATE_RUNNING;
+        run_foc_mode = 1;
+    }
+    else if (strncmp(cmd, "POS ", 4) == 0) {
+        float pos = atof(&cmd[4]);
+        pos_target_dbg = pos;
+        motor->m_pos_pid_set = pos;
+        motor->m_control_mode = CONTROL_MODE_POS;
+        motor->m_state = MC_STATE_RUNNING;
+        run_foc_mode = 2;
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     }
 }
 
@@ -590,9 +672,14 @@ void Comm_Telemetry_Process(FOC_Controller_t *foc)
     // Transmit telemetry at 100Hz (every 10ms)
     uint32_t now = HAL_GetTick();
     if (now - s_last_telemetry_tx_ms >= 10) {
+<<<<<<< HEAD
         if (Comm_Telemetry_Send(foc)) {
             s_last_telemetry_tx_ms = now;
         }
+=======
+        s_last_telemetry_tx_ms = now;
+        Comm_Telemetry_Send(foc);
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     }
 }
 

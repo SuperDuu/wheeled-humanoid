@@ -301,8 +301,11 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 	utils_truncate_number(&angle_set, conf_now->joint_pos_min, conf_now->joint_pos_max);
 
 	float error = angle_set - angle_now;
+<<<<<<< HEAD
 	float pole_pairs = (float)conf_now->foc_motor_pole_pairs;
 	float gear_ratio = (conf_now->gear_ratio > 0.1f) ? conf_now->gear_ratio : 17.0f;
+=======
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
 
 	// 2. Velocity Tracking & Damping (MIT Mini Cheetah Impedance Model)
 	float actual_joint_vel = (motor->m_speed_est_fast / pole_pairs) / gear_ratio; // Output rad/s
@@ -318,13 +321,38 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 	float d_term = vel_error * d_gain;
 	motor->m_pos_i_term = 0.0f;        // Zero I-term (No windup, elastic impact absorption)
 
+<<<<<<< HEAD
 	float iq_cmd = p_term + d_term + iq_friction_ff;
+=======
+	// Process D-term (D on measurement to prevent derivative kick)
+	float d_term_proc = 0.0f;
+	motor->m_pos_dt_int_proc += dt;
+	if (angle_now != motor->m_pos_prev_proc) {
+		d_term_proc = -(angle_now - motor->m_pos_prev_proc) * (kd_proc / motor->m_pos_dt_int_proc);
+		motor->m_pos_dt_int_proc = 0.0f;
+	}
+	UTILS_LP_FAST(motor->m_pos_d_filter_proc, d_term_proc, conf_now->p_pid_kd_filter);
+	d_term_proc = motor->m_pos_d_filter_proc;
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
 
 	// 5. Holding Current Limit (Max 6.6A stall limit)
 	float hold_limit_a = (conf_now->l_current_max > 0.1f) ? conf_now->l_current_max : 6.60f;
 	utils_truncate_number_abs(&iq_cmd, hold_limit_a);
 
+<<<<<<< HEAD
 	motor->m_iq_set = iq_cmd; // Commanded torque current in Amperes -> 20kHz Current Loop
+=======
+	motor->m_pos_prev_error = error;
+	motor->m_pos_prev_proc = angle_now;
+
+	float output = p_term + motor->m_pos_i_term + d_term + d_term_proc;
+	utils_truncate_number(&output, -1.0f, 1.0f);
+
+	// Cap max position control current output to 3.0A max for bench safety
+	float max_pos_current = 3.0f; 
+	if (max_pos_current > conf_now->l_current_max) max_pos_current = conf_now->l_current_max;
+	motor->m_iq_set = output * max_pos_current;
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
 }
 
 /**
@@ -345,6 +373,7 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	float ramp_rate = (conf_now->s_pid_ramp_erpms_s > 10.0f) ? conf_now->s_pid_ramp_erpms_s : 3000.0f;
 	utils_step_towards((float*)&motor->m_speed_pid_set_rpm, motor->m_speed_command_rpm, ramp_rate * dt);
 
+<<<<<<< HEAD
 	float target_erpm = motor->m_speed_pid_set_rpm; // Ramped Target ERPM
 
 	// 2. Direct zero-lag PLL electrical speed feedback (20kHz 2nd-order PLL)
@@ -353,15 +382,27 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 
 	// Deadband when stopping
 	if (fabsf(target_erpm) < conf_now->s_pid_min_erpm && fabsf(motor->m_speed_command_rpm) < conf_now->s_pid_min_erpm) {
+=======
+	float erpm = RADPS2RPM_f(motor->m_speed_est_fast);
+	float target_erpm = motor->m_speed_command_rpm; // ERPM target
+	float error = target_erpm - erpm;
+
+	if (fabsf(target_erpm) < conf_now->s_pid_min_erpm) {
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
 		motor->m_speed_i_term = 0.0f;
 		motor->m_speed_prev_error = error;
 		motor->m_iq_set = 0.0f;
 		return;
 	}
 
+<<<<<<< HEAD
 	// 3. Smooth Zero-Crossing Friction Feedforward for 1:17 Cycloid Gearbox
 	float target_mech_rpm = target_erpm / (float)conf_now->foc_motor_pole_pairs;
 	float iq_friction_ff = 0.50f * tanhf(target_mech_rpm / 0.80f) + 0.0005f * target_mech_rpm;
+=======
+	float p_term = error * conf_now->s_pid_kp;
+	float d_term = (error - motor->m_speed_prev_error) * (conf_now->s_pid_kd / dt);
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
 
 	// 4. Proportional Term (Active Stiffness)
 	float kp = conf_now->s_pid_kp; // 0.0050 A/ERPM
@@ -386,9 +427,14 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	// 7. Total Commanded Current (Amperes)
 	float iq_cmd = iq_p + motor->m_speed_i_term + iq_d + iq_friction_ff;
 
+<<<<<<< HEAD
 	// 8. Safe Stall Current Clamping
 	float i_max = (conf_now->l_current_max > 0.1f) ? conf_now->l_current_max : 6.60f;
 	utils_truncate_number_abs(&iq_cmd, i_max);
+=======
+	motor->m_speed_i_term += error * conf_now->s_pid_ki * dt;
+	utils_truncate_number_abs(&motor->m_speed_i_term, 1.0f);
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
 
 	motor->m_iq_set = iq_cmd; // Target Iq current in Amperes -> 20kHz Current Loop
 }

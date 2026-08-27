@@ -41,12 +41,19 @@ except ImportError:
 #     float    phase_elec, mech_angle, joint_angle; // (offset 44, 48, 52)
 #     float    speed_rpm, speed_target_rpm; // (offset 56, 60)
 #     float    v_bus, temp_fet;    // (offset 64, 68)
+<<<<<<< HEAD
 #     uint8_t  control_mode, motor_state, fault_code; // (offset 72, 73, 74)
 #     int8_t   encoder_dir;        // (offset 75)
 #     float    vd, vq, zero_elec_angle, id_target; // (offset 76, 80, 84, 88)
 #     uint16_t checksum;           // (offset 92)
 # } telemetry_packet_t; Total = 94 bytes.
 PACKET_FORMAT = "<BBBB I 16f BBBb 4f H"
+=======
+#     uint8_t  control_mode, motor_state, fault_code, reserved; // (offset 72, 73, 74, 75)
+#     uint16_t checksum;           // (offset 76)
+# } telemetry_packet_t; Total = 78 bytes.
+PACKET_FORMAT = "<BBBB I 16f BBBB H"
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
 PACKET_SIZE = struct.calcsize(PACKET_FORMAT)
 
 class TelemetryManager:
@@ -82,6 +89,7 @@ class TelemetryManager:
         self.sse_clients = []
         self.sse_lock = threading.Lock()
 
+<<<<<<< HEAD
         # Background auto-reconnector
         self.auto_reconnect_enabled = True
         self.reconnect_thread = threading.Thread(target=self._auto_reconnect_loop, daemon=True)
@@ -99,6 +107,8 @@ class TelemetryManager:
                     except Exception:
                         pass
 
+=======
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     def get_available_ports(self):
         ports = []
         usb_ports = []
@@ -163,9 +173,15 @@ class TelemetryManager:
         if not self.is_connected or not self.ser:
             return False, "Not connected"
         try:
+<<<<<<< HEAD
             cmd = cmd_str.strip() + '\r\n'
             self.ser.write(cmd.encode('utf-8'))
             self.ser.flush()
+=======
+            if not cmd_str.endswith('\n'):
+                cmd_str += '\n'
+            self.ser.write(cmd_str.encode('utf-8'))
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
             self.log_diagnostic(f"Sent Command: {cmd_str.strip()}")
             return True, "Command sent"
         except Exception as e:
@@ -231,7 +247,11 @@ class TelemetryManager:
 
                 # Search for 4-byte packet header 0xAA 0x55 0x01 0x4A (74)
                 while len(buffer) >= PACKET_SIZE:
+<<<<<<< HEAD
                     if buffer[0] == 0xAA and buffer[1] == 0x55 and buffer[2] == 0x01 and buffer[3] == (PACKET_SIZE - 4):
+=======
+                    if buffer[0] == 0xAA and buffer[1] == 0x55 and buffer[2] == 0x01 and buffer[3] == 74:
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
                         packet_bytes = buffer[:PACKET_SIZE]
                         
                         try:
@@ -240,6 +260,7 @@ class TelemetryManager:
                              ia, ib, ic, id_c, iq_c, iq_tgt,
                              da, db, dc, phase, mech, joint,
                              speed, speed_tgt, vbus, temp,
+<<<<<<< HEAD
                              mode, state, fault, enc_dir,
                              vd, vq, zero_elec, id_tgt,
                              chk_val) = unpacked
@@ -250,6 +271,9 @@ class TelemetryManager:
                                 self.error_count += 1
                                 buffer.pop(0)
                                 continue
+=======
+                             mode, state, fault, reserved, chk_val) = unpacked
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
 
                             pkt_dict = {
                                 "timestamp_ms": ts_ms,
@@ -271,12 +295,16 @@ class TelemetryManager:
                                 "temp_fet": round(temp, 1),
                                 "control_mode": mode,
                                 "motor_state": state,
+<<<<<<< HEAD
                                 "fault_code": fault,
                                 "encoder_dir": enc_dir,
                                 "vd": round(vd, 3),
                                 "vq": round(vq, 3),
                                 "zero_elec_angle": round(zero_elec, 4),
                                 "id_target": round(id_tgt, 4)
+=======
+                                "fault_code": fault
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
                             }
 
                             with self.lock:
@@ -289,6 +317,7 @@ class TelemetryManager:
                             now = time.time()
                             if now - self.last_console_log_time >= self.console_log_interval:
                                 self.last_console_log_time = now
+<<<<<<< HEAD
                                 # mode = control_mode enum: 0=DUTY,1=POWER,2=CURRENT,3=BRAKE,4=SPEED,5=POS,6=HANDBRAKE,7=OPENLOOP
                                 mode_names = ["DUTY", "POWER", "CURRENT", "BRAKE", "SPEED", "POS", "HANDBRAKE", "OPENLOOP"]
                                 m_str = mode_names[mode] if mode < len(mode_names) else f"MODE_{mode}"
@@ -296,6 +325,11 @@ class TelemetryManager:
                                 state_names = ["OFF", "DETECTING", "RUNNING", "BRAKE"]
                                 s_str = state_names[state] if state < len(state_names) else f"STATE_{state}"
                                 log_line = f"Telemetry @ {self.fps:.0f}Hz | mode={m_str} state={s_str} | Id={id_c:+.2f}A, Iq={iq_c:+.2f}A (Tgt={iq_tgt:+.2f}A) | RPM={speed:+.1f}/{speed_tgt:+.1f} | Vbus={vbus:.1f}V | Vd={vd:+.1f}V Vq={vq:+.1f}V θe={phase:.2f} θ0={zero_elec:.2f} dir={enc_dir} | duty={da:.3f}/{db:.3f}/{dc:.3f}"
+=======
+                                mode_names = ["IDLE", "CURRENT", "BRAKE", "SPEED", "POS"]
+                                m_str = mode_names[mode] if mode < len(mode_names) else f"MODE_{mode}"
+                                log_line = f"Telemetry @ {self.fps:.0f}Hz | {m_str} | Id={id_c:+.2f}A, Iq={iq_c:+.2f}A (Tgt={iq_tgt:+.2f}A) | RPM={speed:+.1f}/{speed_tgt:+.1f} | Vbus={vbus:.1f}V"
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
                                 if fault > 0:
                                     log_line += f" | FAULT={fault}"
                                 self.log_diagnostic(log_line)
@@ -314,6 +348,7 @@ class TelemetryManager:
                 # Calculate Telemetry Rate (Hz)
                 now = time.time()
                 if now - self.last_fps_time >= 1.0:
+<<<<<<< HEAD
                     elapsed = now - self.last_fps_time
                     self.fps = (self.packet_count - self.last_fps_packets) / elapsed
                     # Log checksum error rate for debugging
@@ -332,6 +367,15 @@ class TelemetryManager:
                     except Exception:
                         pass
                     break
+=======
+                    self.fps = (self.packet_count - self.last_fps_packets) / (now - self.last_fps_time)
+                    self.last_fps_packets = self.packet_count
+                    self.last_fps_time = now
+
+            except Exception as e:
+                if self.running:
+                    self.log_diagnostic(f"Serial read error: {str(e)}")
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
                     time.sleep(0.01)
 
     def _broadcast_sse(self, pkt):
@@ -365,12 +409,15 @@ class TelemetryHTTPHandler(SimpleHTTPRequestHandler):
         directory = os.path.dirname(os.path.abspath(__file__))
         super().__init__(*args, directory=directory, **kwargs)
 
+<<<<<<< HEAD
     def end_headers(self):
         self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
         self.send_header('Pragma', 'no-cache')
         self.send_header('Expires', '0')
         super().end_headers()
 
+=======
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
@@ -454,6 +501,7 @@ class TelemetryHTTPHandler(SimpleHTTPRequestHandler):
             success, msg = telemetry_mgr.send_command(cmd)
             self._send_json({"success": success, "message": msg})
 
+<<<<<<< HEAD
         elif path == "/api/auto_tune":
             import subprocess
             telemetry_mgr.auto_reconnect_enabled = False
@@ -495,6 +543,8 @@ class TelemetryHTTPHandler(SimpleHTTPRequestHandler):
 
             self._send_json({"success": success, "message": msg, "profile": profile})
 
+=======
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
         else:
             self.send_error(404, "Endpoint not found")
 
@@ -537,7 +587,11 @@ def run_server(port=8080):
         httpd.server_close()
 
 if __name__ == '__main__':
+<<<<<<< HEAD
     port_arg = 5050
+=======
+    port_arg = 8080
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     if len(sys.argv) > 1:
         try:
             port_arg = int(sys.argv[1])
