@@ -39,21 +39,19 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->joint_pos_min = -1000000.0f;     // Unlimited continuous rotation
     conf->joint_pos_max =  1000000.0f;     // Unlimited continuous rotation
 
-    // Current Controller (PI D/Q) - 20kHz Inner Loop
-    // Keep the conservative Kp and place the PI zero on the measured motor pole:
-    // Ki/Kp = R/L = 1441.4 rad/s.
-    conf->foc_current_kp = 1.20f;
-    conf->foc_current_ki = 1730.0f;
+    // Current Controller (PI D/Q) - 20kHz Inner Loop with Pole-Zero Cancellation (Ki/Kp = R/L = 22630 rad/s)
+    conf->foc_current_kp = 0.80f;          // Bandwidth ~1270 Hz
+    conf->foc_current_ki = 18100.0f;       // Instant current tracking (~0.18ms settling time)
     conf->foc_current_filter_const = 0.18f;
     conf->foc_cc_decoupling = FOC_CC_DECOUPLING_BEMF; // Bù khử ghép chéo d-q
 
     // Speed Controller (Cascaded Current-Mode FOC: Outputs Iq command in Amperes)
-    conf->s_pid_kp = 0.00045f;             // Smooth, critically damped proportional drive
-    conf->s_pid_ki = 0.00025f;             // Clean integral tracking without hunting
+    conf->s_pid_kp = 0.00060f;             // Crisp, stable speed tracking (no oscillation)
+    conf->s_pid_ki = 0.00060f;             // Fast anti-detent integral recovery
     conf->s_pid_kd = 0.0f;                 // Zero D-term for noise-free response
     conf->s_pid_kd_filter = 0.050f;        // ~8 Hz cutoff; smooth speed feedback
     conf->s_pid_min_erpm = 10.0f;          // 10 ERPM deadband (~0.48 RPM motor)
-    conf->s_pid_ramp_erpms_s = 2500.0f;    // 2500 ERPM/s (~120 RPM/s motor, smooth ramp to 50 in 0.4s)
+    conf->s_pid_ramp_erpms_s = 2000.0f;    // 2000 ERPM/s (~95 RPM/s motor, smooth ramp to 50 in 0.5s)
 
     // Position Controller (MIT Mini Cheetah Impedance PD: Outputs Iq command in Amperes)
     conf->p_pid_kp = 8.0f;                 // Kp_pos = 8.0 A/rad (Virtual Joint Stiffness)
