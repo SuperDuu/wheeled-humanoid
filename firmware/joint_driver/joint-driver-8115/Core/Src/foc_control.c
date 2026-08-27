@@ -216,7 +216,38 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     float omega_mech = foc->encoder.velocity_rad_s;
     motor->m_speed_est_fast = (float)(conf_now->encoder_direction * 21) * omega_mech;
 
-    float elec_angle = encoder_elec_angle;
+    /* Squeeze Step Anti-Stall:
+     * When running in SPEED mode (target >= 15 RPM), if mechanical friction traps
+     * the rotor at zero speed (< 3 RPM) for > 80ms, smoothly advance the stator field
+     * forward at target speed to generate a dynamic pull across the gear pinch point. */
+    static float static_stall_time = 0.0f;
+    static float squeeze_angle = 0.0f;
+    static bool squeeze_active = false;
+
+    float mech_rpm = fabsf(omega_mech * (60.0f / (2.0f * (float)M_PI)));
+    if (motor->m_state == MC_STATE_RUNNING && motor->m_control_mode == CONTROL_MODE_SPEED &&
+        fabsf(motor->m_speed_pid_set_rpm) >= 15.0f * 21.0f) {
+        if (mech_rpm < 3.0f) {
+            static_stall_time += dt_fast;
+            if (static_stall_time > 0.080f) { // 80ms static stall
+                if (!squeeze_active) {
+                    squeeze_active = true;
+                    squeeze_angle = encoder_elec_angle;
+                }
+                float dir = (motor->m_speed_command_rpm > 0.0f) ? 1.0f : -1.0f;
+                squeeze_angle += dir * (50.0f * 21.0f * 2.0f * (float)M_PI / 60.0f) * dt_fast;
+                utils_norm_angle_rad(&squeeze_angle);
+            }
+        } else {
+            static_stall_time = 0.0f;
+            squeeze_active = false;
+        }
+    } else {
+        static_stall_time = 0.0f;
+        squeeze_active = false;
+    }
+
+    float elec_angle = squeeze_active ? squeeze_angle : encoder_elec_angle;
     state_m->phase = elec_angle;
 
     // 1c. Direct Electrical Angle for Current Sensing (30-cycle Ben Katz sincos_lut)
