@@ -217,20 +217,29 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     motor->m_speed_est_fast = (float)(conf_now->encoder_direction * 21) * omega_mech;
 
     float elec_angle = encoder_elec_angle;
-    if (foc->observer_angle_active) {
-        foc->observer_phase_interp += motor->m_speed_est_fast * dt_fast;
-        utils_norm_angle_rad(&foc->observer_phase_interp);
-        foc->observer_angle_blend += dt_fast * 4.0f; // 250 ms bumpless handover
-        if (foc->observer_angle_blend > 1.0f) {
-            foc->observer_angle_blend = 1.0f;
+
+    // Dynamic Anti-Stall Stator Field Advance (Virtual Rotating Vector):
+    // In Speed Control mode, if the target speed is active (|target| >= 15 RPM)
+    // but the rotor speed dips below 15 RPM due to cycloid detents,
+    // advance the stator electrical angle forward at 25 RPM (virtual rotating field)
+    // to magnetically pull the rotor across the detent out of static friction.
+    if (motor->m_control_mode == CONTROL_MODE_SPEED && fabsf(motor->m_speed_pid_set_rpm) >= 15.0f) {
+        float actual_rpm = fabsf(RADPS2RPM_f(motor->m_speed_est_fast) / 21.0f);
+        if (actual_rpm < 15.0f) {
+            float speed_dir = (motor->m_speed_pid_set_rpm > 0.0f) ? 1.0f : -1.0f;
+            // Advance at 25 RPM electrical speed: 21 * 25 * 2pi/60 = 55.0 rad/s
+            foc->virtual_lead_angle += speed_dir * 55.0f * dt_fast;
+            utils_norm_angle_rad(&foc->virtual_lead_angle);
+            elec_angle += foc->virtual_lead_angle;
+            utils_norm_angle_rad(&elec_angle);
+        } else {
+            // Fast smooth decay when spinning normally (halves every 15ms)
+            foc->virtual_lead_angle *= 0.995f;
+            elec_angle += foc->virtual_lead_angle;
+            utils_norm_angle_rad(&elec_angle);
         }
-        float observer_delta = foc->observer_phase_interp - encoder_elec_angle;
-        utils_norm_angle_rad(&observer_delta);
-        elec_angle += foc->observer_angle_blend * observer_delta;
-        utils_norm_angle_rad(&elec_angle);
     } else {
-        foc->observer_phase_interp = encoder_elec_angle;
-        foc->observer_angle_blend = 0.0f;
+        foc->virtual_lead_angle = 0.0f;
     }
 
     state_m->phase = elec_angle;
