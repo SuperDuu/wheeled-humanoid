@@ -384,9 +384,9 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	}
 
 	float speed_filter = conf_now->s_pid_kd_filter;
-	utils_truncate_number(&speed_filter, 0.05f, 0.50f);
-	/* Fast low-latency filter (~40 Hz cutoff, ~20ms response time) */
-	UTILS_LP_FAST(motor->m_speed_d_filter, erpm_raw, 0.25f);
+	utils_truncate_number(&speed_filter, 0.02f, 0.50f);
+	/* Smooth low-pass filter for silky speed feedback (~12 Hz cutoff) */
+	UTILS_LP_FAST(motor->m_speed_d_filter, erpm_raw, speed_filter);
 
 	float erpm = motor->m_speed_d_filter;
 	float actual_mech_rpm = erpm / pole_pairs;
@@ -395,36 +395,8 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		motor->m_speed_i_term = 0.0f;
 	}
 
-	/* Breakaway spinup: small Iq pulse only at initial start from 0 RPM */
-	if (fabsf(motor->m_speed_command_rpm) > 5.0f &&
-			fabsf(motor->m_speed_pid_set_rpm) < pole_pairs &&
-			fabsf(actual_mech_rpm) < 8.0f &&
-			motor->m_openloop_spinup_time <= 0.0f) {
-		motor->m_openloop_spinup_active = true;
-		motor->m_openloop_spinup_time = 0.0f;
-	}
-
-	if (motor->m_openloop_spinup_active) {
-		motor->m_openloop_spinup_time += dt;
-		float spin_dir = (motor->m_speed_command_rpm > 0.0f) ? 1.0f : -1.0f;
-		float command_abs_rpm = fabsf(motor->m_speed_command_rpm / pole_pairs);
-		float spinup_rpm = command_abs_rpm;
-		utils_truncate_number(&spinup_rpm, 0.5f, 15.0f);
-
-		motor->m_iq_set = spin_dir * SPEED_IQ_BREAKAWAY_A;
-		motor->m_speed_pid_set_rpm = spin_dir * spinup_rpm * pole_pairs;
-
-		/* Handover when motor is spinning cleanly (> 8 RPM) or 100ms elapsed */
-		if (motor->m_openloop_spinup_time >= 0.100f || fabsf(actual_mech_rpm) > 8.0f) {
-			motor->m_openloop_spinup_active = false;
-			motor->m_speed_i_term = 0.0f;
-			motor->m_speed_d_filter_proc = erpm;
-		}
-		return;
-	}
-
-	/* Acceleration ramp (5000 ERPM/s ~ 240 RPM/s) */
-	float ramp_rate = (conf_now->s_pid_ramp_erpms_s > 100.0f) ? conf_now->s_pid_ramp_erpms_s : 5000.0f;
+	/* Smooth continuous acceleration ramp from 0 to target speed */
+	float ramp_rate = (conf_now->s_pid_ramp_erpms_s > 100.0f) ? conf_now->s_pid_ramp_erpms_s : 1500.0f;
 	utils_step_towards((float*)&motor->m_speed_pid_set_rpm, motor->m_speed_command_rpm, ramp_rate * dt);
 
 	float target_erpm = motor->m_speed_pid_set_rpm;
