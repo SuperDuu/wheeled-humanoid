@@ -216,31 +216,7 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     float omega_mech = foc->encoder.velocity_rad_s;
     motor->m_speed_est_fast = (float)(conf_now->encoder_direction * 21) * omega_mech;
 
-    /* Continuous Kinetic Angle Advance:
-     * In SPEED mode, if mechanical friction causes actual speed to drop below 15 RPM,
-     * continuously advance the commutation field vector forward at target speed to generate
-     * a dynamic traveling wave (matching open-loop traveling wave physics) so the stator field
-     * never holds a static clamping vector against gearbox tooth detents. */
-    static float kinetic_lead = 0.0f;
-    float mech_rpm = fabsf(omega_mech * (60.0f / (2.0f * (float)M_PI)));
-    if (motor->m_state == MC_STATE_RUNNING && motor->m_control_mode == CONTROL_MODE_SPEED &&
-        fabsf(motor->m_speed_pid_set_rpm) >= 15.0f * 21.0f) {
-        if (mech_rpm < 15.0f) {
-            float droop = (15.0f - mech_rpm) / 15.0f; // 0.0 to 1.0
-            float dir = (motor->m_speed_command_rpm > 0.0f) ? 1.0f : -1.0f;
-            float target_elec_rad_s = (50.0f * 21.0f * 2.0f * (float)M_PI / 60.0f);
-            kinetic_lead += dir * droop * target_elec_rad_s * dt_fast;
-            utils_norm_angle_rad(&kinetic_lead);
-        } else {
-            // Decay lead smoothly when running at speed
-            kinetic_lead *= 0.98f;
-        }
-    } else {
-        kinetic_lead = 0.0f;
-    }
-
-    float elec_angle = encoder_elec_angle + kinetic_lead;
-    utils_norm_angle_rad(&elec_angle);
+    float elec_angle = encoder_elec_angle;
     state_m->phase = elec_angle;
 
     // 1c. Direct Electrical Angle for Current Sensing (30-cycle Ben Katz sincos_lut)
