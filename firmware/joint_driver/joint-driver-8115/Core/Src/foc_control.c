@@ -217,31 +217,6 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     motor->m_speed_est_fast = (float)(conf_now->encoder_direction * 21) * omega_mech;
 
     float elec_angle = encoder_elec_angle;
-
-    // Dynamic Anti-Stall Stator Field Advance (Virtual Rotating Vector):
-    // In Speed Control mode, if the target speed is active (|target| >= 15 RPM)
-    // but the rotor speed dips below 15 RPM due to cycloid detents,
-    // advance the stator electrical angle forward at 25 RPM (virtual rotating field)
-    // to magnetically pull the rotor across the detent out of static friction.
-    if (motor->m_control_mode == CONTROL_MODE_SPEED && fabsf(motor->m_speed_pid_set_rpm) >= 15.0f) {
-        float actual_rpm = fabsf(RADPS2RPM_f(motor->m_speed_est_fast) / 21.0f);
-        if (actual_rpm < 15.0f) {
-            float speed_dir = (motor->m_speed_pid_set_rpm > 0.0f) ? 1.0f : -1.0f;
-            // Advance at 25 RPM electrical speed: 21 * 25 * 2pi/60 = 55.0 rad/s
-            foc->virtual_lead_angle += speed_dir * 55.0f * dt_fast;
-            utils_norm_angle_rad(&foc->virtual_lead_angle);
-            elec_angle += foc->virtual_lead_angle;
-            utils_norm_angle_rad(&elec_angle);
-        } else {
-            // Fast smooth decay when spinning normally (halves every 15ms)
-            foc->virtual_lead_angle *= 0.995f;
-            elec_angle += foc->virtual_lead_angle;
-            utils_norm_angle_rad(&elec_angle);
-        }
-    } else {
-        foc->virtual_lead_angle = 0.0f;
-    }
-
     state_m->phase = elec_angle;
 
     // 1c. Direct Electrical Angle for Current Sensing (30-cycle Ben Katz sincos_lut)
@@ -381,13 +356,28 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     state_m->mod_d = state_m->vd * voltage_normalize;
     state_m->mod_q = state_m->vq * voltage_normalize;
 
-    // 8. Inverse Park Transform: Use Direct Sensor Angle + 1.5*DT Delay Compensation (Ben Katz MIT Cheetah)
-    // Compensate one computation period plus half-period zero-order hold.
+    // 8. Inverse Park Transform: Use Direct Sensor Angle + 1.5*DT Delay Compensation + Virtual Rotating Lead
     float phase_advance = (1.5f * dt_fast) * motor->m_speed_est_fast;
     utils_truncate_number_abs(&phase_advance, 0.35f); // Max ~20 deg electrical
 
-    // Use direct instantaneous elec_angle to avoid 2nd-order PLL dynamic phase lag
-    float theta_svm = elec_angle + phase_advance;
+    // Dynamic Anti-Stall Virtual Rotating Vector:
+    // If the target speed is active (|target| >= 15 RPM) but rotor speed drops below 15 RPM,
+    // advance the voltage vector forward at 25 RPM (virtual rotating field) to pull the rotor forward.
+    if (motor->m_control_mode == CONTROL_MODE_SPEED && fabsf(motor->m_speed_pid_set_rpm) >= 15.0f) {
+        float actual_rpm = fabsf(RADPS2RPM_f(motor->m_speed_est_fast) / 21.0f);
+        if (actual_rpm < 15.0f) {
+            float speed_dir = (motor->m_speed_pid_set_rpm > 0.0f) ? 1.0f : -1.0f;
+            foc->virtual_lead_angle += speed_dir * 55.0f * dt_fast;
+            utils_norm_angle_rad(&foc->virtual_lead_angle);
+        } else {
+            foc->virtual_lead_angle *= 0.995f;
+        }
+    } else {
+        foc->virtual_lead_angle = 0.0f;
+    }
+
+    // Combine direct sensor angle + phase advance + virtual anti-stall field
+    float theta_svm = elec_angle + phase_advance + foc->virtual_lead_angle;
     utils_norm_angle_rad(&theta_svm);
 
     float sin_svm, cos_svm;
