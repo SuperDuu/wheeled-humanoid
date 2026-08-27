@@ -18,7 +18,7 @@ void vesc_conf_set_defaults(mc_configuration *conf)
 
     // Switching Frequency & Limits
     conf->foc_f_zv = 20000.0f;           // 20 kHz PWM Frequency
-    conf->l_max_duty = 0.88f;            // 88% max duty → 12.45V headroom, 6µs low-side window for ADC
+    conf->l_max_duty = 0.92f;            // 92% max duty → 13.01V headroom, 4µs low-side window for ADC
     conf->l_min_duty = 0.005f;           // 0.5% min duty cycle
 
     // Controller phase-domain parameters for the assembled GB8115-4.
@@ -26,9 +26,9 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     // L is the per-phase value from the 3.14 mH line-to-line specification.
     // Lambda was identified from the 3 V direct-Vq run: (Vq-R*Iq)/omega_e ~= 0.030 Wb.
     conf->foc_motor_pole_pairs = 21;       // 21 Pole Pairs (42 Magnets)
-    conf->foc_motor_r = 2.263f;             // Ohm, measured phase-domain slope
-    conf->foc_motor_l = 0.00157f;           // H, per phase
-    conf->foc_motor_flux_linkage = 0.03000f; // Wb, phase-domain flux linkage
+    conf->foc_motor_r = 2.263f;            // Phase resistance 2.263 Ohm
+    conf->foc_motor_l = 0.000100f;         // Phase inductance 100 µH
+    conf->foc_motor_flux_linkage = 0.0300f;// Flux linkage 30.0 mWb (from direct identification)
     conf->foc_motor_ld_lq_diff = 0.0f;     // Surface PMSM (non-salient)
 
     // 1:17 Cycloid Gearbox Mode
@@ -44,8 +44,8 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_cc_decoupling = FOC_CC_DECOUPLING_BEMF; // Bù khử ghép chéo d-q
 
     // Speed Controller (Cascaded Current-Mode FOC: Outputs Iq command in Amperes)
-    conf->s_pid_kp = 0.00085f;             // Crisp, stable speed tracking (no oscillation)
-    conf->s_pid_ki = 0.00085f;             // Fast anti-detent integral recovery
+    conf->s_pid_kp = 0.00110f;             // Crisp, stable speed tracking (no oscillation)
+    conf->s_pid_ki = 0.00110f;             // Fast anti-detent integral recovery
     conf->s_pid_kd = 0.0f;                 // Zero D-term for noise-free response
     conf->s_pid_kd_filter = 0.050f;        // ~8 Hz cutoff; smooth speed feedback
     conf->s_pid_min_erpm = 10.0f;          // 10 ERPM deadband (~0.48 RPM motor)
