@@ -60,7 +60,7 @@ bool EncoderCalStore_Load(AS5048A_t *encoder)
     }
 
     memcpy(encoder->offset_lut, record.lut, sizeof(record.lut));
-    encoder->use_lut = 0U; // Disabled: use pure 14-bit raw magnetic angle
+    encoder->use_lut = 1U;
     return true;
 }
 
