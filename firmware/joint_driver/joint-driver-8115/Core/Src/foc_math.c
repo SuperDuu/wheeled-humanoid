@@ -19,11 +19,11 @@
 #define SPEED_DELTA_V_P_MAX             1.30f
 #define SPEED_IQ_BREAKAWAY_A            1.00f
 #define SPEED_IQ_FRICTION_A             0.40f
-#define SPEED_IQ_CONT_MAX_A             5.50f
-#define SPEED_IQ_STALL_BOOST_A          5.50f
+#define SPEED_IQ_CONT_MAX_A             6.60f
+#define SPEED_IQ_STALL_BOOST_A          6.60f
 #define SPEED_IQ_STALL_BOOST_RATE_A_S   35.0f
 #define SPEED_IQ_CMD_RATE_A_S           50.00f
-#define SPEED_IQ_I_MAX_A                5.50f
+#define SPEED_IQ_I_MAX_A                6.60f
 #define SPEED_IQ_D_MAX_A                0.50f
 #define SPEED_IQ_BRAKE_MAX_A            0.30f
 #define SPEED_OVERSPEED_BAND_RPM        3.00f
