@@ -471,32 +471,20 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	float iq_max = iq_limit;
 
 	/* Dynamic Kinetic Anti-Stall Surge: When running at steady speed (>15 RPM),
-	 * if cycloid gearbox detents cause speed to dip below 95% of target, instantly
-	 * surge Iq by up to +4.5A to punch through the detent without losing momentum.
-	 * This prevents the motor from ever entering 0 RPM static friction. */
+	 * if cycloid gearbox detents cause speed to dip below 80% of target, gently
+	 * surge Iq by up to +1.5A to punch through the detent without oscillation. */
 	float anti_stall_boost = 0.0f;
 	if (fabsf(target_mech_rpm) >= 15.0f) {
 		float speed_ratio = actual_mech_rpm / target_mech_rpm;
-		if (speed_ratio < 0.95f) {
-			float droop = 0.95f - speed_ratio;
-			anti_stall_boost = droop * 12.0f; // Ultra-fast proportional punch up to 4.5A
-			if (anti_stall_boost > 4.50f) anti_stall_boost = 4.50f;
+		if (speed_ratio < 0.80f) {
+			float droop = 0.80f - speed_ratio;
+			anti_stall_boost = droop * 2.5f; // Smooth progressive surge up to 1.5A
+			if (anti_stall_boost > 1.50f) anti_stall_boost = 1.50f;
 			if (target_mech_rpm < 0.0f) anti_stall_boost = -anti_stall_boost;
 		}
 	}
-	/* Dynamic Anti-Stiction Dither Kicker:
-	 * If operating in speed mode above 15 RPM, and actual speed drops below 12 RPM,
-	 * inject a 150 Hz high-torque dither to break static friction boundary lubrication.
-	 * This reduces gearbox break-away stiction by 60% and instantly frees the rotor. */
-	float dither = 0.0f;
-	if (fabsf(target_mech_rpm) >= 15.0f && fabsf(actual_mech_rpm) < 12.0f) {
-		static float dither_phase = 0.0f;
-		dither_phase += 2.0f * (float)M_PI * 150.0f * dt;
-		if (dither_phase > 2.0f * (float)M_PI) dither_phase -= 2.0f * (float)M_PI;
-		dither = 1.20f * sinf(dither_phase);
-	}
 
-	float iq_cmd = iq_friction + p_term + motor->m_speed_i_term + d_term + anti_stall_boost + dither;
+	float iq_cmd = iq_friction + p_term + motor->m_speed_i_term + d_term + anti_stall_boost;
 	utils_truncate_number(&iq_cmd, iq_min, iq_max);
 	motor->m_iq_set = iq_cmd;
 }
