@@ -216,7 +216,42 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     float omega_mech = foc->encoder.velocity_rad_s;
     motor->m_speed_est_fast = (float)(conf_now->encoder_direction * 21) * omega_mech;
 
-    float elec_angle = encoder_elec_angle;
+    /* Automatic Kinetic Anti-Stall Escape:
+     * If running in SPEED mode (>15 RPM target) and rotor gets trapped in static stiction
+     * (speed < 6 RPM) for > 40ms, rotate the electrical angle forward with an open-loop
+     * dynamic wave to break stiction (identical to open-loop behavior). */
+    static float stall_timer = 0.0f;
+    static float escape_angle = 0.0f;
+    static bool escape_active = false;
+
+    float mech_rpm = fabsf(omega_mech * (60.0f / (2.0f * (float)M_PI)));
+    if (motor->m_state == MC_STATE_RUNNING && motor->m_control_mode == CONTROL_MODE_SPEED &&
+        fabsf(motor->m_speed_pid_set_rpm) >= 15.0f * 21.0f) {
+        if (mech_rpm < 6.0f) {
+            stall_timer += dt_fast;
+            if (stall_timer > 0.040f) { // 40ms of static stall
+                escape_active = true;
+            }
+        } else {
+            stall_timer = 0.0f;
+            escape_active = false;
+        }
+    } else {
+        stall_timer = 0.0f;
+        escape_active = false;
+    }
+
+    float elec_angle;
+    if (escape_active) {
+        float dir = (motor->m_speed_command_rpm > 0.0f) ? 1.0f : -1.0f;
+        escape_angle += dir * (50.0f * 21.0f * 2.0f * (float)M_PI / 60.0f) * dt_fast;
+        utils_norm_angle_rad(&escape_angle);
+        elec_angle = escape_angle;
+    } else {
+        escape_angle = encoder_elec_angle;
+        elec_angle = encoder_elec_angle;
+    }
+
     state_m->phase = elec_angle;
 
     // 1c. Direct Electrical Angle for Current Sensing (30-cycle Ben Katz sincos_lut)
