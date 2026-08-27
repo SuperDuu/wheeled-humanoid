@@ -17,8 +17,8 @@
 #define SPEED_DELTA_V_BREAKAWAY         2.20f
 #define SPEED_DELTA_V_I_MAX             1.10f
 #define SPEED_DELTA_V_P_MAX             1.30f
-#define SPEED_IQ_BREAKAWAY_A            0.80f
-#define SPEED_IQ_FRICTION_A             0.28f
+#define SPEED_IQ_BREAKAWAY_A            1.20f
+#define SPEED_IQ_FRICTION_A             0.75f
 #define SPEED_IQ_CONT_MAX_A             5.50f
 #define SPEED_IQ_STALL_BOOST_A          5.50f
 #define SPEED_IQ_STALL_BOOST_RATE_A_S   35.0f
@@ -467,15 +467,15 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	float iq_max = iq_limit;
 
 	/* Dynamic Kinetic Anti-Stall Surge: When running at steady speed (>15 RPM),
-	 * if cycloid gearbox detents cause speed to dip below 85% of target, instantly
+	 * if cycloid gearbox detents cause speed to dip below 90% of target, instantly
 	 * surge Iq by up to +3.5A to punch through the detent without losing momentum.
 	 * This prevents the motor from ever entering 0 RPM static friction. */
 	float anti_stall_boost = 0.0f;
 	if (fabsf(target_mech_rpm) >= 15.0f) {
 		float speed_ratio = actual_mech_rpm / target_mech_rpm;
-		if (speed_ratio < 0.85f) {
-			float droop = 0.85f - speed_ratio;
-			anti_stall_boost = droop * 6.0f; // Rapid proportional surge up to 3.5A
+		if (speed_ratio < 0.90f) {
+			float droop = 0.90f - speed_ratio;
+			anti_stall_boost = droop * 8.0f; // Rapid proportional surge up to 3.5A
 			if (anti_stall_boost > 3.50f) anti_stall_boost = 3.50f;
 			if (target_mech_rpm < 0.0f) anti_stall_boost = -anti_stall_boost;
 		}
