@@ -235,6 +235,7 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
                     escape_active = true;
                     escape_timer = 0.150f; // 150ms minimum escape duration
                     escape_angle = encoder_elec_angle;
+                    motor->m_speed_i_term = 0.0f; // Clear windup
                 }
             } else {
                 stall_timer = 0.0f;
