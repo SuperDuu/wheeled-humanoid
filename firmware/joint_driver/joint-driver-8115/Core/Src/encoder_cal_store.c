@@ -41,7 +41,7 @@ static bool EncoderCalStore_IsValid(const encoder_cal_record_t *record)
     }
 
     for (size_t i = 0; i < AS5048A_LUT_SIZE; i++) {
-        if (record->lut[i] < -128 || record->lut[i] > 128) {
+        if (record->lut[i] < -256 || record->lut[i] > 256) {
             return false;
         }
     }
