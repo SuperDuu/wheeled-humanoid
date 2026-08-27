@@ -216,38 +216,7 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     float omega_mech = foc->encoder.velocity_rad_s;
     motor->m_speed_est_fast = (float)(conf_now->encoder_direction * 21) * omega_mech;
 
-    /* Squeeze Step Anti-Stall:
-     * When running in SPEED mode (target >= 15 RPM), if mechanical friction traps
-     * the rotor at zero speed (< 3 RPM) for > 80ms, smoothly advance the stator field
-     * forward at target speed to generate a dynamic pull across the gear pinch point. */
-    static float static_stall_time = 0.0f;
-    static float squeeze_angle = 0.0f;
-    static bool squeeze_active = false;
-
-    float mech_rpm = fabsf(omega_mech * (60.0f / (2.0f * (float)M_PI)));
-    if (motor->m_state == MC_STATE_RUNNING && motor->m_control_mode == CONTROL_MODE_SPEED &&
-        fabsf(motor->m_speed_pid_set_rpm) >= 15.0f * 21.0f) {
-        if (mech_rpm < 3.0f) {
-            static_stall_time += dt_fast;
-            if (static_stall_time > 0.080f) { // 80ms static stall
-                if (!squeeze_active) {
-                    squeeze_active = true;
-                    squeeze_angle = encoder_elec_angle;
-                }
-                float dir = (motor->m_speed_command_rpm > 0.0f) ? 1.0f : -1.0f;
-                squeeze_angle += dir * (50.0f * 21.0f * 2.0f * (float)M_PI / 60.0f) * dt_fast;
-                utils_norm_angle_rad(&squeeze_angle);
-            }
-        } else {
-            static_stall_time = 0.0f;
-            squeeze_active = false;
-        }
-    } else {
-        static_stall_time = 0.0f;
-        squeeze_active = false;
-    }
-
-    float elec_angle = squeeze_active ? squeeze_angle : encoder_elec_angle;
+    float elec_angle = encoder_elec_angle;
     state_m->phase = elec_angle;
 
     // 1c. Direct Electrical Angle for Current Sensing (30-cycle Ben Katz sincos_lut)
@@ -395,6 +364,38 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     state_m->v_alpha = state_m->mod_alpha_raw * state_m->v_bus;
     state_m->v_beta  = state_m->mod_beta_raw * state_m->v_bus;
     state_m->duty_now = sqrtf(SQ(state_m->mod_d) + SQ(state_m->mod_q));
+
+    /* Direct Breakthrough Wave:
+     * In SPEED mode (target >= 15 RPM), if mechanical binding traps the rotor at
+     * near-zero speed (< 3 RPM) for > 80ms, apply a direct 9.0V forward traveling wave
+     * directly to Space Vector Modulation to break the static tooth bind. */
+    static float static_stall_time = 0.0f;
+    static float breakthrough_angle = 0.0f;
+    float mech_rpm = fabsf(omega_mech * (60.0f / (2.0f * (float)M_PI)));
+    if (motor->m_state == MC_STATE_RUNNING && motor->m_control_mode == CONTROL_MODE_SPEED &&
+        fabsf(motor->m_speed_pid_set_rpm) >= 15.0f * 21.0f) {
+        if (mech_rpm < 3.0f) {
+            static_stall_time += dt_fast;
+            if (static_stall_time > 0.080f) { // 80ms static stall threshold
+                if (static_stall_time <= 0.080f + dt_fast * 2.0f) {
+                    breakthrough_angle = elec_angle;
+                }
+                float dir = (motor->m_speed_command_rpm > 0.0f) ? 1.0f : -1.0f;
+                breakthrough_angle += dir * (50.0f * 21.0f * 2.0f * (float)M_PI / 60.0f) * dt_fast;
+                utils_norm_angle_rad(&breakthrough_angle);
+
+                float s_wave, c_wave;
+                sincos_lut(breakthrough_angle, &s_wave, &c_wave);
+                float v_wave = 9.0f / state_m->v_bus;
+                state_m->mod_alpha_raw = -s_wave * v_wave;
+                state_m->mod_beta_raw  =  c_wave * v_wave;
+            }
+        } else {
+            static_stall_time = 0.0f;
+        }
+    } else {
+        static_stall_time = 0.0f;
+    }
 
     // 9. Space Vector Modulation (SVM) - Identical to Open-Loop & Alignment
     uint32_t ta, tb, tc, sector;
