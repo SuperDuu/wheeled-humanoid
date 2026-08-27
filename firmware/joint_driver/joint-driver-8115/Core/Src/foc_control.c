@@ -339,13 +339,6 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
         state_m->vd = kp * Ierr_d + state_m->vd_int + vd_ff;
         state_m->vq = kp * Ierr_q + state_m->vq_int + vq_ff;
 
-        // Strict Symmetric Vd clamping: Low speed PMSM has negligible inductive voltage (<0.06V at 50 RPM).
-        // Symmetrically clamp Vd and Vd_int to ±(max_v_mag * 0.08f) (~±1.0V at 24V bus).
-        // This guarantees 99.7% of inverter voltage is dedicated entirely to Vq (pure torque).
-        float max_vd = max_v_mag * 0.08f;
-        utils_truncate_number(&state_m->vd_int, -max_vd, max_vd);
-        utils_truncate_number(&state_m->vd, -max_vd, max_vd);
-
         // Final vector circle voltage limitation (SVPWM circular headroom)
         limit_norm(&state_m->vd, &state_m->vq, max_v_mag);
     }
