@@ -355,13 +355,13 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
         state_m->vd = kp * Ierr_d + state_m->vd_int + vd_ff;
         state_m->vq = kp * Ierr_q + state_m->vq_int + vq_ff;
 
-        // Strict Symmetric Vd clamping: Surface PMSM has negligible inductive voltage at low speeds
-        // (|w_e*L*Iq| < 0.06V at 50 RPM). Parasitic Vd integration in either direction (+ or -)
-        // steals torque headroom and rotates the voltage vector away from the 90° q-axis.
-        // Clamp Vd and Vd_int symmetrically to ±(foc_mag_vd_max * max_v_mag) (~±1.13V at 24V bus).
-        float max_vd = max_v_mag * conf_now->foc_mag_vd_max;
-        utils_truncate_number(&state_m->vd_int, -max_vd, max_vd);
-        utils_truncate_number(&state_m->vd, -max_vd, max_vd);
+        // Asymmetric Vd clamping:
+        // 1. Positive Vd is strictly clamped to +max_vd_pos (+1.13V) to prevent parasitic d-axis torque loss.
+        // 2. Negative Vd is allowed down to -max_vd_neg (-6.8V) to enable active field weakening (Id* < 0).
+        float max_vd_pos = max_v_mag * conf_now->foc_mag_vd_max;
+        float max_vd_neg = -max_v_mag * 0.60f;
+        utils_truncate_number(&state_m->vd_int, max_vd_neg, max_vd_pos);
+        utils_truncate_number(&state_m->vd, max_vd_neg, max_vd_pos);
 
         // Final vector circle voltage limitation (SVPWM circular headroom)
         limit_norm(&state_m->vd, &state_m->vq, max_v_mag);
