@@ -299,6 +299,11 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
         // Do not re-trigger it here from raw per-ISR velocity samples.
         state_m->iq_target = motor->m_iq_set;
         float id_target = -motor->m_i_fw_set;
+        // In Speed Control mode, inject a small -0.60A d-axis magnetic pre-tension to provide
+        // instantaneous passive spring stiffness across cycloid gearbox tooth mesh tight spots.
+        if (motor->m_control_mode == CONTROL_MODE_SPEED && fabsf(motor->m_speed_pid_set_rpm) >= 15.0f) {
+            id_target -= 0.60f;
+        }
         state_m->id_target = id_target;
         utils_truncate_number_abs((float*)&state_m->iq_target, conf_now->l_current_max);
 
@@ -339,12 +344,13 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
         state_m->vd = kp * Ierr_d + state_m->vd_int + vd_ff;
         state_m->vq = kp * Ierr_q + state_m->vq_int + vq_ff;
 
-        // Strict Symmetric Vd clamping: Low speed PMSM has negligible inductive voltage (<0.06V at 50 RPM).
-        // Integrator drift on Vd (+ or -) steals torque headroom and reduces Vq.
-        // Symmetrically clamp Vd and Vd_int to ±(max_v_mag * 0.08f) (~±1.0V at 24V bus).
-        float max_vd = max_v_mag * 0.08f;
-        utils_truncate_number(&state_m->vd_int, -max_vd, max_vd);
-        utils_truncate_number(&state_m->vd, -max_vd, max_vd);
+        // Asymmetric Vd clamping:
+        // Positive Vd clamped to +max_v_mag * 0.08f (~+1.0V) to prevent parasitic positive drift.
+        // Negative Vd allowed to -max_v_mag * 0.20f (~-2.6V) to maintain Id = -0.6A pre-tension.
+        float max_vd_pos = max_v_mag * 0.08f;
+        float max_vd_neg = -max_v_mag * 0.20f;
+        utils_truncate_number(&state_m->vd_int, max_vd_neg, max_vd_pos);
+        utils_truncate_number(&state_m->vd, max_vd_neg, max_vd_pos);
 
         // Final vector circle voltage limitation (SVPWM circular headroom)
         limit_norm(&state_m->vd, &state_m->vq, max_v_mag);
