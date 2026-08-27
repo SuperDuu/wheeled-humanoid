@@ -443,7 +443,11 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 
 	/* PI controller */
 	float speed_kp = conf_now->s_pid_kp;
+	float speed_ki = conf_now->s_pid_ki;
 	float p_term = speed_kp * error_erpm;
+
+	motor->m_speed_i_term += speed_ki * error_erpm * dt;
+	utils_truncate_number(&motor->m_speed_i_term, -SPEED_IQ_I_MAX_A, SPEED_IQ_I_MAX_A);
 
 	float erpm_diff = erpm - motor->m_speed_d_filter_proc;
 	motor->m_speed_d_filter_proc += 0.20f * erpm_diff;
