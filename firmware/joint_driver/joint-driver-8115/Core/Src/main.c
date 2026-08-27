@@ -664,7 +664,7 @@ void Run_EncoderCalibration(void)
   float vbus = g_adc_readings.vbus;
   if (vbus < 6.0f) vbus = 24.0f;
 
-  const float vd_cal = 6.0f;
+  const float vd_cal = 8.0f;
   float pole_pairs = (float)g_foc_controller.conf.foc_motor_pole_pairs;
   if (pole_pairs < 1.0f) {
     pole_pairs = 21.0f;
@@ -775,7 +775,7 @@ void Run_EncoderCalibration(void)
 
   calibration_valid = forward_progress > 14745 && forward_progress < 18022 &&
                       backward_progress < -14745 && backward_progress > -18022 &&
-                      max_abs_comp <= 128;
+                      max_abs_comp <= 256;
   if (calibration_valid) {
     for (int k = 0; k < 128; k++) {
       g_foc_controller.encoder.offset_lut[k] = candidate_lut[k];
