@@ -44,8 +44,8 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_cc_decoupling = FOC_CC_DECOUPLING_BEMF; // Bù khử ghép chéo d-q
 
     // Speed Controller (Cascaded Current-Mode FOC: Outputs Iq command in Amperes)
-    conf->s_pid_kp = 0.00110f;             // Crisp, stable speed tracking (no oscillation)
-    conf->s_pid_ki = 0.00110f;             // Fast anti-detent integral recovery
+    conf->s_pid_kp = 0.00035f;             // Crisp, stable speed tracking (no oscillation)
+    conf->s_pid_ki = 0.00015f;             // Smooth steady-state integral elimination of speed error
     conf->s_pid_kd = 0.0f;                 // Zero D-term for noise-free response
     conf->s_pid_kd_filter = 0.050f;        // ~8 Hz cutoff; smooth speed feedback
     conf->s_pid_min_erpm = 10.0f;          // 10 ERPM deadband (~0.48 RPM motor)
