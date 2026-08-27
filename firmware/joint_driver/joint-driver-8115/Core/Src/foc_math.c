@@ -447,7 +447,21 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		iq_max = 0.30f;
 	}
 
-	float iq_cmd = iq_friction + p_term + motor->m_speed_i_term + d_term;
+	/* Dynamic Acoustic Stiction Dither (100 Hz):
+	 * When running in SPEED mode (target >= 15 RPM), if mechanical friction causes actual
+	 * speed to drop near zero (< 4 RPM), inject a 100 Hz micro-dither to transform static
+	 * Coulomb friction into dynamic kinetic friction, instantly breaking cycloid pin pinch. */
+	static float dither_phase = 0.0f;
+	float dither = 0.0f;
+	if (fabsf(target_mech_rpm) >= 15.0f && fabsf(erpm / pole_pairs) < 4.0f) {
+		dither_phase += 2.0f * (float)M_PI * 100.0f * dt; // 100 Hz
+		if (dither_phase > (float)M_PI) dither_phase -= 2.0f * (float)M_PI;
+		dither = 1.20f * sinf(dither_phase);
+	} else {
+		dither_phase = 0.0f;
+	}
+
+	float iq_cmd = iq_friction + p_term + motor->m_speed_i_term + d_term + dither;
 	utils_truncate_number(&iq_cmd, iq_min, iq_max);
 	motor->m_iq_set = iq_cmd;
 }
