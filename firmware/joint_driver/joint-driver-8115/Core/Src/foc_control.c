@@ -216,28 +216,39 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     float omega_mech = foc->encoder.velocity_rad_s;
     motor->m_speed_est_fast = (float)(conf_now->encoder_direction * 21) * omega_mech;
 
-    /* Automatic Kinetic Anti-Stall Escape:
-     * If running in SPEED mode (>15 RPM target) and rotor gets trapped in static stiction
-     * (speed < 6 RPM) for > 40ms, rotate the electrical angle forward with an open-loop
-     * dynamic wave to break stiction (identical to open-loop behavior). */
+    /* Automatic Kinetic Anti-Stall Escape (Hysteresis-Guarded 150ms Breakaway Wave):
+     * When running in SPEED mode (target >= 15 RPM), if rotor gets trapped in static stiction
+     * (speed < 5 RPM) for > 30ms, inject a 150ms dynamic rotating stator wave to break stiction,
+     * identical to bulletproof open-loop behavior. */
     static float stall_timer = 0.0f;
+    static float escape_timer = 0.0f;
     static float escape_angle = 0.0f;
     static bool escape_active = false;
 
     float mech_rpm = fabsf(omega_mech * (60.0f / (2.0f * (float)M_PI)));
     if (motor->m_state == MC_STATE_RUNNING && motor->m_control_mode == CONTROL_MODE_SPEED &&
         fabsf(motor->m_speed_pid_set_rpm) >= 15.0f * 21.0f) {
-        if (mech_rpm < 6.0f) {
-            stall_timer += dt_fast;
-            if (stall_timer > 0.040f) { // 40ms of static stall
-                escape_active = true;
+        if (!escape_active) {
+            if (mech_rpm < 5.0f) {
+                stall_timer += dt_fast;
+                if (stall_timer > 0.030f) { // 30ms of static stall
+                    escape_active = true;
+                    escape_timer = 0.150f; // 150ms minimum escape duration
+                    escape_angle = encoder_elec_angle;
+                }
+            } else {
+                stall_timer = 0.0f;
             }
         } else {
-            stall_timer = 0.0f;
-            escape_active = false;
+            escape_timer -= dt_fast;
+            if (escape_timer <= 0.0f && mech_rpm > 12.0f) {
+                escape_active = false;
+                stall_timer = 0.0f;
+            }
         }
     } else {
         stall_timer = 0.0f;
+        escape_timer = 0.0f;
         escape_active = false;
     }
 
@@ -248,7 +259,6 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
         utils_norm_angle_rad(&escape_angle);
         elec_angle = escape_angle;
     } else {
-        escape_angle = encoder_elec_angle;
         elec_angle = encoder_elec_angle;
     }
 
