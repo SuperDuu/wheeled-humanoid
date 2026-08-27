@@ -93,9 +93,16 @@ bool FOC_Control_CheckSafety(FOC_Controller_t *foc, float current_a, float curre
     float current_mag_raw = sqrtf(current_a * current_a + current_b * current_b);
     UTILS_LP_FAST(current_mag_filtered, current_mag_raw, 0.02f); // ~60Hz LPF at 20kHz
 
+<<<<<<< HEAD
     // 2. Overcurrent Instantaneous Check (Peak 30A for > 2.5ms = 50 ISR cycles)
     static uint32_t overcurrent_count = 0;
     if (current_mag_filtered > 25.0f || current_mag_raw > 35.0f) {
+=======
+    // Overcurrent Check - Cần 50 mẫu liên tiếp (>2.5ms) vượt ngưỡng 20.0A mới kích hoạt Lỗi Quá Dòng
+    // Tránh bị ngắt giả do nhiễu gai dòng hoặc đợt tăng tốc ban đầu
+    static uint32_t overcurrent_count = 0;
+    if (current_mag > 20.0f) {
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
         overcurrent_count++;
         if (overcurrent_count >= 50) {
             foc->fault |= MC_FAULT_OVER_CURRENT;
@@ -130,7 +137,18 @@ bool FOC_Control_CheckSafety(FOC_Controller_t *foc, float current_a, float curre
         foc->fault |= MC_FAULT_OVER_TEMP_MOS;
     }
 
+<<<<<<< HEAD
     // If any fault occurred, immediately trip motor off and zero duty cycles
+=======
+    // Joint Soft Limit Check (-180 deg to +180 deg) - Chỉ kích hoạt trong Position Control Mode
+    if (foc->motor.m_control_mode == CONTROL_MODE_POS) {
+        if (foc->motor.m_joint_angle < foc->conf.joint_pos_min || foc->motor.m_joint_angle > foc->conf.joint_pos_max) {
+            foc->fault |= MC_FAULT_POS_LIMIT;
+        }
+    }
+
+    // If any fault occurred, immediately trip motor off
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     if (foc->fault != MC_FAULT_NONE) {
         foc->motor.m_state = MC_STATE_OFF;
         foc->duty_a = foc->duty_b = foc->duty_c = 0.0f; // Turn off PWM output completely
@@ -225,22 +243,32 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
      * Sau fix: vbus=0.9V < 5.0f -> fallback 24.0f -> FOC hoạt động đúng. */
     state_m->v_bus = vbus > 5.0f ? vbus : 24.0f;
 
+<<<<<<< HEAD
     // 1. Đọc Encoder 20kHz trực tiếp từ SPI3.
     // SPI3 chỉ do ISR quản lý 100% độc quyền (không đọc ở Slow Loop nữa) -> triệt tiêu hoàn toàn nhiễu giật khục 1kHz.
+=======
+    // 1. ALWAYS Read Encoder & Update Angle (even in IDLE/OFF state)
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     float raw_enc_rad = foc->encoder.angle_rad;
     AS5048A_ReadRadians(&foc->encoder, &raw_enc_rad);
     foc_update_cycloidal_joint_angle(motor, raw_enc_rad);
 
+<<<<<<< HEAD
     // 1a. Bù sai số phi tuyến tính cơ học (LUT 128 điểm theo phương pháp Ben Katz / MIT Mini Cheetah)
     float corrected_enc_rad = FOC_Control_CorrectEncoderAngle(foc, raw_enc_rad);
 
     // 1b. Tính Góc Điện theo Chuẩn VESC [-PI, +PI] (21 cặp cực)
     float elec_raw = (float)(conf_now->encoder_direction * conf_now->foc_motor_pole_pairs) * corrected_enc_rad;
     float elec_angle = elec_raw - foc->zero_electric_angle;
+=======
+    float enc_rad_dir = (conf_now->encoder_direction == -1) ? (2.0f * (float)M_PI - raw_enc_rad) : raw_enc_rad;
+    float elec_angle = (enc_rad_dir * (float)conf_now->foc_motor_pole_pairs) - foc->zero_electric_angle;
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     utils_norm_angle_rad(&elec_angle);
 
     state_m->phase = elec_angle;
 
+<<<<<<< HEAD
     // Chạy Bộ lọc PLL Tracking Filter ở tần số 20kHz để ước lượng vận tốc
     float dt_fast = 0.000050f; // 20kHz Fast Loop period (Ts = 50µs)
     foc_pll_run(elec_angle, dt_fast, &motor->m_pll_phase, &motor->m_pll_speed, motor->m_conf);
@@ -259,6 +287,18 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     // 3. Park Transform: Stator -> Rotor reference frame (Id, Iq) using true sample angle
     state_m->id = cos_elec * state_m->i_alpha + sin_elec * state_m->i_beta;
     state_m->iq = cos_elec * state_m->i_beta  - sin_elec * state_m->i_alpha;
+=======
+    // 2. Clarke Transform: (Ia, Ib) -> (Ialpha, Ibeta)
+    state_m->i_alpha = current_a;
+    state_m->i_beta  = (current_a + 2.0f * current_b) * ONE_BY_SQRT3;
+
+    float s = state_m->phase_sin;
+    float c = state_m->phase_cos;
+
+    // 3. Park Transform: Stator -> Rotor reference frame (Id, Iq)
+    state_m->id = c * state_m->i_alpha + s * state_m->i_beta;
+    state_m->iq = c * state_m->i_beta  - s * state_m->i_alpha;
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
 
     // Low-pass filter currents for telemetry
     UTILS_LP_FAST(state_m->id_filter, state_m->id, conf_now->foc_current_filter_const);
@@ -267,6 +307,46 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     // 4. Run Safety Check Supervisor
     if (!FOC_Control_CheckSafety(foc, current_a, current_b, state_m->v_bus, temp_fet)) {
         return; // Tripped fault!
+<<<<<<< HEAD
+=======
+    }
+
+    if (motor->m_state != MC_STATE_RUNNING) {
+        state_m->vd_int = 0.0f;
+        state_m->vq_int = 0.0f;
+        state_m->vd = 0.0f;
+        state_m->vq = 0.0f;
+        foc->duty_a = foc->duty_b = foc->duty_c = 0.5f;
+        return;
+    }
+
+    // 5. Current Control PI Loop
+    if (motor->m_control_mode != CONTROL_MODE_CURRENT) {
+        state_m->iq_target = motor->m_iq_set;
+    }
+
+    float Ierr_d = state_m->id_target - state_m->id;
+    float Ierr_q = state_m->iq_target - state_m->iq;
+
+    float ki = conf_now->foc_current_ki;
+    float kp = conf_now->foc_current_kp;
+
+    state_m->vd_int += Ierr_d * ki * dt;
+    state_m->vq_int += Ierr_q * ki * dt;
+
+    state_m->vd = state_m->vd_int + Ierr_d * kp;
+    state_m->vq = state_m->vq_int + Ierr_q * kp;
+
+    // 6. Cross-Coupling Decoupling (BEMF + Cross Feedforward)
+    float dec_vd = 0.0f;
+    float dec_vq = 0.0f;
+    float dec_bemf = 0.0f;
+
+    if (conf_now->foc_cc_decoupling != FOC_CC_DECOUPLING_DISABLED) {
+        dec_vd = state_m->iq * motor->m_speed_est_fast * motor->p_lq;
+        dec_vq = state_m->id * motor->m_speed_est_fast * motor->p_ld;
+        dec_bemf = motor->m_speed_est_fast * conf_now->foc_motor_flux_linkage;
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     }
 
     if (motor->m_state != MC_STATE_RUNNING) {
@@ -387,7 +467,15 @@ void FOC_Control_SlowLoop(FOC_Controller_t *foc, float dt)
                         motor->m_motor_state.i_alpha, motor->m_motor_state.i_beta,
                         dt, &motor->m_observer_state, &motor->m_phase_now_observer, motor);
 
+<<<<<<< HEAD
     // 2. Run Position PID or Speed PID based on Control Mode (generates target Iq)
+=======
+    // Dùng trực tiếp góc điện của Encoder (m_motor_state.phase) thay vì góc điện ước lượng của Observer để tính toán tốc độ bằng PLL
+    foc_pll_run(motor->m_motor_state.phase, dt, &motor->m_pll_phase, &motor->m_pll_speed, motor->m_conf);
+    motor->m_speed_est_fast = motor->m_pll_speed;
+
+    // 2. Run Position PID or Speed PID based on Control Mode
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     if (motor->m_control_mode == CONTROL_MODE_POS) {
         foc_run_pid_control_pos(true, dt, motor);
     } else if (motor->m_control_mode == CONTROL_MODE_SPEED) {

@@ -202,6 +202,10 @@ class FOCOscilloscopeStudio {
       if (inputSpeed) inputSpeed.value = val;
       if (sliderSpeed) sliderSpeed.value = val;
       if (speedDisplay) speedDisplay.innerText = `${val} RPM`;
+<<<<<<< HEAD
+=======
+      this.sendCommand(`MODE 3`);
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
       this.sendCommand(`SPEED ${val}`);
       document.querySelectorAll('.btn-mode').forEach(b => b.classList.remove('active'));
       const speedBtn = document.querySelector('.btn-mode[data-mode="3"]');
@@ -236,6 +240,7 @@ class FOCOscilloscopeStudio {
       });
     });
 
+<<<<<<< HEAD
     // Voltage Vq Controls (Direct Vector Voltage Mode)
     const inputVq = document.getElementById('input-vq');
     const vqDisplay = document.getElementById('vq-display');
@@ -277,10 +282,13 @@ class FOCOscilloscopeStudio {
       });
     }
 
+=======
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     // Current Iq Controls
     const inputIq = document.getElementById('input-iq');
     const iqDisplay = document.getElementById('iq-display');
     const btnSetIq = document.getElementById('btn-set-iq');
+<<<<<<< HEAD
     const sliderIq = document.getElementById('slider-iq');
 
     const updateIq = (val) => {
@@ -290,6 +298,15 @@ class FOCOscilloscopeStudio {
       if (iqDisplay) iqDisplay.innerText = `${numVal} A`;
       this.sendCommand(`IQ ${numVal}`);
       this.appendLog(`⚡ Đặt dòng điện mục tiêu Iq: ${numVal}A`, 'success');
+=======
+
+    const updateIq = (val) => {
+      const numVal = parseFloat(val).toFixed(1);
+      if (inputIq) inputIq.value = numVal;
+      if (iqDisplay) iqDisplay.innerText = `${numVal} A`;
+      this.sendCommand(`MODE 1`);
+      this.sendCommand(`IQ ${numVal}`);
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
       document.querySelectorAll('.btn-mode').forEach(b => b.classList.remove('active'));
       const curBtn = document.querySelector('.btn-mode[data-mode="1"]');
       if (curBtn) curBtn.classList.add('active');
@@ -304,6 +321,7 @@ class FOCOscilloscopeStudio {
       });
     }
 
+<<<<<<< HEAD
     if (sliderIq) {
       sliderIq.addEventListener('input', (e) => {
         if (iqDisplay) iqDisplay.innerText = `${parseFloat(e.target.value).toFixed(2)} A`;
@@ -321,6 +339,8 @@ class FOCOscilloscopeStudio {
       });
     });
 
+=======
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     // Position / Angle Controls (Degrees -> Radians)
     const inputPos = document.getElementById('input-pos');
     const posDisplay = document.getElementById('pos-display');
@@ -331,8 +351,13 @@ class FOCOscilloscopeStudio {
       const rad = deg * Math.PI / 180.0;
       if (inputPos) inputPos.value = deg;
       if (posDisplay) posDisplay.innerText = `${deg.toFixed(1)}° (${rad.toFixed(2)} rad)`;
+<<<<<<< HEAD
       this.sendCommand(`POS ${deg}`);
       this.appendLog(`🎯 Đặt góc mục tiêu: ${deg}°`, 'success');
+=======
+      this.sendCommand(`MODE 4`);
+      this.sendCommand(`POS ${rad.toFixed(4)}`);
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
       document.querySelectorAll('.btn-mode').forEach(b => b.classList.remove('active'));
       const posBtn = document.querySelector('.btn-mode[data-mode="4"]');
       if (posBtn) posBtn.classList.add('active');
@@ -356,6 +381,7 @@ class FOCOscilloscopeStudio {
       });
     });
 
+<<<<<<< HEAD
     // Open-Loop Quick Test Buttons
     const btnOpenloopFwd = document.getElementById('btn-openloop-fwd');
     if (btnOpenloopFwd) {
@@ -374,6 +400,9 @@ class FOCOscilloscopeStudio {
     }
 
     // Direct D-Axis Encoder Alignment
+=======
+    // Align Encoder Button
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     const btnAlign = document.getElementById('btn-align');
     if (btnAlign) {
       btnAlign.addEventListener('click', () => {
@@ -382,6 +411,7 @@ class FOCOscilloscopeStudio {
       });
     }
 
+<<<<<<< HEAD
     // ✨ One-Click Auto-Tune / Calibration for Any Motor
     const btnAutoTune = document.getElementById('btn-auto-tune');
     if (btnAutoTune) {
@@ -429,6 +459,8 @@ class FOCOscilloscopeStudio {
       });
     }
 
+=======
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     // Emergency Stop
     const btnEstop = document.getElementById('btn-estop');
     if (btnEstop) {
@@ -437,15 +469,21 @@ class FOCOscilloscopeStudio {
         if (sliderSpeed) sliderSpeed.value = 0;
         if (inputSpeed) inputSpeed.value = 0;
         if (speedDisplay) speedDisplay.innerText = '0 RPM';
+<<<<<<< HEAD
         if (inputVq) inputVq.value = 0;
         if (vqDisplay) vqDisplay.innerText = '0.0 V';
         if (inputIq) inputIq.value = 0;
+=======
+        if (inputIq) inputIq.value = 0;
+        if (iqDisplay) iqDisplay.innerText = '0.0 A';
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
         document.querySelectorAll('.btn-mode').forEach(b => b.classList.remove('active'));
         const idleBtn = document.querySelector('.btn-mode[data-mode="0"]');
         if (idleBtn) idleBtn.classList.add('active');
       });
     }
 
+<<<<<<< HEAD
     // 🔄 RESET DRIVER Button
     const btnResetDriver = document.getElementById('btn-reset-driver');
     if (btnResetDriver) {
@@ -536,6 +574,8 @@ class FOCOscilloscopeStudio {
       });
     });
 
+=======
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     // CSV Recording Controls
     const btnRecord = document.getElementById('btn-record-toggle');
     const btnDownload = document.getElementById('btn-download-csv');
@@ -567,6 +607,7 @@ class FOCOscilloscopeStudio {
       });
     }
 
+<<<<<<< HEAD
     // 🎛️ Real-Time FOC & PID Parameter Tuning Event Listeners
     this.currentOffset = 0.0;
     this.currentDir = 1;
@@ -644,6 +685,8 @@ class FOCOscilloscopeStudio {
       });
     });
 
+=======
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     // Log actions
     const btnCopyLog = document.getElementById('btn-copy-log');
     if (btnCopyLog) {
@@ -925,6 +968,7 @@ class FOCOscilloscopeStudio {
     setTxt('val-mech', `${pkt.mech_angle.toFixed(2)} rad`);
     setTxt('val-joint', `${pkt.joint_angle.toFixed(2)} rad`);
 
+<<<<<<< HEAD
     // 📍 Update Hero Robot Joint Angle Readouts
     const jointDeg = (pkt.joint_angle * 180.0 / Math.PI);
     const mechDeg = (pkt.mech_angle * 180.0 / Math.PI);
@@ -933,6 +977,8 @@ class FOCOscilloscopeStudio {
     setTxt('val-rpm-disp', pkt.speed_rpm.toFixed(1));
     setTxt('val-iq-disp', pkt.i_q.toFixed(2));
 
+=======
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     setTxt('val-rpm', `${pkt.speed_rpm.toFixed(1)} RPM`);
     setTxt('val-rpm-tgt', `${pkt.speed_target_rpm.toFixed(1)} RPM`);
     const err = pkt.speed_target_rpm - pkt.speed_rpm;
@@ -941,6 +987,7 @@ class FOCOscilloscopeStudio {
     setTxt('val-vbus', pkt.v_bus.toFixed(1));
     setTxt('val-temp', pkt.temp_fet.toFixed(1));
 
+<<<<<<< HEAD
     const modeNames = ["IDLE (0)", "CURRENT (1)", "BRAKE (2)", "SPEED (3)", "POS (4)", "VOLTAGE (5)"];
     setTxt('val-mode', modeNames[pkt.control_mode] || `MODE ${pkt.control_mode}`);
 
@@ -965,6 +1012,10 @@ class FOCOscilloscopeStudio {
       setTxt('display-offset', `${pkt.zero_electric_angle.toFixed(2)} rad (${(pkt.zero_electric_angle * 180 / Math.PI).toFixed(0)}°)`);
       this.currentOffset = pkt.zero_electric_angle;
     }
+=======
+    const modeNames = ["IDLE (0)", "CURRENT (1)", "BRAKE (2)", "SPEED (3)", "POS (4)"];
+    setTxt('val-mode', modeNames[pkt.control_mode] || `MODE ${pkt.control_mode}`);
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
   }
 
   async sendCommand(cmd) {

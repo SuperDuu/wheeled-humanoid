@@ -23,12 +23,21 @@ void vesc_conf_set_defaults(mc_configuration *conf)
                                           // At 0.95, phases B&C have only 2.5µs → ADC corrupted → Iq flips negative!
     conf->l_min_duty = 0.005f;           // 0.5% min duty cycle
 
+<<<<<<< HEAD
     // Motor Physical Parameters (GB8115-4: 21 pole pairs, R=3.90 Ohm, L=1.20 mH, Kv=39.5 RPM/V -> lambda=0.01160 Wb)
     conf->foc_motor_pole_pairs = 21;       // 21 Pole Pairs (42 Magnets)
     conf->foc_motor_r = 3.90f;             // 3.90 Ohm Phase Resistance
     conf->foc_motor_l = 0.00120f;          // 1.20 mH Phase Inductance
     conf->foc_motor_flux_linkage = 0.01160f; // 0.01160 Wb Flux Linkage (Kt = 0.3654 Nm/A)
     conf->foc_motor_ld_lq_diff = 0.0f;     // Surface PMSM (non-salient)
+=======
+    // Motor Parameters (GB8115-4 Gimbal/Actuator Motor)
+    conf->foc_motor_pole_pairs = 21;     // 21 Pole Pairs
+    conf->foc_motor_r = 3.89f;           // 3.89 Ohm phase resistance (was 0.090f)
+    conf->foc_motor_l = 0.00314f;        // 3.14 mH phase inductance (was 0.000120f)
+    conf->foc_motor_flux_linkage = 0.025f; // 0.025 Wb (~25 mWb) flux linkage (was 0.0045f)
+    conf->foc_motor_ld_lq_diff = 0.0f;   // Non-salient PMSM motor
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
 
     // 1:17 Cycloid Gearbox Mode
     conf->gear_ratio = 17.0f;              // 1:17 Cycloidal Gearbox Reduction Ratio
@@ -36,15 +45,22 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->joint_pos_min = -1000000.0f;     // Unlimited continuous rotation
     conf->joint_pos_max =  1000000.0f;     // Unlimited continuous rotation
 
+<<<<<<< HEAD
     // Current Controller (PI D/Q) - 20kHz Inner Loop (Pole placement: f_bw = 800Hz, w_bw = 5026.5 rad/s)
     // Kp_curr = L * w_bw = 0.00120 * 5026.5 = 6.03 V/A
     // Ki_curr = R * w_bw = 3.90 * 5026.5 = 19603.0 V/(A*s)
     conf->foc_current_kp = 6.03f;           // Kp = 6.03 V/A
     conf->foc_current_ki = 19603.0f;        // Ki = 19603.0 V/(A*s)
+=======
+    // Current Controller (PI D/Q) - Đã tối ưu Kp, Ki để ổn định với nội trở lớn 3.89 Ohm mà không bị quá nhạy với nhiễu/offset ADC
+    conf->foc_current_kp = 1.0f;         // Giảm từ 1.5f xuống 1.0f để êm hơn
+    conf->foc_current_ki = 200.0f;       // Giảm từ 300.0f xuống 200.0f để ổn định tích phân dòng
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     conf->foc_current_filter_const = 0.1f;
     conf->foc_observer_gain = 0.5e6f;
     conf->foc_cc_decoupling = FOC_CC_DECOUPLING_BEMF; // Bù khử ghép chéo d-q
 
+<<<<<<< HEAD
     // Speed Controller (Cascaded Current-Mode FOC: Outputs Iq command in Amperes)
     conf->s_pid_kp = 0.0050f;              // Kp = 0.0050 A/ERPM (Active Stiffness)
     conf->s_pid_ki = 0.0500f;              // Ki = 0.0500 A/(ERPM*s) (Zero steady-state error with Anti-Windup)
@@ -58,6 +74,21 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->p_pid_ki = 0.0f;                 // Zero I-term (No windup, elastic ground impact absorption)
     conf->p_pid_kd = 0.50f;                // Kd_pos = 0.50 A/(rad/s) (Virtual Joint Damping)
     conf->p_pid_kd_proc = 0.05f;           // Damping on measurement
+=======
+    // Speed Controller (PID)
+    conf->s_pid_kp = 0.0005f;           // Standard VESC Kp for ERPM
+    conf->s_pid_ki = 0.002f;            // Standard VESC Ki for ERPM
+    conf->s_pid_kd = 0.00001f;
+    conf->s_pid_kd_filter = 0.2f;
+    conf->s_pid_min_erpm = 5.0f;        // 5 ERPM (~0.2 RPM)
+    conf->s_pid_ramp_erpms_s = 2000.0f;  // Ramp gia tốc 2000 ERPM/s
+
+    // Position Controller (PID + Process D) - Tuned for 1:17 Cycloid Joint
+    conf->p_pid_kp = 3.5f;               // Smooth proportional gain (was 15.0f causing bang-bang saturation)
+    conf->p_pid_ki = 0.2f;               // Low integral gain to remove steady-state error
+    conf->p_pid_kd = 0.08f;              // Damping gain against oscillations
+    conf->p_pid_kd_proc = 0.05f;         // Damping on measurement
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     conf->p_pid_kd_filter = 0.2f;
     conf->p_pid_ang_div = 1.0f;
     conf->p_pid_gain_dec_angle = 0.0f;
@@ -65,11 +96,17 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     // Observer & Sensorless Configuration
     conf->foc_observer_type = FOC_OBSERVER_ORTEGA_ORIGINAL;
     conf->foc_observer_gain = 1000.0f;
+<<<<<<< HEAD
     // PLL Speed Estimator (20kHz 2nd-order PLL: wn=200 rad/s ~32Hz BW, zeta=0.707)
     // K_pll_1 = 2 * zeta * wn = 2 * 0.707 * 200 = 283.0
     // K_pll_2 = wn^2 = 200^2 = 40000.0
     conf->foc_pll_kp = 283.0f;             // K_pll_1 = 283.0
     conf->foc_pll_ki = 40000.0f;           // K_pll_2 = 40000.0
+=======
+    // Đã hạ Kp, Ki của PLL từ (2000/40000) xuống (100/1000) vì PLL chạy ở Slow Loop 1kHz chứ không phải 20kHz
+    conf->foc_pll_kp = 100.0f;           // Giảm từ 2000.0f
+    conf->foc_pll_ki = 1000.0f;          // Giảm từ 40000.0f
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     conf->foc_sl_erpm = 2000.0f;
 
     // Field Weakening
@@ -82,6 +119,7 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_overmod_factor = 1.0f;       // Standard space vector modulation
     conf->foc_mag_vd_max = 0.1f;           // Max 10% voltage in Vd (prevent d-axis stealing sampling margin)
 
+<<<<<<< HEAD
     // Protection & Safety Limits (Datasheet: Nominal 2.1A, Stall 6.6A, Max Speed 534 RPM = 11214 ERPM)
     conf->l_current_max = 6.6f;            // 6.6A Stall current limit
     conf->l_current_min = -6.6f;           // -6.6A Braking current limit
@@ -93,6 +131,19 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->l_max_erpm_fbreak_cc = 15000.0f;
     conf->l_voltage_max = 50.0f;           // 50V max bus voltage (OVP)
     conf->l_voltage_min = 12.0f;           // 12V min bus voltage (UVP)
+=======
+    // Protection & Safety Limits
+    conf->l_current_max = 4.0f;          // Limit current to 4A to prevent voltage saturation on 4-ohm gimbal motor
+    conf->l_current_min = -4.0f;         // Limit braking current to -4A
+    conf->l_in_current_max = 20.0f;      // Khôi phục 20A dòng nguồn tối đa
+    conf->l_in_current_min = -10.0f;     // Khôi phục -10A dòng sạc ngược tối đa
+    conf->l_max_erpm = 100000.0f;        // 100k ERPM max
+    conf->l_min_erpm = -100000.0f;
+    conf->l_max_erpm_fbreak = 150000.0f;
+    conf->l_max_erpm_fbreak_cc = 150000.0f;
+    conf->l_voltage_max = 50.0f;         // 50V max bus voltage (OVP)
+    conf->l_voltage_min = 12.0f;         // 12V min bus voltage (UVP)
+>>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     conf->l_temp_fet_start = 85.0f;      // MOSFET thermal warning at 85C
     conf->l_temp_fet_end = 95.0f;        // MOSFET cutoff at 95C
     conf->l_temp_motor_start = 80.0f;    // Motor thermal warning at 80C
