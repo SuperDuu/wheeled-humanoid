@@ -193,6 +193,9 @@ typedef struct {
   float zero_electric_angle;  /* Góc điện offset (rad) */
   float encoder_rad;          /* Góc encoder tại thời điểm lock (rad) */
   float vbus;                 /* VBUS khi alignment */
+  float concentration;        /* Circular concentration of static zero samples */
+  int32_t forward_counts;     /* Encoder travel during forward sweep */
+  int32_t backward_counts;    /* Encoder travel during backward sweep */
   float current_a;            /* Dòng pha A khi lock (A) */
   float current_b;            /* Dòng pha B khi lock (A) */
   float current_c;            /* Dòng pha C khi lock (A) */
@@ -411,158 +414,92 @@ void Run_EncoderAlignment(void)
   float vbus = g_adc_readings.vbus;
   if (vbus < 6.0f) vbus = 24.0f;
 
-  /* ====================================================================
-   * DYNAMIC ALIGN — open-loop rotation measures zero_electric_angle
-   * ====================================================================
-   * Static d-axis lock with 21 pole-pairs is susceptible to cogging bias:
-   * rotor sits ~3.5° mechanical off the true d-axis → 75° electrical error
-   * → Iq command produces mostly Id → motor stalls after 30–40 s.
-   *
-   * Dynamic ALIGN spins open-loop through ALL cogging positions over 1+
-   * full mechanical revolutions, then circular-averages θ_field − pp×θ_enc.
-   * Forward + backward rotation cancels the load-angle bias.
-   * ==================================================================== */
-
+  /* A continuously rotating voltage vector gave an 83.6 degree electrical
+   * zero error on this high-pole-count motor. The rotor lagged the field, so
+   * the measured q-axis was almost the physical d-axis. Move the field in
+   * small increments, let it settle at every point, and circular-average the
+   * static relation zero = pole_pairs * encoder - field_angle instead. */
   const float vd_align = 8.0f;
-  const float sample_dt = 0.001f;    /* 1 ms per step */
+  const float sample_dt = 0.005f;
   float encoder_scale = (float)(g_foc_controller.conf.encoder_direction *
                                 g_foc_controller.conf.foc_motor_pole_pairs);
-  float pole_pairs = (float)g_foc_controller.conf.foc_motor_pole_pairs;
+  int pole_pairs = g_foc_controller.conf.foc_motor_pole_pairs;
+  if (pole_pairs < 1) pole_pairs = 21;
+  const int points_per_elec_rev = 8;
+  const int points_per_mech_rev = pole_pairs * points_per_elec_rev;
+  const int microsteps_per_point = 8;
+  const int settle_samples = 4;
+  const float point_delta = (2.0f * (float)M_PI) /
+                            (float)points_per_elec_rev;
 
-  /* Target speed: 20 RPM mechanical → 44 rad/s electrical.
-   * At 8 V with λ≈0.030, BEMF≈1.3 V, available torque I≈(8−1.3)/2.26≈3 A,
-   * far above cogging, so rotor will track the field cleanly. */
-  float omega_elec_target = 20.0f * pole_pairs * 2.0f * (float)M_PI / 60.0f;
-  /* 1.5 mechanical revolutions = 1.5 × 21 = 31.5 electrical revolutions.
-   * At ω_e ≈ 44 rad/s that takes ~4.5 seconds. */
-  int steps_per_dir = 4500;   /* 4500 ms */
-  int ramp_steps    = 500;    /* 500 ms ramp */
-  int stable_start  = 800;    /* start sampling after 800 ms */
-
-  /* --- Phase 0: initial d-axis lock to overcome stiction --- */
-  for (int i = 0; i <= 40; i++) {
+  /* Lock to a known stator field before beginning the quasi-static sweep. */
+  for (int i = 0; i <= 80; i++) {
     if (run_alignment != 1 || g_foc_controller.fault != MC_FAULT_NONE)
       goto alignment_abort;
-    Apply_SvmVector(vd_align * (float)i / 40.0f, 0.0f, vbus, period);
-    HAL_Delay(4);
+    Apply_SvmVector(vd_align * (float)i / 80.0f, 0.0f, vbus, period);
+    HAL_Delay(5);
   }
-  HAL_Delay(150);
+  for (int i = 0; i < 40; i++) {
+    Apply_SvmVector(vd_align, 0.0f, vbus, period);
+    HAL_Delay(5);
+    AS5048A_Sample(&g_foc_controller.encoder, sample_dt);
+  }
 
-  /* --- Phase 1: Forward rotation (+20 RPM) --- */
   float theta = 0.0f;
-  float fwd_sin_sum = 0.0f, fwd_cos_sum = 0.0f;
-  uint32_t fwd_count = 0U;
+  float zero_sin_sum = 0.0f;
+  float zero_cos_sum = 0.0f;
+  uint32_t zero_count = 0U;
+  int32_t sweep_progress[2] = {0, 0};
 
-  for (int step = 0; step < steps_per_dir; step++) {
-    if (run_alignment != 1 || g_foc_controller.fault != MC_FAULT_NONE)
-      goto alignment_abort;
+  for (int pass = 0; pass < 2; pass++) {
+    float direction = (pass == 0) ? 1.0f : -1.0f;
+    int32_t pass_start = g_foc_controller.encoder.count_buff[0];
 
-    /* Smooth acceleration ramp */
-    float speed_frac = (step < ramp_steps)
-                       ? (float)step / (float)ramp_steps
-                       : 1.0f;
-    float omega_now = omega_elec_target * speed_frac;
-    theta += omega_now * sample_dt;
-    while (theta >  (float)M_PI) theta -= 2.0f * (float)M_PI;
-    while (theta < -(float)M_PI) theta += 2.0f * (float)M_PI;
+    for (int point = 0; point < points_per_mech_rev; point++) {
+      if (run_alignment != 1 || g_foc_controller.fault != MC_FAULT_NONE)
+        goto alignment_abort;
 
-    Apply_SvmVector(vd_align, theta, vbus, period);
-    HAL_Delay(1);
-    AS5048A_Sample(&g_foc_controller.encoder, sample_dt);
+      for (int micro = 0; micro < microsteps_per_point; micro++) {
+        theta += direction * point_delta / (float)microsteps_per_point;
+        utils_norm_angle_rad(&theta);
+        Apply_SvmVector(vd_align, theta, vbus, period);
+        HAL_Delay(2);
+        AS5048A_Sample(&g_foc_controller.encoder, 0.002f);
+      }
 
-    /* Accumulate circular-average samples after ramp-up */
-    if (step >= stable_start) {
+      for (int sample = 0; sample < settle_samples; sample++) {
+        Apply_SvmVector(vd_align, theta, vbus, period);
+        HAL_Delay(5);
+        AS5048A_Sample(&g_foc_controller.encoder, sample_dt);
+      }
+
       float zero_sample = encoder_scale *
                           g_foc_controller.encoder.angle_singleturn - theta;
       utils_norm_angle_rad(&zero_sample);
-      fwd_sin_sum += sinf(zero_sample);
-      fwd_cos_sum += cosf(zero_sample);
-      fwd_count++;
+      zero_sin_sum += sinf(zero_sample);
+      zero_cos_sum += cosf(zero_sample);
+      zero_count++;
+      Comm_Telemetry_Process(&g_foc_controller);
     }
 
-    /* Telemetry every 50 ms */
-    if (step % 50 == 0)
-      Comm_Telemetry_Process(&g_foc_controller);
+    sweep_progress[pass] = g_foc_controller.conf.encoder_direction *
+        (g_foc_controller.encoder.count_buff[0] - pass_start);
   }
 
-  /* Decelerate to stop */
-  for (int i = 20; i >= 0; i--) {
-    float frac = (float)i / 20.0f;
-    theta += omega_elec_target * frac * sample_dt;
-    while (theta >  (float)M_PI) theta -= 2.0f * (float)M_PI;
-    while (theta < -(float)M_PI) theta += 2.0f * (float)M_PI;
-    Apply_SvmVector(vd_align * frac, theta, vbus, period);
-    HAL_Delay(10);
-  }
-  HAL_Delay(200);
-
-  /* --- Phase 2: Backward rotation (−20 RPM) --- */
-  /* Re-lock at current position before reversing */
-  AS5048A_Sample(&g_foc_controller.encoder, sample_dt);
-  theta = 0.0f;
-  for (int i = 0; i <= 30; i++) {
-    Apply_SvmVector(vd_align * (float)i / 30.0f, 0.0f, vbus, period);
-    HAL_Delay(4);
-  }
-  HAL_Delay(100);
-
-  float bwd_sin_sum = 0.0f, bwd_cos_sum = 0.0f;
-  uint32_t bwd_count = 0U;
-
-  for (int step = 0; step < steps_per_dir; step++) {
-    if (run_alignment != 1 || g_foc_controller.fault != MC_FAULT_NONE)
-      goto alignment_abort;
-
-    float speed_frac = (step < ramp_steps)
-                       ? (float)step / (float)ramp_steps
-                       : 1.0f;
-    float omega_now = -omega_elec_target * speed_frac;   /* negative = backward */
-    theta += omega_now * sample_dt;
-    while (theta >  (float)M_PI) theta -= 2.0f * (float)M_PI;
-    while (theta < -(float)M_PI) theta += 2.0f * (float)M_PI;
-
-    Apply_SvmVector(vd_align, theta, vbus, period);
-    HAL_Delay(1);
-    AS5048A_Sample(&g_foc_controller.encoder, sample_dt);
-
-    if (step >= stable_start) {
-      float zero_sample = encoder_scale *
-                          g_foc_controller.encoder.angle_singleturn - theta;
-      utils_norm_angle_rad(&zero_sample);
-      bwd_sin_sum += sinf(zero_sample);
-      bwd_cos_sum += cosf(zero_sample);
-      bwd_count++;
-    }
-
-    if (step % 50 == 0)
-      Comm_Telemetry_Process(&g_foc_controller);
-  }
-
-  /* Decelerate backward to stop */
-  for (int i = 20; i >= 0; i--) {
-    float frac = (float)i / 20.0f;
-    theta += (-omega_elec_target) * frac * sample_dt;
-    while (theta >  (float)M_PI) theta -= 2.0f * (float)M_PI;
-    while (theta < -(float)M_PI) theta += 2.0f * (float)M_PI;
-    Apply_SvmVector(vd_align * frac, theta, vbus, period);
-    HAL_Delay(10);
-  }
-
-  /* --- Phase 3: Compute zero from forward + backward --- */
-  if (fwd_count < 100 || bwd_count < 100)
+  int32_t min_progress = (AS5048A_CPR * 3) / 4;
+  int32_t max_progress = (AS5048A_CPR * 5) / 4;
+  bool forward_valid = sweep_progress[0] >= min_progress &&
+                       sweep_progress[0] <= max_progress;
+  bool backward_valid = sweep_progress[1] <= -min_progress &&
+                        sweep_progress[1] >= -max_progress;
+  float concentration = (zero_count > 0U)
+      ? sqrtf(zero_sin_sum * zero_sin_sum + zero_cos_sum * zero_cos_sum) /
+        (float)zero_count
+      : 0.0f;
+  if (!forward_valid || !backward_valid || concentration < 0.95f)
     goto alignment_abort;
 
-  float zero_fwd = atan2f(fwd_sin_sum, fwd_cos_sum);
-  float zero_bwd = atan2f(bwd_sin_sum, bwd_cos_sum);
-
-  /* Circular average of forward and backward cancels the load angle δ:
-   * zero_fwd ≈ zero_true + δ,  zero_bwd ≈ zero_true − δ
-   * average ≈ zero_true */
-  float elec_offset = atan2f(sinf(zero_fwd) + sinf(zero_bwd),
-                             cosf(zero_fwd) + cosf(zero_bwd));
-
-  /* --- Phase 4: Store result --- */
-  utils_norm_angle_rad(&elec_offset);
+  float elec_offset = atan2f(zero_sin_sum, zero_cos_sum);
   AS5048A_Sample(&g_foc_controller.encoder, sample_dt);
   float enc_zero = g_foc_controller.encoder.angle_singleturn;
   g_foc_controller.zero_electric_angle = elec_offset;
@@ -572,13 +509,16 @@ void Run_EncoderAlignment(void)
   g_dbg_align.enc_dir = g_foc_controller.conf.encoder_direction;
   g_dbg_align.zero_electric_angle = elec_offset;
   g_dbg_align.encoder_rad = enc_zero;
+  g_dbg_align.concentration = concentration;
+  g_dbg_align.forward_counts = sweep_progress[0];
+  g_dbg_align.backward_counts = sweep_progress[1];
   g_dbg_align.aligned = 1;
 
   /* Ramp down gently */
-  for (int i = 30; i >= 0; i--) {
-    Apply_SvmVector(vd_align * (float)i / 30.0f, 0.0f, vbus, period);
+  for (int i = 40; i >= 0; i--) {
+    Apply_SvmVector(vd_align * (float)i / 40.0f, theta, vbus, period);
     Comm_Telemetry_Process(&g_foc_controller);
-    HAL_Delay(4);
+    HAL_Delay(5);
   }
 
   align_result = 2;
