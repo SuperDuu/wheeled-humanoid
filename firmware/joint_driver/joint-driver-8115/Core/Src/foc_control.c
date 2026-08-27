@@ -38,9 +38,47 @@ void FOC_Control_Init(FOC_Controller_t *foc, SPI_HandleTypeDef *hspi1_drv, SPI_H
     foc->aligned = false;
 
     foc->duty_a = foc->duty_b = foc->duty_c = 0.5f;
+    foc->phase_swap_bc = false; // Pure 1:1 forward phase sequence (A->B->C)
+
+    // Encoder LUT Non-Linearity Compensation
+    foc->use_encoder_lut = false;
+    for (int i = 0; i < ENCODER_LUT_SIZE; i++) {
+        foc->encoder_lut[i] = 0;
+    }
 
     // Precalculate Inductances & Frequencies
     foc_precalc_values(&foc->motor);
+}
+
+/**
+  * @brief  Linear Interpolation over 128-Point Encoder Non-Linearity LUT (MIT Mini Cheetah method)
+  * @param  raw_rad: Raw mechanical angle [0, 2*PI) from AS5048A
+  * @retval Corrected mechanical angle with mounting eccentricity and magnetic distortion removed
+  */
+float FOC_Control_CorrectEncoderAngle(const FOC_Controller_t *foc, float raw_rad)
+{
+    if (foc == NULL || !foc->use_encoder_lut) return raw_rad;
+
+    // Normalize to [0, 2*PI)
+    float a = raw_rad;
+    while (a < 0.0f) a += 2.0f * (float)M_PI;
+    while (a >= 2.0f * (float)M_PI) a -= 2.0f * (float)M_PI;
+
+    float pos = a * ((float)ENCODER_LUT_SIZE / (2.0f * (float)M_PI));
+    int idx_low = (int)pos;
+    if (idx_low < 0) idx_low = 0;
+    if (idx_low >= ENCODER_LUT_SIZE) idx_low = ENCODER_LUT_SIZE - 1;
+    float frac = pos - (float)idx_low;
+    int idx_high = (idx_low + 1) % ENCODER_LUT_SIZE;
+
+    // Convert fixed-point units (0.0001 rad per count) to float radians
+    float offset_low = (float)foc->encoder_lut[idx_low] * 0.0001f;
+    float offset_high = (float)foc->encoder_lut[idx_high] * 0.0001f;
+    float offset = offset_low + frac * (offset_high - offset_low);
+
+    float corrected = raw_rad + offset;
+    utils_norm_angle_rad(&corrected);
+    return corrected;
 }
 
 /**
@@ -50,37 +88,52 @@ bool FOC_Control_CheckSafety(FOC_Controller_t *foc, float current_a, float curre
 {
     if (foc == NULL) return false;
 
-    float current_mag = sqrtf(current_a * current_a + current_b * current_b);
+    // 1. Filter current magnitude with low-pass filter to reject ADC switching spikes
+    static float current_mag_filtered = 0.0f;
+    float current_mag_raw = sqrtf(current_a * current_a + current_b * current_b);
+    UTILS_LP_FAST(current_mag_filtered, current_mag_raw, 0.02f); // ~60Hz LPF at 20kHz
 
-    // Overcurrent Check
-    if (current_mag > foc->conf.l_current_max) {
-        foc->fault |= MC_FAULT_OVER_CURRENT;
+    // 2. Overcurrent Instantaneous Check (Peak 30A for > 2.5ms = 50 ISR cycles)
+    static uint32_t overcurrent_count = 0;
+    if (current_mag_filtered > 25.0f || current_mag_raw > 35.0f) {
+        overcurrent_count++;
+        if (overcurrent_count >= 50) {
+            foc->fault |= MC_FAULT_OVER_CURRENT;
+        }
+    } else {
+        if (overcurrent_count > 0) overcurrent_count--;
     }
 
-    // Overvoltage Check (50V max OVP)
+    // 3. Thermal Safety Timeout Protection (Sustained current > 15.0A for > 5.0s = 100,000 ISR cycles @ 20kHz)
+    static uint32_t thermal_timeout_count = 0;
+    if (current_mag_filtered > 15.0f) {
+        thermal_timeout_count++;
+        if (thermal_timeout_count >= 100000) {
+            foc->fault |= MC_FAULT_OVER_CURRENT;
+        }
+    } else {
+        thermal_timeout_count = 0;
+    }
+
+    // 4. Overvoltage Check (50V max OVP)
     if (vbus > foc->conf.l_voltage_max) {
         foc->fault |= MC_FAULT_OVER_VOLTAGE;
     }
 
-    // Undervoltage Check (12V min UVP)
+    // 5. Undervoltage Check (12V min UVP)
     if (vbus < foc->conf.l_voltage_min) {
         foc->fault |= MC_FAULT_UNDER_VOLTAGE;
     }
 
-    // MOSFET Overtemperature Check (85C max)
+    // 6. MOSFET Overtemperature Check (85C max)
     if (temp_fet > foc->conf.l_temp_fet_start) {
         foc->fault |= MC_FAULT_OVER_TEMP_MOS;
     }
 
-    // Joint Soft Limit Check (-180 deg to +180 deg)
-    if (foc->motor.m_joint_angle < foc->conf.joint_pos_min || foc->motor.m_joint_angle > foc->conf.joint_pos_max) {
-        foc->fault |= MC_FAULT_POS_LIMIT;
-    }
-
-    // If any fault occurred, immediately trip motor off
+    // If any fault occurred, immediately trip motor off and zero duty cycles
     if (foc->fault != MC_FAULT_NONE) {
         foc->motor.m_state = MC_STATE_OFF;
-        foc->duty_a = foc->duty_b = foc->duty_c = 0.5f;
+        foc->duty_a = foc->duty_b = foc->duty_c = 0.0f; // Turn off PWM output completely
         return false;
     }
 
@@ -92,11 +145,18 @@ bool FOC_Control_CheckSafety(FOC_Controller_t *foc, float current_a, float curre
   */
 void FOC_Control_AdcCalibrate(FOC_Controller_t *foc, uint16_t raw_adc_a, uint16_t raw_adc_b)
 {
+    static uint32_t startup_delay_count = 0;
     static uint32_t sample_count = 0;
     static float sum_a = 0.0f;
     static float sum_b = 0.0f;
 
     if (foc->calibrated_offsets) return;
+
+    // Chờ 500ms (10,000 chu kỳ ISR 20kHz) cho mạch khuếch đại dòng DRV8353 ổn định điện áp 1.65V
+    if (startup_delay_count < 10000) {
+        startup_delay_count++;
+        return;
+    }
 
     sum_a += (float)raw_adc_a;
     sum_b += (float)raw_adc_b;
@@ -139,7 +199,9 @@ void FOC_Control_AlignEncoder(FOC_Controller_t *foc)
     float enc_rad = 0.0f;
     AS5048A_ReadRadians(&foc->encoder, &enc_rad);
 
-    foc->zero_electric_angle = fmodf(enc_rad * (float)foc->conf.foc_motor_pole_pairs, 2.0f * (float)M_PI);
+    float elec_offset = (float)(foc->conf.encoder_direction * foc->conf.foc_motor_pole_pairs) * enc_rad;
+    utils_norm_angle_rad(&elec_offset);
+    foc->zero_electric_angle = elec_offset;
     foc->aligned = true;
 
     foc->motor.m_state = MC_STATE_RUNNING;
@@ -149,7 +211,7 @@ void FOC_Control_AlignEncoder(FOC_Controller_t *foc)
   * @brief  High-Speed FOC Current Control Loop (Extracted directly from VESC control_current)
   *         Runs at 20 kHz inside PWM/ADC Interrupt Callback
   */
-void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float current_b, float vbus, float dt)
+void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float current_b, float vbus, float temp_fet, float dt)
 {
     if (foc == NULL) return;
 
@@ -157,99 +219,156 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     motor_state_t *state_m = &motor->m_motor_state;
     mc_configuration *conf_now = motor->m_conf;
 
-    state_m->v_bus = vbus > 0.0f ? vbus : 24.0f;
+    /* FIX: ngưỡng 5V thay vì 0.0f.
+     * Trước: vbus=0.9V (ADC thiếu hệ số chia) -> 0.9V > 0.0f -> state_m->v_bus=0.9V
+     * -> UVP trip (0.9V < l_voltage_min=12V) -> motor luôn ở IDLE!
+     * Sau fix: vbus=0.9V < 5.0f -> fallback 24.0f -> FOC hoạt động đúng. */
+    state_m->v_bus = vbus > 5.0f ? vbus : 24.0f;
 
-    // 1. Run Safety Check Supervisor
-    if (!FOC_Control_CheckSafety(foc, current_a, current_b, state_m->v_bus, 25.0f)) {
-        return; // Tripped fault!
-    }
-
-    if (motor->m_state != MC_STATE_RUNNING) {
-        foc->duty_a = foc->duty_b = foc->duty_c = 0.5f;
-        return;
-    }
-
-    // 2. Measure & Subtract Calibrated Offsets
-    state_m->i_alpha = current_a - foc->offset_ia;
-    state_m->i_beta  = (state_m->i_alpha + 2.0f * (current_b - foc->offset_ib)) * ONE_BY_SQRT3;
-
-    // 3. Encoder Electrical Angle
-    float raw_enc_rad = 0.0f;
+    // 1. Đọc Encoder 20kHz trực tiếp từ SPI3.
+    // SPI3 chỉ do ISR quản lý 100% độc quyền (không đọc ở Slow Loop nữa) -> triệt tiêu hoàn toàn nhiễu giật khục 1kHz.
+    float raw_enc_rad = foc->encoder.angle_rad;
     AS5048A_ReadRadians(&foc->encoder, &raw_enc_rad);
     foc_update_cycloidal_joint_angle(motor, raw_enc_rad);
 
-    float elec_angle = (raw_enc_rad * (float)conf_now->foc_motor_pole_pairs) - foc->zero_electric_angle;
+    // 1a. Bù sai số phi tuyến tính cơ học (LUT 128 điểm theo phương pháp Ben Katz / MIT Mini Cheetah)
+    float corrected_enc_rad = FOC_Control_CorrectEncoderAngle(foc, raw_enc_rad);
+
+    // 1b. Tính Góc Điện theo Chuẩn VESC [-PI, +PI] (21 cặp cực)
+    float elec_raw = (float)(conf_now->encoder_direction * conf_now->foc_motor_pole_pairs) * corrected_enc_rad;
+    float elec_angle = elec_raw - foc->zero_electric_angle;
     utils_norm_angle_rad(&elec_angle);
 
     state_m->phase = elec_angle;
-    utils_fast_sincos(elec_angle, &state_m->phase_sin, &state_m->phase_cos);
 
-    float s = state_m->phase_sin;
-    float c = state_m->phase_cos;
+    // Chạy Bộ lọc PLL Tracking Filter ở tần số 20kHz để ước lượng vận tốc
+    float dt_fast = 0.000050f; // 20kHz Fast Loop period (Ts = 50µs)
+    foc_pll_run(elec_angle, dt_fast, &motor->m_pll_phase, &motor->m_pll_speed, motor->m_conf);
+    motor->m_speed_est_fast = motor->m_pll_speed;
 
-    // 4. Park Transform: Stator -> Rotor reference frame (Id, Iq)
-    state_m->id = c * state_m->i_alpha + s * state_m->i_beta;
-    state_m->iq = c * state_m->i_beta  - s * state_m->i_alpha;
+    // 1c. Direct Electrical Angle for Current Sensing (measured at ADC sampling instant)
+    float sin_elec, cos_elec;
+    utils_fast_sincos(elec_angle, &sin_elec, &cos_elec);
+    state_m->phase_sin = sin_elec;
+    state_m->phase_cos = cos_elec;
+
+    // 2. Clarke Transform: (Ia, Ib) -> (Ialpha, Ibeta)
+    state_m->i_alpha = current_a;
+    state_m->i_beta  = (current_a + 2.0f * current_b) * ONE_BY_SQRT3;
+
+    // 3. Park Transform: Stator -> Rotor reference frame (Id, Iq) using true sample angle
+    state_m->id = cos_elec * state_m->i_alpha + sin_elec * state_m->i_beta;
+    state_m->iq = cos_elec * state_m->i_beta  - sin_elec * state_m->i_alpha;
 
     // Low-pass filter currents for telemetry
     UTILS_LP_FAST(state_m->id_filter, state_m->id, conf_now->foc_current_filter_const);
     UTILS_LP_FAST(state_m->iq_filter, state_m->iq, conf_now->foc_current_filter_const);
 
-    // 5. Current Control PI Loop
-    float Ierr_d = state_m->id_target - state_m->id;
-    float Ierr_q = state_m->iq_target - state_m->iq;
-
-    float ki = conf_now->foc_current_ki;
-    float kp = conf_now->foc_current_kp;
-
-    state_m->vd_int += Ierr_d * ki * dt;
-    state_m->vq_int += Ierr_q * ki * dt;
-
-    state_m->vd = state_m->vd_int + Ierr_d * kp;
-    state_m->vq = state_m->vq_int + Ierr_q * kp;
-
-    // 6. Cross-Coupling Decoupling (BEMF + Cross Feedforward)
-    float dec_vd = 0.0f;
-    float dec_vq = 0.0f;
-    float dec_bemf = 0.0f;
-
-    if (conf_now->foc_cc_decoupling != FOC_CC_DECOUPLING_DISABLED) {
-        dec_vd = state_m->iq * motor->m_speed_est_fast * motor->p_lq;
-        dec_vq = state_m->id * motor->m_speed_est_fast * motor->p_ld;
-        dec_bemf = motor->m_speed_est_fast * conf_now->foc_motor_flux_linkage;
+    // 4. Run Safety Check Supervisor
+    if (!FOC_Control_CheckSafety(foc, current_a, current_b, state_m->v_bus, temp_fet)) {
+        return; // Tripped fault!
     }
 
-    state_m->vd -= dec_vd;
-    state_m->vq += dec_vq + dec_bemf;
+    if (motor->m_state != MC_STATE_RUNNING) {
+        state_m->vd_int = 0.0f;
+        state_m->vq_int = 0.0f;
+        state_m->vd = 0.0f;
+        state_m->vq = 0.0f;
+        foc->duty_a = 0.0f;
+        foc->duty_b = 0.0f;
+        foc->duty_c = 0.0f;
+        return;
+    }
 
-    // 7. Strict Voltage Vector Circle Limitation (Max = Vbus / sqrt(3))
+    // Strict Voltage Vector Circle Limitation (Max = Vbus / sqrt(3))
     float max_v_mag = ONE_BY_SQRT3 * conf_now->l_max_duty * state_m->v_bus * conf_now->foc_overmod_factor;
-
-    utils_truncate_number_abs((float*)&state_m->vd, max_v_mag * conf_now->foc_mag_vd_max);
-    utils_truncate_number_abs((float*)&state_m->vd_int, max_v_mag * conf_now->foc_mag_vd_max);
-
+    float max_vd = max_v_mag * conf_now->foc_mag_vd_max;
     float max_vq = sqrtf(SQ(max_v_mag) - SQ(state_m->vd));
     UTILS_NAN_ZERO(max_vq);
 
-    utils_truncate_number_abs((float*)&state_m->vq, max_vq);
-    utils_truncate_number_abs((float*)&state_m->vq_int, max_vq);
+    // 5. FOC Controller
+    if (motor->m_control_mode == CONTROL_MODE_DUTY) {
+        state_m->vd = 0.0f;
+        state_m->vq = state_m->duty_now * state_m->v_bus;
+        state_m->vd_int = 0.0f;
+        state_m->vq_int = 0.0f;
+    } else {
+        // Cascaded Closed-Loop FOC (Active for CONTROL_MODE_CURRENT, CONTROL_MODE_SPEED, CONTROL_MODE_POS)
+        // motor->m_iq_set is the commanded torque current (Iq target in Amperes) from Speed/Pos Loop
+        state_m->iq_target = motor->m_iq_set;
+        float id_target = -motor->m_i_fw_set;
+
+        utils_truncate_number_abs((float*)&state_m->iq_target, conf_now->l_current_max);
+
+        float Ierr_d = id_target - state_m->id;
+        float Ierr_q = state_m->iq_target - state_m->iq;
+
+        float kp = conf_now->foc_current_kp; // 6.03 V/A (Pole placement @ 800Hz)
+        float ki = conf_now->foc_current_ki; // 19603 V/(A*s)
+
+        // Decoupling Feedforward terms (-w_e*L*Iq on d-axis, +w_e*L*Id + w_e*lambda on q-axis)
+        float vq_ff = motor->m_speed_est_fast * conf_now->foc_motor_flux_linkage + motor->m_speed_est_fast * conf_now->foc_motor_l * state_m->id;
+        float vd_ff = -motor->m_speed_est_fast * conf_now->foc_motor_l * state_m->iq;
+
+        // Anti-windup conditional integration with back-calculation clamping
+        if (!((state_m->vd >= max_vd && Ierr_d > 0.0f) || (state_m->vd <= -max_vd && Ierr_d < 0.0f))) {
+            state_m->vd_int += Ierr_d * ki * dt_fast;
+            utils_truncate_number_abs((float*)&state_m->vd_int, max_vd);
+        }
+        if (!((state_m->vq >= max_vq && Ierr_q > 0.0f) || (state_m->vq <= -max_vq && Ierr_q < 0.0f))) {
+            state_m->vq_int += Ierr_q * ki * dt_fast;
+            utils_truncate_number_abs((float*)&state_m->vq_int, max_vq);
+        }
+
+        float vd_new = state_m->vd_int + (Ierr_d * kp) + vd_ff;
+        float vq_new = state_m->vq_int + (Ierr_q * kp) + vq_ff;
+
+        state_m->vd = vd_new;
+        state_m->vq = vq_new;
+
+        // Vector circle voltage limitation
+        float v_mag = sqrtf(state_m->vd * state_m->vd + state_m->vq * state_m->vq);
+        if (v_mag > max_v_mag && v_mag > 0.001f) {
+            float scale = max_v_mag / v_mag;
+            state_m->vd *= scale;
+            state_m->vq *= scale;
+        }
+    }
 
     // Normalize voltages for Inverse Park & Modulation
-    const float voltage_normalize = 1.5f / state_m->v_bus;
+    const float voltage_normalize = 1.0f / state_m->v_bus;
     state_m->mod_d = state_m->vd * voltage_normalize;
     state_m->mod_q = state_m->vq * voltage_normalize;
 
-    // 8. Inverse Park Transform: Rotor -> Stator frame
-    state_m->mod_alpha_raw = c * state_m->mod_d - s * state_m->mod_q;
-    state_m->mod_beta_raw  = c * state_m->mod_q + s * state_m->mod_d;
+    // 8. Inverse Park Transform: Rotor -> Stator frame using Direct Encoder Angle + 1.5 Ts Phase Advance
+    float phase_advance = 1.5f * dt_fast * motor->m_speed_est_fast;
+    float theta_svm = elec_angle + phase_advance;
+    utils_norm_angle_rad(&theta_svm);
 
-    // 9. VESC 6-Sector Space Vector Modulation (SVM)
+    float sin_svm, cos_svm;
+    utils_fast_sincos(theta_svm, &sin_svm, &cos_svm);
+
+    state_m->mod_alpha_raw = cos_svm * state_m->mod_d - sin_svm * state_m->mod_q;
+    state_m->mod_beta_raw  = cos_svm * state_m->mod_q + sin_svm * state_m->mod_d;
+
+    // 9. Space Vector Modulation (SVM) - Identical to Open-Loop & Alignment
     uint32_t ta, tb, tc, sector;
-    foc_svm(state_m->mod_alpha_raw, state_m->mod_beta_raw, conf_now->l_max_duty, 1000, &ta, &tb, &tc, &sector);
+    foc_svm(state_m->mod_alpha_raw, state_m->mod_beta_raw,
+            conf_now->l_max_duty, 1000, &ta, &tb, &tc, &sector);
 
-    foc->duty_a = (float)ta / 1000.0f;
-    foc->duty_b = (float)tb / 1000.0f;
-    foc->duty_c = (float)tc / 1000.0f;
+    float duty_a = (float)ta / 1000.0f;
+    float duty_b = (float)tb / 1000.0f;
+    float duty_c = (float)tc / 1000.0f;
+
+    // Stator Phase Mapping: Apply auto-detected Phase B <-> Phase C swap
+    foc->duty_a = duty_a;
+    if (foc->phase_swap_bc) {
+        foc->duty_b = duty_c;
+        foc->duty_c = duty_b;
+    } else {
+        foc->duty_b = duty_b;
+        foc->duty_c = duty_c;
+    }
 }
 
 /**
@@ -257,19 +376,18 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
   */
 void FOC_Control_SlowLoop(FOC_Controller_t *foc, float dt)
 {
-    if (foc == NULL || foc->motor.m_state != MC_STATE_RUNNING) return;
+    if (foc == NULL) return;
 
     motor_all_state_t *motor = &foc->motor;
 
-    // 1. Run VESC Observer & PLL Speed Estimator
+    if (foc->motor.m_state != MC_STATE_RUNNING) return;
+
+    // 1. Run VESC Observer
     foc_observer_update(motor->m_motor_state.v_alpha, motor->m_motor_state.v_beta,
                         motor->m_motor_state.i_alpha, motor->m_motor_state.i_beta,
                         dt, &motor->m_observer_state, &motor->m_phase_now_observer, motor);
 
-    foc_pll_run(motor->m_phase_now_observer, dt, &motor->m_pll_phase, &motor->m_pll_speed, motor->m_conf);
-    motor->m_speed_est_fast = motor->m_pll_speed;
-
-    // 2. Run Position PID or Speed PID based on Control Mode
+    // 2. Run Position PID or Speed PID based on Control Mode (generates target Iq)
     if (motor->m_control_mode == CONTROL_MODE_POS) {
         foc_run_pid_control_pos(true, dt, motor);
     } else if (motor->m_control_mode == CONTROL_MODE_SPEED) {

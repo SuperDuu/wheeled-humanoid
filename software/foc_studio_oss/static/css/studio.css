@@ -1,0 +1,354 @@
+/* ==============================================================================
+   FOC Telemetry Studio OSS - Theme & Stylesheet
+   Supports Clean Modern Light & Dark Themes with Per-Scope Wheel Zoom & Pan
+   ============================================================================== */
+
+:root {
+  --color-phase-a: #ef4444; /* Red / Coral */
+  --color-phase-b: #10b981; /* Emerald Green */
+  --color-phase-c: #3b82f6; /* Bright Blue */
+
+  --color-id: #f59e0b;       /* Amber */
+  --color-iq: #8b5cf6;       /* Purple */
+  --color-target: #06b6d4;   /* Cyan */
+  --color-angle: #ec4899;    /* Pink */
+  --color-speed: #10b981;    /* Green */
+  --color-danger: #dc2626;
+
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+}
+
+/* Dark Theme (Default) */
+[data-theme="dark"] {
+  --bg-base: #0b0f19;
+  --bg-surface: #111827;
+  --bg-card: #1f293d;
+  --bg-card-hover: #26334d;
+  --border-color: #2e3d5b;
+  --border-focus: #3b82f6;
+
+  --text-primary: #f9fafb;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+
+  --canvas-bg: #070b12;
+  --canvas-grid: #1e293b;
+  --canvas-zero: #334155;
+  --scope-header-bg: #151e2e;
+  --navbar-bg: rgba(17, 24, 39, 0.95);
+  --input-bg: #111827;
+  --input-border: #374151;
+}
+
+/* Light Theme */
+[data-theme="light"] {
+  --bg-base: #f1f5f9;
+  --bg-surface: #ffffff;
+  --bg-card: #f8fafc;
+  --bg-card-hover: #e2e8f0;
+  --border-color: #cbd5e1;
+  --border-focus: #2563eb;
+
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+
+  --canvas-bg: #ffffff;
+  --canvas-grid: #e2e8f0;
+  --canvas-zero: #94a3b8;
+  --scope-header-bg: #f8fafc;
+  --navbar-bg: rgba(255, 255, 255, 0.95);
+  --input-bg: #ffffff;
+  --input-border: #cbd5e1;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  line-height: 1.5;
+  overflow-x: hidden;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Header Navbar */
+.app-navbar {
+  background: var(--navbar-bg);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-color);
+  padding: 0.65rem 1.25rem;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+.brand-badge {
+  font-size: 0.72rem;
+  background: rgba(59, 130, 246, 0.12);
+  color: #3b82f6;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  background-color: #6b7280;
+  transition: all 0.3s ease;
+}
+
+.status-dot.connected {
+  background-color: #10b981;
+  box-shadow: 0 0 8px #10b98180;
+}
+
+.status-dot.simulating {
+  background-color: #f59e0b;
+  box-shadow: 0 0 8px #f59e0b80;
+}
+
+/* Form Inputs */
+.custom-input {
+  background-color: var(--input-bg) !important;
+  border-color: var(--input-border) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Metric Cards */
+.metric-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.65rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.2s;
+}
+
+.metric-card:hover {
+  border-color: #475569;
+}
+
+.metric-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.metric-value {
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-top: 0.15rem;
+}
+
+.metric-unit {
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-left: 0.2rem;
+}
+
+/* Oscilloscope Cards */
+.scope-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.scope-header {
+  background: var(--scope-header-bg);
+  border-bottom: 1px solid var(--border-color);
+  padding: 0.45rem 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.scope-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.scope-controls-group {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.scope-badges {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.scope-badge {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.btn-scope-tool {
+  font-size: 0.68rem;
+  padding: 0.12rem 0.4rem;
+  border-radius: 4px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.zoom-slider-mini {
+  width: 75px;
+  height: 4px;
+  margin: 0 0.2rem;
+}
+
+.canvas-container {
+  position: relative;
+  width: 100%;
+  height: 190px;
+  background-color: var(--canvas-bg);
+  overflow: hidden;
+  cursor: grab;
+}
+
+.canvas-container:active {
+  cursor: grabbing;
+}
+
+canvas.scope-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Mouse Scroll Hint Overlay */
+.scope-hint-badge {
+  position: absolute;
+  bottom: 6px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #94a3b8;
+  font-size: 0.65rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  pointer-events: none;
+  font-family: var(--font-mono);
+}
+
+/* Controls Panel */
+.panel-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.85rem;
+}
+
+.panel-header {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.65rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Mode Buttons */
+.mode-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4rem;
+  margin-bottom: 0.65rem;
+}
+
+.btn-mode {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.35rem;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-mode:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.btn-mode.active {
+  background: #2563eb;
+  border-color: #3b82f6;
+  color: white;
+}
+
+.btn-estop {
+  background: #b91c1c;
+  color: white;
+  border: 1px solid #ef4444;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.5rem;
+  border-radius: 5px;
+  width: 100%;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-size: 0.82rem;
+}
+
+.btn-estop:hover {
+  background: #dc2626;
+}
+
+/* Diagnostic Log */
+.log-terminal {
+  background: var(--canvas-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  padding: 0.45rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  height: 160px;
+  overflow-y: auto;
+  color: var(--text-secondary);
+}
+
+.log-line {
+  margin-bottom: 0.15rem;
+  line-height: 1.35;
+}
+
+.log-line.system { color: #0284c7; }
+.log-line.error { color: #ef4444; font-weight: bold; }
+.log-line.warn { color: #d97706; }
+.log-line.telemetry { color: #059669; }

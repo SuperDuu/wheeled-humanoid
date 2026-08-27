@@ -1,0 +1,27 @@
+{
+  "timestamp": "2026-08-18 10:27:24",
+  "port": "/dev/ttyACM0",
+  "vbus_volts": 23.16,
+  "encoder_dir": 1,
+  "zero_elec_angle_rad": 1.3568,
+  "zero_elec_angle_deg": 77.74,
+  "current_offset_ia": 0.0,
+  "current_offset_ib": 0.0,
+  "kirchhoff_sum_error_amps": 0.0,
+  "vq_mode_success": false,
+  "vq_avg_speed_rpm": 0.57,
+  "vq_avg_iq_measured": -0.55,
+  "iq_mode_success": false,
+  "iq_tracking_error_amps": 9.981,
+  "fault_occurred": false,
+  "fault_code": 0,
+  "diagnosis_verdict": "FAIL_ENCODER_OR_PHASE",
+  "detected_issues": [
+    "Ở chế độ VQ (Voltage-Mode), tốc độ động cơ gần như bằng 0 (0.57 RPM).",
+    "Dòng điện đo về Iq BỊ NGƯỢC DẤU so với dòng mục tiêu (Target > 0 nhưng Measured < 0)."
+  ],
+  "action_items": [
+    "Kiểm tra xem động cơ có bị kẹt cơ khí hộp số 1:17 hay Zero Offset bị lệch 90 độ (ép áp vào trục D thay vì trục Q).",
+    "Đổi dấu dòng trong main.c (dòng 1643-1644): Đổi `current_b = -((float)raw_ib ...)` thành `+`."
+  ]
+}
