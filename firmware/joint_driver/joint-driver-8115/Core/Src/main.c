@@ -1,27 +1,34 @@
 /* USER CODE BEGIN Header */
 /**
-  ******************************************************************************
-  * @file           : main.c
-  * @brief          : Main program body
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2026 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
+ ******************************************************************************
+ * @file           : main.c
+ * @brief          : Main program body
+ ******************************************************************************
+ * @attention
+ *
+ * Copyright (c) 2026 STMicroelectronics.
+ * All rights reserved.
+ *
+ * This software is licensed under terms that can be found in the LICENSE file
+ * in the root directory of this software component.
+ * If no LICENSE file comes with this software, it is provided AS-IS.
+ *
+ ******************************************************************************
+ */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "usb_device.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "foc_control.h"
 #include "motor_interface.h"
+#include "comm_can.h"
+#include "comm_telemetry.h"
+#include "vesc_utils.h"
+#include <math.h>
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -32,6 +39,31 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
+/* ================================================================
+ * ADC Regular Channel Definitions (từ file .ioc)
+ * Tất cả đều nằm trên ADC1, đọc bằng polling trong slow loop
+ * ================================================================ */
+
+/* Tỷ lệ bộ chia áp VBUS trên PCB: Vbus_real = Vadc × VBUS_DIVIDER_RATIO
+ * Đã hiệu chỉnh: cấp 24.6V thực tế, ratio cũ 12.915 đọc ra 11.85V
+ * → ratio đúng = 12.915 × (24.6 / 11.85) ≈ 26.81
+ * TODO: Đo chính xác hơn bằng nguồn chuẩn nếu cần */
+#define VBUS_DIVIDER_RATIO    26.81f
+
+/* Hệ số chuyển đổi NTC thermistor cho FET_TEMP
+ * TODO: SỬA THEO MẠCH THẬT (phụ thuộc NTC + mạch phân áp) */
+#define FET_TEMP_OFFSET       0.0f
+#define FET_TEMP_SCALE        1.0f   /* °C per ADC volt, placeholder */
+
+/* Tỷ lệ bộ chia áp VSENSE pha A/B/C (Back-EMF sensing)
+ * TODO: SỬA THEO SCHEMATIC THẬT */
+#define VSENSE_DIVIDER_RATIO  12.915f
+
+/* ADC Reference voltage và resolution */
+#define ADC_VREF              3.3f
+#define ADC_MAX_VALUE         4096.0f
+#define ADC_TO_VOLT           (ADC_VREF / ADC_MAX_VALUE)
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -41,6 +73,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
+ADC_HandleTypeDef hadc2;
 
 COMP_HandleTypeDef hcomp1;
 COMP_HandleTypeDef hcomp2;
@@ -58,12 +91,129 @@ TIM_HandleTypeDef htim2;
 
 UART_HandleTypeDef huart1;
 
-PCD_HandleTypeDef hpcd_USB_FS;
-
 /* USER CODE BEGIN PV */
 float current_joint_deg = 0.0f;
 float current_joint_rpm = 0.0f;
-float current_iq_amps   = 0.0f;
+float current_iq_amps = 0.0f;
+float current_vbus = 0.0f;
+
+/* Bộ đếm chia tần cho Slow Loop 1kHz */
+static volatile uint32_t slow_loop_divider = 0;
+
+/* ================================================================
+ * Kết quả đọc ADC Regular Channels + DRV8353 SPI Status
+ * ================================================================ */
+
+
+volatile ADC_Readings_t g_adc_readings = {
+    .vbus = 24.0f,
+    .fet_temp = 25.0f
+};
+
+/*
+ * Hằng số chuyển đổi ADC → Ampere
+ * Công thức: ADC_TO_AMPS = (V_ref / ADC_resolution) / (R_shunt × CSA_Gain)
+ *
+ * TODO: ĐIỀU CHỈNH THEO GIÁ TRỊ R_SHUNT VÀ CSA GAIN THẬT TRÊN PCB CỦA BẠN
+ *       R_shunt = 1mΩ (0.001Ω), CSA_Gain = 20V/V → ADC_TO_AMPS ≈ 40.28
+ *       R_shunt = 0.5mΩ, CSA_Gain = 20V/V → ADC_TO_AMPS ≈ 80.57
+ *       R_shunt = 2mΩ, CSA_Gain = 20V/V → ADC_TO_AMPS ≈ 20.14
+ */
+#define CURRENT_SENSE_R_SHUNT 0.002f /* Ohm - SỬA THEO PCB THẬT (R002) */
+#define CURRENT_SENSE_CSA_GAIN 20.0f /* V/V - SỬA THEO PCB THẬT */
+#define ADC_TO_AMPS                                                            \
+  ((3.3f / 4096.0f) / (CURRENT_SENSE_R_SHUNT * CURRENT_SENSE_CSA_GAIN))
+
+/* Biến phục vụ test chiều quay động cơ và encoder */
+volatile int run_direction_test = 0;  /* Set = 1 trong Live Expressions để chạy */
+volatile int test_result = 0;         /* 0: Idle, 1: Đang test, 2: OK, 3: Ngược chiều, -1: Lỗi */
+
+/* Cấu trúc lưu log nhích động cơ từng bước */
+typedef struct {
+  float angle;
+  uint32_t ta;
+  uint32_t tb;
+  uint32_t tc;
+  uint16_t raw_angle;
+  uint16_t ccr1;      /* Giá trị thực tế TIM1->CCR1 sau khi ghi */
+  uint16_t ccr2;      /* Giá trị thực tế TIM1->CCR2 sau khi ghi */
+  uint16_t ccr3;      /* Giá trị thực tế TIM1->CCR3 sau khi ghi */
+  uint32_t isr_count; /* Số lần ADC ISR đã chạy tại thời điểm log */
+} Step_Debug_t;
+
+/* Cấu trúc debug cho bài test chiều quay */
+typedef struct {
+  float start_angle;
+  float end_angle;
+  float diff_angle;
+  uint16_t raw_start;
+  uint16_t raw_end;
+  float vbus;
+  uint8_t moe;
+  uint8_t break_flag;
+  uint8_t step_reached;
+  uint8_t calibrated;   /* ADC offset calibration hoàn tất? */
+  uint16_t ccer;
+  uint16_t cnt;         /* TIM1->CNT snapshot - timer có đang đếm? */
+  uint16_t bdtr;        /* TIM1->BDTR snapshot */
+  uint16_t drv_reg_00;
+  uint16_t drv_reg_01;
+  uint16_t drv_reg_02;
+  uint16_t drv_reg_03;
+  uint16_t drv_reg_04;
+  uint16_t drv_reg_05;
+  uint16_t drv_reg_06;
+  uint32_t isr_at_start;  /* ADC ISR count khi bắt đầu test */
+  uint32_t isr_at_end;    /* ADC ISR count khi kết thúc test */
+  Step_Debug_t steps[10]; /* Mảng lưu log 10 lần trong vòng lặp test */
+} Debug_Test_t;
+
+volatile Debug_Test_t g_dbg_test = {0};
+volatile uint32_t g_adc_isr_counter = 0; /* Đếm số lần ADC ISR callback chạy */
+
+/* ===== ENCODER ALIGNMENT DEBUG ===== */
+volatile int run_alignment = 0;   /* Set = 1 trong Live Expressions để chạy alignment */
+volatile int align_result = 0;    /* 0: Idle, 1: Đang chạy, 2: OK, -1: Lỗi */
+
+typedef struct {
+  float zero_electric_angle;  /* Góc điện offset (rad) */
+  float encoder_rad;          /* Góc encoder tại thời điểm lock (rad) */
+  float vbus;                 /* VBUS khi alignment */
+  float current_a;            /* Dòng pha A khi lock (A) */
+  float current_b;            /* Dòng pha B khi lock (A) */
+  float current_c;            /* Dòng pha C khi lock (A) */
+  float vd_applied;           /* Điện áp Vd đã áp dụng (V) */
+  uint16_t raw_angle;         /* Raw encoder angle */
+  uint8_t aligned;            /* 1 = alignment thành công */
+  int8_t enc_dir;             /* encoder_direction đang dùng */
+} Align_Debug_t;
+
+volatile Align_Debug_t g_dbg_align = {0};
+
+/* ===== CURRENT SENSING DEBUG (Phase 2) ===== */
+volatile float g_dbg_ia = 0, g_dbg_ib = 0, g_dbg_ic = 0; /* Dòng điện realtime */
+volatile float g_dbg_offset_ia = 0, g_dbg_offset_ib = 0;  /* ADC offsets */
+
+/* ===== PHASE 3 & 4: FOC CLOSED-LOOP DEBUG ===== */
+volatile int run_foc_mode = 0;       /* 0: Dừng, 1: Torque/Current Mode, 2: Position Mode, 3: Speed Mode */
+volatile float iq_target_dbg = 0.0f; /* Dòng Iq mục tiêu (A) - ví dụ 0.5A, 1.0A */
+volatile float id_target_dbg = 0.0f; /* Dòng Id mục tiêu (A) - thường = 0A */
+volatile float pos_target_dbg = 0.0f;/* Vị trí khớp mục tiêu (Radian) - ví dụ 0.0, 0.5, -0.5 */
+volatile float speed_target_dbg = 0.0f; /* Tốc độ mục tiêu (Motor Shaft Mechanical RPM) - ví dụ 100, 500, -500 */
+
+typedef struct {
+  float id;
+  float iq;
+  float id_target;
+  float iq_target;
+  float vd;
+  float vq;
+  float phase_elec;
+  float speed_est_rpm;   /* Tốc độ cơ học thực tế trục động cơ (Mechanical RPM) */
+  float speed_target_rpm;/* Tốc độ cơ học mục tiêu trục động cơ (Mechanical RPM) */
+} FOC_Debug_t;
+
+volatile FOC_Debug_t g_dbg_foc = {0};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -78,15 +228,436 @@ static void MX_FDCAN2_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_SPI3_Init(void);
 static void MX_USART1_UART_Init(void);
-static void MX_USB_PCD_Init(void);
 static void MX_I2C3_Init(void);
 static void MX_TIM2_Init(void);
+static void MX_ADC2_Init(void);
 /* USER CODE BEGIN PFP */
-
+static uint16_t ADC_PollSingleChannel(ADC_HandleTypeDef *hadc, uint32_t channel);
+void ADC_ReadAllChannels(void);
+void DRV8353_ReadStatus(void);
+void Run_MotorDirectionTest(void);
+void Run_EncoderAlignment(void);
+void TIM1_EnsureMoeEnabled(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+/**
+  * @brief  Xóa cờ Break (nếu có) và bật lại MOE (Main Output Enable) cho Timer1.
+  * Việc này giúp giải phóng PWM ra khỏi chế độ bảo vệ nếu chân fault bị sụt áp tạm thời lúc boot.
+  */
+void TIM1_EnsureMoeEnabled(void)
+{
+  __HAL_TIM_CLEAR_FLAG(&htim1, TIM_FLAG_BREAK);
+  __HAL_TIM_CLEAR_FLAG(&htim1, TIM_FLAG_BREAK2);
+  TIM1->BDTR |= TIM_BDTR_MOE;
+}
+
+/**
+  * @brief  Hàm test chiều quay động cơ so với chiều tăng của Encoder.
+  * Quay open-loop bằng cách xoay vector điện áp và đo sự thay đổi của Encoder.
+  */
+void Run_MotorDirectionTest(void)
+{
+  if (run_direction_test != 1) return;
+  test_result = 1; // Đang chạy test
+  g_dbg_test.step_reached = 0;
+
+  // 1. Lưu trạng thái motor hiện tại và chuyển sang trạng thái dừng an toàn tạm thời
+  mc_state old_state = g_foc_controller.motor.m_state;
+  g_foc_controller.motor.m_state = MC_STATE_DETECTING;
+
+  // Đảm bảo PWM giải phóng hoàn toàn khỏi trạng thái Break
+  TIM1_EnsureMoeEnabled();
+
+  // Đọc các giá trị phần cứng tại thời điểm bắt đầu test
+  g_dbg_test.vbus = g_adc_readings.vbus;
+  g_dbg_test.moe = (TIM1->BDTR & TIM_BDTR_MOE) ? 1 : 0;
+  g_dbg_test.break_flag = (__HAL_TIM_GET_FLAG(&htim1, TIM_FLAG_BREAK) != RESET) ? 1 : 0;
+  g_dbg_test.calibrated = g_foc_controller.calibrated_offsets ? 1 : 0;
+  g_dbg_test.cnt = TIM1->CNT;
+  g_dbg_test.bdtr = TIM1->BDTR;
+  g_dbg_test.isr_at_start = g_adc_isr_counter;
+
+  // Đợi dòng điện ổn định - GHI TRỰC TIẾP vào TIM1->CCR
+  uint32_t period = htim1.Init.Period; // = 4249
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, period / 2);
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, period / 2);
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, period / 2);
+  g_foc_controller.duty_a = g_foc_controller.duty_b = g_foc_controller.duty_c = 0.5f;
+  HAL_Delay(100);
+
+  // 2. Đọc góc encoder ban đầu
+  uint16_t raw_start = 0;
+  AS5048A_ReadRawAngle(&g_foc_controller.encoder, &raw_start);
+  g_dbg_test.raw_start = raw_start;
+  g_dbg_test.start_angle = g_foc_controller.encoder.angle_rad;
+
+  float v_test_max = 14.0f; // Áp thử nghiệm 14V - Đủ mạnh để nhích motor qua hộp số 1:17 nhằm đo chính xác encoder_direction
+  float vbus_test = (g_adc_readings.vbus > 6.0f) ? g_adc_readings.vbus : 24.0f;
+  float angle = 0.0f;
+
+  for (int step = 0; step < 200; step++) {
+    // Ramp up v_test dần trong 50 bước đầu để tránh sốc dòng kích hoạt bảo vệ Overcurrent của DRV8353
+    float v_test = (step < 50) ? (v_test_max * (float)step / 50.0f) : v_test_max;
+
+    angle += 0.03f; // Nhích dần góc điện áp
+    float valpha = v_test * cosf(angle);
+    float vbeta  = v_test * sinf(angle);
+
+    // Tính toán SVPWM (sử dụng vbus_test an toàn)
+    uint32_t ta, tb, tc, sector;
+    foc_svm(valpha / vbus_test, vbeta / vbus_test,
+            g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
+
+    // *** GHI TRỰC TIẾP vào TIM1->CCR thay vì chờ ADC callback ***
+    uint32_t ccr1 = (ta * period) / 1000;
+    uint32_t ccr2 = (tb * period) / 1000;
+    uint32_t ccr3 = (tc * period) / 1000;
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, ccr1);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, ccr2);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, ccr3);
+
+    // Cập nhật duty cho ADC callback (nếu callback cũng chạy)
+    g_foc_controller.duty_a = (float)ta / 1000.0f;
+    g_foc_controller.duty_b = (float)tb / 1000.0f;
+    g_foc_controller.duty_c = (float)tc / 1000.0f;
+
+    // Lưu log 10 lần (mỗi 20 bước)
+    if (step % 20 == 0 && step / 20 < 10) {
+      int idx = step / 20;
+      g_dbg_test.steps[idx].angle = angle;
+      g_dbg_test.steps[idx].ta = ta;
+      g_dbg_test.steps[idx].tb = tb;
+      g_dbg_test.steps[idx].tc = tc;
+      // Đọc lại giá trị thực tế từ TIM1 registers
+      g_dbg_test.steps[idx].ccr1 = TIM1->CCR1;
+      g_dbg_test.steps[idx].ccr2 = TIM1->CCR2;
+      g_dbg_test.steps[idx].ccr3 = TIM1->CCR3;
+      g_dbg_test.steps[idx].isr_count = g_adc_isr_counter;
+      uint16_t r_enc = 0;
+      AS5048A_ReadRawAngle(&g_foc_controller.encoder, &r_enc);
+      g_dbg_test.steps[idx].raw_angle = r_enc;
+    }
+
+    // Đọc liên tục để cập nhật UI Web App
+    AS5048A_ReadRawAngle(&g_foc_controller.encoder, &g_foc_controller.encoder.raw_angle);
+    Comm_Telemetry_Process(&g_foc_controller);
+
+    HAL_Delay(8); // Tổng cộng test chạy trong ~1.6 giây
+    g_dbg_test.step_reached = step + 1;
+  }
+
+  // 4. Đọc góc encoder sau khi quay
+  uint16_t raw_end = 0;
+  AS5048A_ReadRawAngle(&g_foc_controller.encoder, &raw_end);
+  g_dbg_test.raw_end = raw_end;
+  g_dbg_test.end_angle = g_foc_controller.encoder.angle_rad;
+  g_dbg_test.isr_at_end = g_adc_isr_counter;
+
+  // 5. Tắt cấp nguồn motor (đưa về safe state) - ghi trực tiếp
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, period / 2);
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, period / 2);
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, period / 2);
+  g_foc_controller.duty_a = g_foc_controller.duty_b = g_foc_controller.duty_c = 0.5f;
+
+  // 6. Tính toán chênh lệch góc và xử lý điểm tràn góc (wrap around)
+  float diff = g_dbg_test.end_angle - g_dbg_test.start_angle;
+  while (diff > 3.14159265f) diff -= 2.0f * 3.14159265f;
+  while (diff < -3.14159265f) diff += 2.0f * 3.14159265f;
+  g_dbg_test.diff_angle = diff;
+
+  // 7. Direction test chỉ kiểm tra motor có quay hay không — chiều thật do ALIGN Step 5 xác định
+  // KHÔNG hardcode encoder_direction ở đây nữa (ALIGN open-loop handoff sẽ auto-detect chính xác)
+  if (diff > 0.05f || diff < -0.05f) {
+    test_result = 2; // OK
+  } else {
+    test_result = -1; // Lỗi (Động cơ không nhúc nhích đủ hoặc kẹt)
+  }
+
+  // Khôi phục lại trạng thái cũ
+  g_foc_controller.motor.m_state = old_state;
+  run_direction_test = 0; // Kết thúc test
+}
+
+void Run_EncoderAlignment(void)
+{
+  if (run_alignment != 1) return;
+  align_result = 1; // Running
+
+  mc_state old_state = g_foc_controller.motor.m_state;
+  g_foc_controller.motor.m_state = MC_STATE_DETECTING;
+
+  TIM1_EnsureMoeEnabled();
+
+  uint32_t period = htim1.Init.Period; // 4249
+  float vbus = g_adc_readings.vbus;
+  if (vbus < 6.0f) vbus = 24.0f;
+
+  /* Giữ DRV8353 ổn định liên tục, không reset EN để tránh trôi DC bias của mạch CSA */
+  TIM1_EnsureMoeEnabled();
+
+  float vd_align = 10.0f; // 10.0V alignment voltage (~2.5A peak torque for solid locking through cycloid gearbox)
+
+  // STEP 1: Lock to Electrical Zero (theta_e = 0)
+  for (int step = 0; step <= 50; step++) {
+    float vd = vd_align * (float)step / 50.0f;
+    float valpha = vd / vbus, vbeta = 0.0f;
+    uint32_t ta, tb, tc, sector;
+    foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
+    if (g_foc_controller.phase_swap_bc) {
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tc * period) / 1000);
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tb * period) / 1000);
+    } else {
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
+    }
+    Comm_Telemetry_Process(&g_foc_controller);
+    HAL_Delay(5);
+  }
+  for (int i = 0; i < 80; i++) {
+    Comm_Telemetry_Process(&g_foc_controller);
+    HAL_Delay(10);
+  }
+
+  // Read starting encoder position (Đọc 2 lần liên tiếp để lấy giá trị mới nhất theo chuẩn SPI AS5048A)
+  float enc_start = 0.0f;
+  AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_start);
+  AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_start);
+
+  // STEP 2: Rotate forward by 1 FULL MECHANICAL REVOLUTION (360 deg = 21 elec revs = 42*PI)
+  // Quay chậm rãi 1 vòng tròn 360 độ hoàn chỉnh (trong 2.0 giây) để xác định chiều cảm biến chính xác 100%
+  float last_enc = enc_start;
+  float total_mech_delta = 0.0f;
+
+  for (int step = 0; step <= 400; step++) {
+    float angle = (42.0f * 3.14159265f) * (float)step / 400.0f;
+    float sin_a, cos_a;
+    utils_fast_sincos(angle, &sin_a, &cos_a);
+    float valpha = (vd_align / vbus) * cos_a;
+    float vbeta  = (vd_align / vbus) * sin_a;
+    uint32_t ta, tb, tc, sector;
+    foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
+    if (g_foc_controller.phase_swap_bc) {
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tc * period) / 1000);
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tb * period) / 1000);
+    } else {
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
+    }
+
+    // Tích lũy liên tục độ dịch chuyển cơ học
+    float current_enc = 0.0f;
+    AS5048A_ReadRadians(&g_foc_controller.encoder, &current_enc);
+    float step_diff = current_enc - last_enc;
+    while (step_diff > 3.14159265f) step_diff -= 2.0f * 3.14159265f;
+    while (step_diff < -3.14159265f) step_diff += 2.0f * 3.14159265f;
+    total_mech_delta += step_diff;
+    last_enc = current_enc;
+
+    Comm_Telemetry_Process(&g_foc_controller);
+    HAL_Delay(5);
+  }
+  for (int i = 0; i < 40; i++) {
+    Comm_Telemetry_Process(&g_foc_controller);
+    HAL_Delay(10);
+  }
+
+  // STEP 3: Auto-detect encoder_direction (+1 or -1) dựa trên tổng 1 vòng quay cơ học (2*PI rad)
+  if (total_mech_delta > 1.0f) {
+    g_foc_controller.conf.encoder_direction = 1;
+    test_result = 2; // Direction +1 detected
+  } else if (total_mech_delta < -1.0f) {
+    g_foc_controller.conf.encoder_direction = -1;
+    test_result = 3; // Direction -1 detected
+  } else {
+    test_result = -1; // Error: motor didn't move
+  }
+
+  g_dbg_align.vbus = vbus;
+  g_dbg_align.enc_dir = g_foc_controller.conf.encoder_direction;
+
+  // STEP 4: Rotate smoothly back to Electrical Zero (theta_e = 0)
+  for (int step = 0; step <= 400; step++) {
+    float angle = (42.0f * 3.14159265f) * (1.0f - (float)step / 400.0f);
+    float sin_a, cos_a;
+    utils_fast_sincos(angle, &sin_a, &cos_a);
+    float valpha = (vd_align / vbus) * cos_a;
+    float vbeta  = (vd_align / vbus) * sin_a;
+    uint32_t ta, tb, tc, sector;
+    foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
+    if (g_foc_controller.phase_swap_bc) {
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tc * period) / 1000);
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tb * period) / 1000);
+    } else {
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
+    }
+    Comm_Telemetry_Process(&g_foc_controller);
+    HAL_Delay(5);
+  }
+  for (int i = 0; i < 80; i++) {
+    Comm_Telemetry_Process(&g_foc_controller);
+    HAL_Delay(10);
+  }
+
+  float enc_zero = 0.0f;
+  AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_zero);
+  AS5048A_ReadRadians(&g_foc_controller.encoder, &enc_zero);
+
+  // Lưu Offset ở Miền Góc Điện (Electrical Domain) theo Chuẩn VESC [-PI, +PI]
+  float elec_offset = (float)(g_foc_controller.conf.encoder_direction * g_foc_controller.conf.foc_motor_pole_pairs) * enc_zero;
+  utils_norm_angle_rad(&elec_offset);
+  g_foc_controller.zero_electric_angle = elec_offset;
+  g_foc_controller.aligned = true;
+
+  // Log debug
+  g_dbg_align.zero_electric_angle = enc_zero;
+  g_dbg_align.encoder_rad = enc_zero;
+  g_dbg_align.aligned = 1;
+
+  // STEP 5: Smooth ramp down to 0V
+  for (int i = 30; i >= 0; i--) {
+    float vd = (vd_align * (float)i / 30.0f);
+    float valpha = vd / vbus, vbeta = 0.0f;
+    uint32_t ta, tb, tc, sector;
+    foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
+    if (g_foc_controller.phase_swap_bc) {
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tc * period) / 1000);
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tb * period) / 1000);
+    } else {
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
+    }
+    Comm_Telemetry_Process(&g_foc_controller);
+    HAL_Delay(4);
+  }
+
+  // Safe state
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, period / 2);
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, period / 2);
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, period / 2);
+  g_foc_controller.duty_a = g_foc_controller.duty_b = g_foc_controller.duty_c = 0.5f;
+
+  HAL_Delay(50);
+  g_foc_controller.fault = MC_FAULT_NONE;
+  g_foc_controller.motor.m_state = old_state;
+  align_result = 2; // OK
+  run_alignment = 0;
+}
+
+
+/**
+ * @brief  Đọc 1 kênh ADC regular bằng polling (reconfigure + start + wait + read)
+ * @param  hadc  : Handle ADC (dùng &hadc1)
+ * @param  channel: Kênh ADC, ví dụ ADC_CHANNEL_8
+ * @retval Giá trị raw 12-bit (0..4095)
+ */
+static uint16_t ADC_PollSingleChannel(ADC_HandleTypeDef *hadc, uint32_t channel)
+{
+  ADC_TypeDef *ADCx = hadc->Instance;
+
+  /* KHÔNG dùng HAL_ADC_ConfigChannel() vì nó gọi HAL_ADC_Disable() bên trong,
+   * sẽ giết chết Injected Conversions đang chạy 20kHz từ TIM1 TRGO.
+   *
+   * Thay vào đó: ghi trực tiếp vào SQR1 để chọn kênh regular,
+   * tạm tắt External Trigger (EXTEN=0) để software start hoạt động,
+   * rồi trigger ADSTART và đợi EOC. */
+
+  /* Chờ nếu có regular conversion đang chạy (bounded) */
+  uint32_t timeout = 5000;
+  while ((ADCx->CR & ADC_CR_ADSTART) && --timeout);
+  if (timeout == 0) return 0;
+
+  /* Lưu CFGR gốc và tạm tắt external trigger cho regular conversion */
+  uint32_t cfgr_backup = ADCx->CFGR;
+  ADCx->CFGR = (cfgr_backup & ~ADC_CFGR_EXTEN);  /* EXTEN = 00 = Software start */
+
+  /* Clear any pending EOC/OVR flags */
+  ADCx->ISR = ADC_ISR_EOC | ADC_ISR_EOS | ADC_ISR_OVR;
+
+  /* Write channel to SQR1: L[3:0]=0 (1 conversion), SQ1[4:0]=channel number */
+  uint32_t ch_num = __LL_ADC_CHANNEL_TO_DECIMAL_NB(channel);
+  ADCx->SQR1 = (ch_num << ADC_SQR1_SQ1_Pos) | (0 << ADC_SQR1_L_Pos);
+
+  /* Start regular conversion (software trigger vì EXTEN=0) */
+  ADCx->CR |= ADC_CR_ADSTART;
+
+  /* Wait for End-Of-Conversion with bounded timeout (~50µs max) */
+  timeout = 10000;
+  while (!(ADCx->ISR & ADC_ISR_EOC) && --timeout);
+
+  /* Read result */
+  uint16_t raw = (uint16_t)(ADCx->DR & 0x0FFF);
+
+  /* Khôi phục CFGR gốc (external trigger cho regular conversion) */
+  ADCx->CFGR = cfgr_backup;
+
+  return raw;
+}
+
+/**
+ * @brief  Đọc VBUS và FET_TEMP thông qua ADC polling an toàn.
+ *         LƯU Ý QUAN TRỌNG: Hàm này CHỈ được phép gọi từ bên trong ngắt Injected
+ *         (sau khi ngắt Injected đã đo xong dòng điện pha), nếu không việc ghi
+ *         SQR1 sẽ làm nhiễu loạn ADC1 Injected trigger (gây kẹt dòng ảo 50A).
+ */
+void ADC_ReadAllChannels(void)
+{
+  /* Đọc VBUS thực qua ADC1 kênh IN8 (PC2/VBUS_SENSE) với hệ số chia áp 26.81.
+   * AN TOÀN vì:
+   *   (1) Được gọi trong slow loop ISR (sau khi Injected xong, trước TRGO tiếp theo)
+   *   (2) ADC1 Regular đã cấu hình SOFTWARE_START (Fix 1) -> không còn xung đột T1_TRGO */
+  uint16_t raw_vbus = ADC_PollSingleChannel(&hadc1, ADC_CHANNEL_8); /* PC2 = VBUS_SENSE */
+  if (raw_vbus > 200) { /* Sanity: >200 LSB ~ 0.16V -> VBUS > 4.3V thực */
+    g_adc_readings.vbus_raw = raw_vbus;
+    g_adc_readings.vbus = (float)raw_vbus * ADC_TO_VOLT * VBUS_DIVIDER_RATIO;
+  }
+  /* Nếu raw_vbus <= 200 (lỗi ADC hoặc VBUS quá thấp): giữ giá trị cũ (init=24.0f) */
+
+  g_adc_readings.fet_temp = 25.0f; /* TODO: NTC thermistor via ADC_CHANNEL_4 (PA3) */
+
+  /* Cập nhật cờ lỗi từ chân nFAULT (DRV_BKIN) của DRV8353 */
+  g_adc_readings.drv_has_fault = (HAL_GPIO_ReadPin(DRV_BKIN_GPIO_Port, DRV_BKIN_Pin) == GPIO_PIN_RESET) ? 1 : 0;
+}
+
+/**
+ * @brief  Đọc trạng thái DRV8353RS qua SPI1
+ *         Lấy Fault Status 1 & 2, trích xuất cờ cảnh báo nhiệt
+ *
+ * FAULT_STATUS_1 (0x00) bit map:
+ *   Bit 10: FAULT  (có lỗi chung)
+ *   Bit 9 : VDS_OCP (quá dòng VDS)
+ *   Bit 8 : GDF    (Gate Driver Fault)
+ *   Bit 7 : UVLO   (Under-Voltage Lock-Out)
+ *   Bit 6 : OTSD   (Over-Temperature Shutdown)
+ *   Bit 5 : VDS_HA / Bit 4: VDS_LA ... (chi tiết từng pha)
+ *
+ * VGS_STATUS_2 (0x01) bit map:
+ *   Bit 10: SA_OC  (Sense Amp Overcurrent)
+ *   Bit 9 : SB_OC
+ *   Bit 8 : SC_OC
+ *   Bit 7 : OTW    (Over-Temperature Warning, ~150°C)
+ *   Bit 6 : CPUV   (Charge Pump Under-Voltage)
+ *   Bit 5 : VGS_HA ... (chi tiết từng pha)
+ */
+void DRV8353_ReadStatus(void)
+{
+  uint16_t fault1 = 0, fault2 = 0;
+
+  if (DRV8353_ReadFaults(&g_foc_controller.drv8353, &fault1, &fault2) == HAL_OK) {
+    g_adc_readings.drv_fault1    = fault1;
+    g_adc_readings.drv_fault2    = fault2;
+    g_adc_readings.drv_otsd      = (fault1 >> 6) & 0x01;  /* FAULT_STATUS_1 bit 6 */
+    g_adc_readings.drv_otw       = (fault2 >> 7) & 0x01;  /* VGS_STATUS_2   bit 7 */
+    g_adc_readings.drv_has_fault = (fault1 >> 10) & 0x01;  /* FAULT_STATUS_1 bit 10 */
+  }
+}
 
 /* USER CODE END 0 */
 
@@ -104,7 +675,7 @@ int main(void)
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+	HAL_Init();
 
   /* USER CODE BEGIN Init */
 
@@ -128,44 +699,174 @@ int main(void)
   MX_SPI1_Init();
   MX_SPI3_Init();
   MX_USART1_UART_Init();
-  MX_USB_PCD_Init();
   MX_I2C3_Init();
   MX_TIM2_Init();
+  MX_ADC2_Init();
+  MX_USB_Device_Init();
   /* USER CODE BEGIN 2 */
 
-  /* Initialize VESC Industrial FOC Engine, DRV8353RS Gate Driver & AS5048A Encoder */
-  // Motor GB8115-4 (21 Pole Pairs), 1:17 Cycloidal Gearbox, 20kHz PWM, +-180 deg joint limits
+  /* ================================================================
+   * STARTUP SEQUENCE - Joint Driver 8115
+   * Motor: GB8115-4 (21PP), Gearbox: Cycloid 1:17, PWM: 20kHz
+   * ================================================================ */
+
+  /* 1. Initialize FOC Engine, DRV8353RS Gate Driver & AS5048A Encoder */
   motor_init(&hspi1, &hspi3);
 
-  /* Set Initial Target Joint Position (0.0 degrees) */
+  /* 2. Calibrate ADC hardware (internal offset calibration) */
+  HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
+  HAL_ADCEx_Calibration_Start(&hadc2, ADC_SINGLE_ENDED);
+
+  /* 3. Start PWM on all 6 channels (3 High-side + 3 Low-side complementary) */
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+  HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+  HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2);
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
+  HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_3);
+
+  /* 4. Set initial duty to 50% (zero differential voltage = safe state) */
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, htim1.Init.Period / 2);
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, htim1.Init.Period / 2);
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, htim1.Init.Period / 2);
+
+  /* 5. Start Injected ADC conversions (triggered by TIM1 TRGO at 20kHz) */
+  HAL_ADCEx_InjectedStart_IT(&hadc2);  // Slave ADC2 start first
+  HAL_ADCEx_InjectedStart_IT(&hadc1);  // Master ADC1 start (triggers both)
+
+  /* 6. Wait for ADC zero-current offset calibration to truly complete.
+   * Calibration timeline: 10000 ISR warmup (500ms) + 2048 samples (102ms) = ~602ms total.
+   * HAL_Delay(150) cũ KHÔNG ĐỦ -> offset chưa xong khi main loop chạy.
+   * Poll flag thực để đảm bảo offset đúng trước khi gửi telemetry. */
+  while (!g_foc_controller.calibrated_offsets) {
+      HAL_Delay(10);
+  }
+  HAL_Delay(10); /* Buffer thêm 10ms sau khi offset xong */
+
+  /* 7. Đọc VBUS thực và cập nhật g_adc_readings sau khi offset calibration hoàn tất
+   * AN TOÀN gọi từ main loop: ADC1 Regular = SOFTWARE_START (Fix 1) -> không xung đột T1_TRGO */
+  ADC_ReadAllChannels();
+
+  /* 8. Set initial target joint position */
   motor_set_position(0.0f);
+
+  /* 9. Initialize VESC Protocol CAN Communication (Node ID = 1) */
+  comm_can_init(&hfdcan2, DEFAULT_CAN_NODE_ID);
+
+  /* 10. Initialize High-Speed Native USB Telemetry Stream */
+  Comm_Telemetry_Init();
+
+
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
-  {
+  while (1) {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    // 1. Read Telemetry Values (Position, Speed, Current)
-    current_joint_deg = motor_get_position();
-    current_joint_rpm = motor_get_speed();
-    current_iq_amps   = motor_get_current();
 
-    // 2. High-Speed 20kHz FOC Control ISR Execution (Runs inside TIM1/ADC Interrupt Callback in hardware)
-    FOC_Control_Current_ISR(&g_foc_controller, 0.0f, 0.0f, 24.0f, 0.00005f);
+    /* ================================================================
+     * MAIN LOOP - Đọc tất cả cảm biến (~2Hz)
+     * ================================================================ */
 
-    // 3. 1kHz Slow Loop Execution (Observer, PLL, PID, Field Weakening)
-    FOC_Control_SlowLoop(&g_foc_controller, 0.001f);
+    /* 0. Chạy test chiều quay động cơ nếu được kích hoạt */
+    Run_MotorDirectionTest();
 
-    // 4. Update TIM1 PWM Duty Cycles
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (uint32_t)(g_foc_controller.duty_a * (float)htim1.Init.Period));
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (uint32_t)(g_foc_controller.duty_b * (float)htim1.Init.Period));
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (uint32_t)(g_foc_controller.duty_c * (float)htim1.Init.Period));
+    /* 0b. Chạy encoder alignment nếu được kích hoạt */
+    Run_EncoderAlignment();
 
-    HAL_Delay(1);
+    /* Đảm bảo giải phóng khóa Break PWM ở Timer1 (tránh kẹt lúc khởi động) */
+    TIM1_EnsureMoeEnabled();
+
+    /* 0c. Chế độ điều khiển FOC Closed-Loop (Đồng bộ giữa Live Expressions và USB App) */
+    if (g_foc_controller.fault != MC_FAULT_NONE) {
+      // Nếu có lỗi an toàn (Overcurrent/Overvoltage), tự động reset mode về 0 để không bị vòng lặp ON/OFF
+      run_foc_mode = 0;
+      g_foc_controller.motor.m_state = MC_STATE_OFF;
+    } else if (run_foc_mode == 1 || run_foc_mode == 2 || run_foc_mode == 3 || run_foc_mode == 4) {
+      // Tự động Căn chỉnh Góc Encoder (Align) Lần đầu nếu chưa được căn chỉnh
+      if (!g_foc_controller.aligned && run_alignment != 1) {
+        run_alignment = 1;
+        Run_EncoderAlignment();
+      }
+
+      if (run_foc_mode == 1) { // Current/Torque Control Mode từ Live Expressions
+        g_foc_controller.motor.m_state = MC_STATE_RUNNING;
+        g_foc_controller.motor.m_control_mode = CONTROL_MODE_CURRENT;
+        g_foc_controller.motor.m_iq_set = iq_target_dbg;
+        g_foc_controller.motor.m_motor_state.iq_target = iq_target_dbg;
+        g_foc_controller.motor.m_motor_state.id_target = id_target_dbg;
+      } else if (run_foc_mode == 2) { // Position Control Mode từ Live Expressions
+        g_foc_controller.motor.m_state = MC_STATE_RUNNING;
+        g_foc_controller.motor.m_control_mode = CONTROL_MODE_POS;
+        if (!g_foc_controller.motor.m_traj_active) {
+          g_foc_controller.motor.m_pos_pid_set = pos_target_dbg;
+        }
+        g_foc_controller.motor.m_motor_state.id_target = id_target_dbg;
+      } else if (run_foc_mode == 3) { // Speed/Velocity Control Mode từ Live Expressions / Web App
+        g_foc_controller.motor.m_state = MC_STATE_RUNNING;
+        g_foc_controller.motor.m_control_mode = CONTROL_MODE_SPEED;
+        g_foc_controller.motor.m_speed_command_rpm = speed_target_dbg * (float)g_foc_controller.conf.foc_motor_pole_pairs;
+        g_foc_controller.motor.m_motor_state.id_target = id_target_dbg;
+      } else if (run_foc_mode == 4) { // Direct Voltage Vq Mode
+        g_foc_controller.motor.m_state = MC_STATE_RUNNING;
+        g_foc_controller.motor.m_control_mode = CONTROL_MODE_DUTY;
+      }
+    } else if (run_direction_test != 1 && run_alignment != 1) {
+      // Khi run_foc_mode == 0, chỉ tắt động cơ nếu USB App cũng không yêu cầu chạy
+      if (g_foc_controller.motor.m_state == MC_STATE_OFF) {
+        g_foc_controller.motor.m_motor_state.iq_target = 0.0f;
+        g_foc_controller.motor.m_motor_state.id_target = 0.0f;
+        pos_target_dbg = g_foc_controller.motor.m_joint_angle;
+        speed_target_dbg = 0.0f;
+        g_foc_controller.motor.m_speed_command_rpm = 0.0f;
+        g_foc_controller.motor.m_speed_pid_set_rpm = 0.0f;
+        g_foc_controller.fault = MC_FAULT_NONE;
+      }
+    }
+
+    /* 1. Đọc VBUS qua ADC1 Regular (SOFTWARE_START, an toàn) + DRV status ở 2Hz
+     * Giữ main loop chạy nhanh cho Comm_Telemetry_Process (~100Hz+) */
+    {
+      static uint32_t last_slow_sensor_ms = 0;
+      uint32_t now_ms = HAL_GetTick();
+      if (now_ms - last_slow_sensor_ms >= 500) {
+        last_slow_sensor_ms = now_ms;
+
+        ADC_ReadAllChannels();
+
+        /* Đọc trạng thái DRV8353 qua SoftSPI (Fault, OTW, OTSD) */
+        DRV8353_ReadStatus();
+
+
+
+        /* LED Heartbeat (chớp mỗi 500ms = 1Hz, thay vì chớp cuồng ở tốc độ main loop) */
+        HAL_GPIO_TogglePin(LED_1_GPIO_Port, LED_1_Pin);
+      }
+    }
+
+    /* Cập nhật live debug expressions (rất nhanh, chỉ đọc RAM) */
+    g_dbg_test.raw_start = g_foc_controller.encoder.raw_angle;
+    g_dbg_test.start_angle = g_foc_controller.encoder.angle_rad;
+    g_dbg_test.vbus = g_adc_readings.vbus;
+    g_dbg_test.moe = (TIM1->BDTR & TIM_BDTR_MOE) ? 1 : 0;
+    g_dbg_test.break_flag = (__HAL_TIM_GET_FLAG(&htim1, TIM_FLAG_BREAK) != RESET) ? 1 : 0;
+    g_dbg_test.calibrated = g_foc_controller.calibrated_offsets ? 1 : 0;
+    g_dbg_test.cnt = TIM1->CNT;
+    g_dbg_test.bdtr = TIM1->BDTR;
+    g_dbg_test.ccer = TIM1->CCER;
+
+    /* Fault indicator on LED2 (Active-Low: RESET = ON, SET = OFF) */
+    if (g_adc_readings.drv_has_fault) {
+      HAL_GPIO_WritePin(LED_2_GPIO_Port, LED_2_Pin, GPIO_PIN_RESET);
+    } else {
+      HAL_GPIO_WritePin(LED_2_GPIO_Port, LED_2_Pin, GPIO_PIN_SET);
+    }
+
+    /* Truyền Telemetry 100Hz qua USB CDC - PHẢI gọi nhanh nhất có thể */
+    Comm_Telemetry_Process(&g_foc_controller);
   }
   /* USER CODE END 3 */
 }
@@ -231,6 +932,7 @@ static void MX_ADC1_Init(void)
 
   ADC_MultiModeTypeDef multimode = {0};
   ADC_ChannelConfTypeDef sConfig = {0};
+  ADC_InjectionConfTypeDef sConfigInjected = {0};
 
   /* USER CODE BEGIN ADC1_Init 1 */
 
@@ -244,13 +946,17 @@ static void MX_ADC1_Init(void)
   hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
   hadc1.Init.GainCompensation = 0;
   hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
-  hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  hadc1.Init.EOCSelection = ADC_EOC_SEQ_CONV;
   hadc1.Init.LowPowerAutoWait = DISABLE;
   hadc1.Init.ContinuousConvMode = DISABLE;
   hadc1.Init.NbrOfConversion = 1;
   hadc1.Init.DiscontinuousConvMode = DISABLE;
-  hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIG_T1_TRGO;
-  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
+  /* FIX: Regular channel KHÔNG tự động trigger theo T1_TRGO nữa.
+   * Trước đây, cả Regular và Injected cùng triggered bởi T1_TRGO và cùng đọc IN7 (PC1),
+   * gây ra xung đột kênh và khuếch đại nhiễu ADC (~±25 LSB = ±0.5A).
+   * Regular channel chỉ dùng bởi ADC_PollSingleChannel() (software start) khi cần thiết. */
+  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
   hadc1.Init.DMAContinuousRequests = DISABLE;
   hadc1.Init.Overrun = ADC_OVR_DATA_PRESERVED;
   hadc1.Init.OversamplingMode = DISABLE;
@@ -261,7 +967,9 @@ static void MX_ADC1_Init(void)
 
   /** Configure the ADC multi-mode
   */
-  multimode.Mode = ADC_MODE_INDEPENDENT;
+  multimode.Mode = ADC_DUALMODE_INJECSIMULT;
+  multimode.DMAAccessMode = ADC_DMAACCESSMODE_DISABLED;
+  multimode.TwoSamplingDelay = ADC_TWOSAMPLINGDELAY_1CYCLE;
   if (HAL_ADCEx_MultiModeConfigChannel(&hadc1, &multimode) != HAL_OK)
   {
     Error_Handler();
@@ -269,9 +977,9 @@ static void MX_ADC1_Init(void)
 
   /** Configure Regular Channel
   */
-  sConfig.Channel = ADC_CHANNEL_1;
+  sConfig.Channel = ADC_CHANNEL_7;
   sConfig.Rank = ADC_REGULAR_RANK_1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_2CYCLES_5;
+  sConfig.SamplingTime = ADC_SAMPLETIME_6CYCLES_5;
   sConfig.SingleDiff = ADC_SINGLE_ENDED;
   sConfig.OffsetNumber = ADC_OFFSET_NONE;
   sConfig.Offset = 0;
@@ -279,9 +987,105 @@ static void MX_ADC1_Init(void)
   {
     Error_Handler();
   }
+
+  /** Configure Injected Channel
+  */
+  sConfigInjected.InjectedChannel = ADC_CHANNEL_7;
+  sConfigInjected.InjectedRank = ADC_INJECTED_RANK_1;
+  sConfigInjected.InjectedSamplingTime = ADC_SAMPLETIME_6CYCLES_5;
+  sConfigInjected.InjectedSingleDiff = ADC_SINGLE_ENDED;
+  sConfigInjected.InjectedOffsetNumber = ADC_OFFSET_NONE;
+  sConfigInjected.InjectedOffset = 0;
+  sConfigInjected.InjectedNbrOfConversion = 1;
+  sConfigInjected.InjectedDiscontinuousConvMode = DISABLE;
+  sConfigInjected.AutoInjectedConv = DISABLE;
+  sConfigInjected.QueueInjectedContext = DISABLE;
+  sConfigInjected.ExternalTrigInjecConv = ADC_EXTERNALTRIGINJEC_T1_TRGO;
+  sConfigInjected.ExternalTrigInjecConvEdge = ADC_EXTERNALTRIGINJECCONV_EDGE_RISING;
+  sConfigInjected.InjecOversamplingMode = DISABLE;
+  if (HAL_ADCEx_InjectedConfigChannel(&hadc1, &sConfigInjected) != HAL_OK)
+  {
+    Error_Handler();
+  }
   /* USER CODE BEGIN ADC1_Init 2 */
 
   /* USER CODE END ADC1_Init 2 */
+
+}
+
+/**
+  * @brief ADC2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_ADC2_Init(void)
+{
+
+  /* USER CODE BEGIN ADC2_Init 0 */
+
+  /* USER CODE END ADC2_Init 0 */
+
+  ADC_ChannelConfTypeDef sConfig = {0};
+  ADC_InjectionConfTypeDef sConfigInjected = {0};
+
+  /* USER CODE BEGIN ADC2_Init 1 */
+
+  /* USER CODE END ADC2_Init 1 */
+
+  /** Common config
+  */
+  hadc2.Instance = ADC2;
+  hadc2.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
+  hadc2.Init.Resolution = ADC_RESOLUTION_12B;
+  hadc2.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc2.Init.GainCompensation = 0;
+  hadc2.Init.ScanConvMode = ADC_SCAN_DISABLE;
+  hadc2.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  hadc2.Init.LowPowerAutoWait = DISABLE;
+  hadc2.Init.ContinuousConvMode = DISABLE;
+  hadc2.Init.NbrOfConversion = 1;
+  hadc2.Init.DiscontinuousConvMode = DISABLE;
+  hadc2.Init.DMAContinuousRequests = DISABLE;
+  hadc2.Init.Overrun = ADC_OVR_DATA_PRESERVED;
+  hadc2.Init.OversamplingMode = DISABLE;
+  if (HAL_ADC_Init(&hadc2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_4;
+  sConfig.Rank = ADC_REGULAR_RANK_1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_2CYCLES_5;
+  sConfig.SingleDiff = ADC_SINGLE_ENDED;
+  sConfig.OffsetNumber = ADC_OFFSET_NONE;
+  sConfig.Offset = 0;
+  if (HAL_ADC_ConfigChannel(&hadc2, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Injected Channel
+  */
+  sConfigInjected.InjectedChannel = ADC_CHANNEL_4;
+  sConfigInjected.InjectedRank = ADC_INJECTED_RANK_1;
+  sConfigInjected.InjectedSamplingTime = ADC_SAMPLETIME_6CYCLES_5;
+  sConfigInjected.InjectedSingleDiff = ADC_SINGLE_ENDED;
+  sConfigInjected.InjectedOffsetNumber = ADC_OFFSET_NONE;
+  sConfigInjected.InjectedOffset = 0;
+  sConfigInjected.InjectedNbrOfConversion = 1;
+  sConfigInjected.InjectedDiscontinuousConvMode = DISABLE;
+  sConfigInjected.AutoInjectedConv = DISABLE;
+  sConfigInjected.QueueInjectedContext = DISABLE;
+  sConfigInjected.InjecOversamplingMode = DISABLE;
+  if (HAL_ADCEx_InjectedConfigChannel(&hadc2, &sConfigInjected) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC2_Init 2 */
+
+  /* USER CODE END ADC2_Init 2 */
 
 }
 
@@ -400,13 +1204,13 @@ static void MX_FDCAN2_Init(void)
   hfdcan2.Init.ClockDivider = FDCAN_CLOCK_DIV1;
   hfdcan2.Init.FrameFormat = FDCAN_FRAME_CLASSIC;
   hfdcan2.Init.Mode = FDCAN_MODE_NORMAL;
-  hfdcan2.Init.AutoRetransmission = DISABLE;
+  hfdcan2.Init.AutoRetransmission = ENABLE;
   hfdcan2.Init.TransmitPause = DISABLE;
   hfdcan2.Init.ProtocolException = DISABLE;
-  hfdcan2.Init.NominalPrescaler = 16;
-  hfdcan2.Init.NominalSyncJumpWidth = 1;
-  hfdcan2.Init.NominalTimeSeg1 = 1;
-  hfdcan2.Init.NominalTimeSeg2 = 1;
+  hfdcan2.Init.NominalPrescaler = 20;
+  hfdcan2.Init.NominalSyncJumpWidth = 3;
+  hfdcan2.Init.NominalTimeSeg1 = 13;
+  hfdcan2.Init.NominalTimeSeg2 = 3 ;
   hfdcan2.Init.DataPrescaler = 1;
   hfdcan2.Init.DataSyncJumpWidth = 1;
   hfdcan2.Init.DataTimeSeg1 = 1;
@@ -574,10 +1378,10 @@ static void MX_TIM1_Init(void)
   /* USER CODE END TIM1_Init 1 */
   htim1.Instance = TIM1;
   htim1.Init.Prescaler = 0;
-  htim1.Init.CounterMode = TIM_COUNTERMODE_CENTERALIGNED1;
+  htim1.Init.CounterMode = TIM_COUNTERMODE_CENTERALIGNED2;
   htim1.Init.Period = 4249;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim1.Init.RepetitionCounter = 0;
+  htim1.Init.RepetitionCounter = 1;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_PWM_Init(&htim1) != HAL_OK)
   {
@@ -635,7 +1439,7 @@ static void MX_TIM1_Init(void)
   sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_ENABLE;
   sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_OFF;
   sBreakDeadTimeConfig.DeadTime = 100;
-  sBreakDeadTimeConfig.BreakState = TIM_BREAK_ENABLE;
+  sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
   sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
   sBreakDeadTimeConfig.BreakFilter = 0;
   sBreakDeadTimeConfig.BreakAFMode = TIM_BREAK_AFMODE_INPUT;
@@ -643,7 +1447,7 @@ static void MX_TIM1_Init(void)
   sBreakDeadTimeConfig.Break2Polarity = TIM_BREAK2POLARITY_HIGH;
   sBreakDeadTimeConfig.Break2Filter = 0;
   sBreakDeadTimeConfig.Break2AFMode = TIM_BREAK_AFMODE_INPUT;
-  sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
+  sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_ENABLE;
   if (HAL_TIMEx_ConfigBreakDeadTime(&htim1, &sBreakDeadTimeConfig) != HAL_OK)
   {
     Error_Handler();
@@ -752,39 +1556,6 @@ static void MX_USART1_UART_Init(void)
 }
 
 /**
-  * @brief USB Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_USB_PCD_Init(void)
-{
-
-  /* USER CODE BEGIN USB_Init 0 */
-
-  /* USER CODE END USB_Init 0 */
-
-  /* USER CODE BEGIN USB_Init 1 */
-
-  /* USER CODE END USB_Init 1 */
-  hpcd_USB_FS.Instance = USB;
-  hpcd_USB_FS.Init.dev_endpoints = 8;
-  hpcd_USB_FS.Init.speed = PCD_SPEED_FULL;
-  hpcd_USB_FS.Init.phy_itface = PCD_PHY_EMBEDDED;
-  hpcd_USB_FS.Init.Sof_enable = DISABLE;
-  hpcd_USB_FS.Init.low_power_enable = DISABLE;
-  hpcd_USB_FS.Init.lpm_enable = DISABLE;
-  hpcd_USB_FS.Init.battery_charging_enable = DISABLE;
-  if (HAL_PCD_Init(&hpcd_USB_FS) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN USB_Init 2 */
-
-  /* USER CODE END USB_Init 2 */
-
-}
-
-/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -848,6 +1619,162 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+/**
+ * @brief  ADC Injected Conversion Complete Callback
+ *         CHẠY Ở 20 kHz - Được kích hoạt bởi TIM1 TRGO (Update Event)
+ *         Đây là trái tim của toàn bộ hệ thống điều khiển FOC.
+ *
+ *         Luồng phần cứng:
+ *         TIM1 Counter đếm tới ARR → TRGO Update Event → Kích hoạt ADC1+ADC2
+ *         → ADC Injected lấy mẫu đồng thời Ib (PA7) và Ic (PC1)
+ *         → ADC End-of-Injected-Conversion → Nhảy vào callback này
+ *         → Chạy FOC transforms + PI + SVPWM → Cập nhật TIM1 CCR1/2/3
+ *
+ * @param  hadc: ADC handle pointer (ADC1 hoặc ADC2)
+ * @note   Chỉ xử lý khi ADC1 (Master) báo xong conversion
+ * @note   Thời gian thực thi mục tiêu: < 12µs (trong chu kỳ 50µs)
+ */
+void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc) {
+  if (hadc->Instance != ADC1)
+    return; // Chỉ xử lý Master ADC1
+
+  g_adc_isr_counter++; // Đếm số lần ISR chạy để debug
+
+  // ===== 1. ĐỌC GIÁ TRỊ DÒNG ĐIỆN THẬT TỪ ADC =====
+  // ADC2 Injected Rank 1 = PA7 (IB) - Dòng pha B từ DRV8353 SOB
+  // ADC1 Injected Rank 1 = PC1 (IC) - Dòng pha C từ DRV8353 SOC
+  uint32_t raw_ib = HAL_ADCEx_InjectedGetValue(&hadc2, ADC_INJECTED_RANK_1);
+  uint32_t raw_ic = HAL_ADCEx_InjectedGetValue(&hadc1, ADC_INJECTED_RANK_1);
+
+  // ===== 2. CALIBRATE OFFSET (2048 lần đầu khi motor OFF) =====
+  if (!g_foc_controller.calibrated_offsets) {
+    FOC_Control_AdcCalibrate(&g_foc_controller, (uint16_t)raw_ic,
+                             (uint16_t)raw_ib);
+    return; // Không chạy FOC khi đang calibrate
+  }
+
+  // Chuyển đổi dòng điện 3 pha chuẩn theo cấu trúc Low-Side Shunt (Dòng vào pha = -(ADC - offset))
+  float current_b, current_c;
+  if (g_foc_controller.phase_swap_bc) {
+    current_b = -((float)raw_ic - g_foc_controller.offset_ia) * ADC_TO_AMPS;
+    current_c = -((float)raw_ib - g_foc_controller.offset_ib) * ADC_TO_AMPS;
+  } else {
+    current_b = -((float)raw_ib - g_foc_controller.offset_ib) * ADC_TO_AMPS;
+    current_c = -((float)raw_ic - g_foc_controller.offset_ia) * ADC_TO_AMPS;
+  }
+  float current_a = -(current_b + current_c); // Kirchhoff: Ia + Ib + Ic = 0
+
+  // Debug: cập nhật dòng điện realtime cho monitoring
+  g_dbg_ia = current_a;
+  g_dbg_ib = current_b;
+  g_dbg_ic = current_c;
+  g_dbg_offset_ia = g_foc_controller.offset_ia;
+  g_dbg_offset_ib = g_foc_controller.offset_ib;
+
+  // ===== 4. ĐỌC VBUS VÀ FET_TEMP (từ slow loop ADC polling) =====
+  float vbus = g_adc_readings.vbus;
+  if (vbus < 6.0f) vbus = 24.0f;  /* Fallback nếu chưa có giá trị hợp lệ */
+  float temp_fet = g_adc_readings.fet_temp;
+  if (temp_fet < -20.0f || temp_fet > 150.0f) temp_fet = 25.0f;
+
+  // ===== 5. CHẠY FOC CURRENT CONTROL ISR =====
+  const float dt = 1.0f / 20000.0f; // 50µs = 1/20kHz
+  if (run_open_loop == 1) {
+    TIM1_EnsureMoeEnabled();
+
+    /* Đọc Encoder realtime trong Open-Loop để telemetry nhận góc thực */
+    float raw_enc_rad = 0.0f;
+    AS5048A_ReadRadians(&g_foc_controller.encoder, &raw_enc_rad);
+    foc_update_cycloidal_joint_angle(&g_foc_controller.motor, raw_enc_rad);
+
+    /* === 1. SMOOTH ACCELERATION RAMP (80 RPM/s) ===
+     * Hỗ trợ mượt mà cả chiều quay thuận (+) và nghịch (-).
+     * 100ms đầu giữ 0 RPM để rotor khóa êm vào góc 0 điện, sau đó tăng tốc từ từ. */
+    static uint32_t s_openloop_start_tick = 0;
+    if (fabsf(open_loop_target_rpm) > 0.1f) {
+      if (s_openloop_start_tick == 0) {
+        s_openloop_start_tick = g_adc_isr_counter;
+      }
+      /* Giữ 100ms (2000 chu kỳ 20kHz) lúc mới bắt đầu để rotor định hướng êm */
+      if ((g_adc_isr_counter - s_openloop_start_tick) >= 2000) {
+        utils_step_towards((float*)&open_loop_current_rpm, open_loop_target_rpm, 80.0f * dt);
+      }
+    } else {
+      s_openloop_start_tick = 0;
+      open_loop_current_rpm = 0.0f;
+    }
+
+    /* === 2. TÍNH GÓC ĐIỆN (Electrical Angle) === */
+    float pole_pairs = (float)g_foc_controller.conf.foc_motor_pole_pairs; /* 21PP */
+    float elec_rad_s = (open_loop_current_rpm * pole_pairs * 2.0f * 3.14159265f) / 60.0f;
+    open_loop_angle += elec_rad_s * dt;
+    /* Wrap angle [-PI, +PI] mỗi ISR cycle để tránh drift/overflow float */
+    utils_norm_angle_rad((float*)&open_loop_angle);
+    /* Cập nhật PLL speed cho telemetry hiển thị RPM */
+    g_foc_controller.motor.m_speed_est_fast = elec_rad_s;
+
+    /* === 3. TÍNH ĐIỆN ÁP V/f CHUẨN (Mô-men Giữ Đồng Bộ Vững) ===
+     * Duy trì V_boost = open_loop_voltage (Mặc định 9.0V = ~2.31A / ~25Nm ngõ ra hộp số)
+     * kết hợp bù sức điện động BEMF để kéo tải nặng đĩa Cycloid 1:17 mượt mà không trượt bước. */
+    float v_boost = (open_loop_voltage > 1.0f) ? open_loop_voltage : 9.0f;
+    float v_bemf  = g_foc_controller.conf.foc_motor_flux_linkage * fabsf(elec_rad_s);
+    float v_open  = v_boost + v_bemf;
+
+    /* Clamp tổng điện áp ≤ Vbus/√3 × max_duty */
+    float v_max = ONE_BY_SQRT3 * g_foc_controller.conf.l_max_duty * vbus;
+    if (v_open > v_max) v_open = v_max;
+
+    /* === 4. SINH SÓNG SIN CHUẨN → SVPWM === */
+    float sin_val, cos_val;
+    utils_fast_sincos(open_loop_angle, &sin_val, &cos_val);
+
+    float valpha = (v_open / vbus) * cos_val;
+    float vbeta  = (v_open / vbus) * sin_val;
+
+    uint32_t ta, tb, tc, sector;
+    foc_svm(valpha, vbeta, g_foc_controller.conf.l_max_duty, 1000, &ta, &tb, &tc, &sector);
+
+    /* === 5. GHI PWM TRỰC TIẾP VÀO TIMER (Đồng bộ theo phase_swap_bc) === */
+    uint32_t period = htim1.Init.Period;
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (ta * period) / 1000);
+    g_foc_controller.duty_a = (float)ta / 1000.0f;
+    if (g_foc_controller.phase_swap_bc) {
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tc * period) / 1000);
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tb * period) / 1000);
+      g_foc_controller.duty_b = (float)tc / 1000.0f;
+      g_foc_controller.duty_c = (float)tb / 1000.0f;
+    } else {
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (tb * period) / 1000);
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (tc * period) / 1000);
+      g_foc_controller.duty_b = (float)tb / 1000.0f;
+      g_foc_controller.duty_c = (float)tc / 1000.0f;
+    }
+    return;
+  }
+
+  if (run_direction_test != 1 && run_alignment != 1) {
+    FOC_Control_Current_ISR(&g_foc_controller, current_a, current_b, vbus, temp_fet, dt);
+
+    // ===== 6. CẬP NHẬT PWM DUTY CYCLE TRỰC TIẾP VÀO TIMER =====
+    // CHỈ ghi khi FOC ISR đang chạy. Khi alignment/direction test, main loop ghi trực tiếp.
+    uint32_t period = htim1.Init.Period;
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1,
+                          (uint32_t)(g_foc_controller.duty_a * (float)period));
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2,
+                          (uint32_t)(g_foc_controller.duty_b * (float)period));
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3,
+                          (uint32_t)(g_foc_controller.duty_c * (float)period));
+
+    // ===== 7. SLOW LOOP 1kHz (chia 20 lần từ 20kHz) =====
+    // Cũng chỉ chạy khi FOC active - SlowLoop đọc SPI3 encoder sẽ xung đột với alignment SPI reads
+    slow_loop_divider++;
+    if (slow_loop_divider >= 20) {
+      slow_loop_divider = 0;
+      FOC_Control_SlowLoop(&g_foc_controller, 0.001f); // dt = 1ms
+    }
+  }
+}
+
 /* USER CODE END 4 */
 
 /**
@@ -859,8 +1786,7 @@ void Error_Handler(void)
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
-  while (1)
-  {
+  while (1) {
   }
   /* USER CODE END Error_Handler_Debug */
 }
@@ -875,8 +1801,9 @@ void Error_Handler(void)
 void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */
-  /* User can add his own implementation to report the file name and line number,
-     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  /* User can add his own implementation to report the file name and line
+     number, ex: printf("Wrong parameters value: file %s on line %d\r\n", file,
+     line) */
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */

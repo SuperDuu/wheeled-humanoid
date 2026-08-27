@@ -38,11 +38,13 @@ typedef struct {
 	float m_pll_speed;          // rad/s electrical
 	float m_speed_est_fast;     // rad/s electrical
 
-	// Multi-turn Cycloidal Joint Accumulator
+	// Multi-turn Cycloidal Joint Accumulator with Absolute Home Calibration
+	float m_mech_home_offset;    // Calibrated Absolute Mechanical Home Angle [0, 2PI)
+	bool  m_home_calibrated;
 	float m_mech_angle_single;   // [0, 2PI)
 	float m_prev_mech_angle;
 	int32_t m_turn_count;
-	float m_total_mech_angle;   // Total motor angle in Radians
+	float m_total_mech_angle;   // Total motor angle in Radians from Home
 	float m_joint_angle;        // Output Joint Angle in Radians (after 1:17 gearbox)
 	float m_joint_velocity_rad_s;
 
@@ -59,6 +61,7 @@ typedef struct {
 	float m_speed_i_term;
 	float m_speed_prev_error;
 	float m_speed_d_filter;
+	float m_speed_d_filter_proc;
 
 	// Pre-calculated variables
 	float p_lq;
@@ -66,6 +69,14 @@ typedef struct {
 	float p_duty_norm;
 	float p_fs;
 	float p_dt;
+
+	// Smooth S-Curve Trajectory Profile Generator for Robot Arm Joints
+	float m_traj_start_angle;
+	float m_traj_target_angle;
+	float m_traj_duration;              // in seconds
+	float m_traj_time;                  // elapsed time in seconds
+	float m_pos_holding_current_limit;  // Maximum holding current in Amperes (e.g. 3.0A, 5.0A)
+	bool  m_traj_active;
 
 	// Sensor Flag
 	bool m_using_encoder;
@@ -80,6 +91,8 @@ void foc_svm(float alpha, float beta, float max_mod, uint32_t PWMFullDutyCycle,
 		uint32_t* tAout, uint32_t* tBout, uint32_t* tCout, uint32_t *svm_sector);
 void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *motor);
 void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *motor);
+void foc_start_trajectory(motor_all_state_t *motor, float target_angle_rad, float duration_s, float max_current_a);
+void foc_set_home_position(motor_all_state_t *motor);
 float foc_correct_encoder(float obs_angle, float enc_angle, float speed, float sl_erpm, motor_all_state_t *motor);
 void foc_run_fw(motor_all_state_t *motor, float dt);
 void foc_precalc_values(motor_all_state_t *motor);

@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>STM32 FOC Telemetry & Oscilloscope Visualizer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Header Bar -->
+  <header class="app-header">
+    <div class="brand">
+      <div class="logo-icon">⚡</div>
+      <div class="brand-text">
+        <h1>STM32 FOC STUDIO</h1>
+        <span class="subtitle">Real-Time 3-Phase Oscilloscope & Motor Telemetry</span>
+      </div>
+    </div>
+
+    <!-- Connection Toolbar -->
+    <div class="connection-bar">
+      <div class="input-group">
+        <label for="port-select">USB Port</label>
+        <div class="select-wrapper">
+          <select id="port-select">
+            <option value="">Scanning ports...</option>
+          </select>
+          <button id="btn-refresh-ports" title="Refresh USB Ports">🔄</button>
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label for="baud-select">Baudrate</label>
+        <select id="baud-select">
+          <option value="115200" selected>115,200</option>
+          <option value="460800">460,800</option>
+          <option value="921600">921,600</option>
+          <option value="2000000">2,000,000</option>
+        </select>
+      </div>
+
+      <button id="btn-connect" class="btn btn-primary">
+        <span class="btn-icon">🔌</span> Connect
+      </button>
+
+      <button id="btn-reset-driver" class="btn" style="background: #dc2626; color: white; font-weight: bold; border-color: #b91c1c;" title="Reset Vi Điều Khiển & Xóa Lỗi">
+        🔄 RESET DRIVER
+      </button>
+
+      <div class="status-badge" id="conn-status">
+        <span class="dot"></span>
+        <span class="text">Disconnected</span>
+      </div>
+
+      <div class="rate-badge">
+        <span id="telemetry-hz">0</span> Hz
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="workspace">
+    <!-- Left Column: Waveform Oscilloscopes -->
+    <section class="scopes-column">
+      
+      <!-- Scope 1: 3-Phase Sinusoidal Waveforms (MATLAB Style) -->
+      <div class="scope-card primary-scope" id="card-scope1">
+        <div class="scope-header">
+          <div class="scope-title">
+            <span class="scope-icon">〰️</span>
+            <h3>Scope 1: 3-Phase Sinusoids (Ia, Ib, Ic)</h3>
+            <span class="matlab-tag">MATLAB Scope</span>
+            <span class="frozen-badge" id="freeze-tag-scope1" style="display:none;">⏸️ FROZEN</span>
+          </div>
+
+          <div class="scope-controls">
+            <div class="btn-toggle-group">
+              <button class="btn-toggle active" id="view-currents">Currents (A)</button>
+              <button class="btn-toggle" id="view-duties">Duties (%)</button>
+            </div>
+            
+            <div class="timebase-select">
+              <span>Zoom:</span>
+              <button class="btn-zoom" data-scope="1" data-zoom="in" title="Zoom In (Time)">🔍+</button>
+              <button class="btn-zoom" data-scope="1" data-zoom="out" title="Zoom Out (Time)">🔍−</button>
+              <select id="timebase-scope1" class="timebase-dropdown" data-scope="1">
+                <option value="50">50 ms</option>
+                <option value="100">100 ms</option>
+                <option value="250" selected>250 ms</option>
+                <option value="500">500 ms</option>
+                <option value="1000">1.0 s</option>
+                <option value="2000">2.0 s</option>
+                <option value="5000">5.0 s</option>
+              </select>
+            </div>
+
+            <button id="btn-pause-scope1" class="btn-scope-pause" data-scope="1" title="Freeze / Resume Frame">⏸️ Freeze</button>
+          </div>
+        </div>
+
+        <div class="scope-canvas-container">
+          <canvas id="canvas-scope1"></canvas>
+          <div class="scope-hint">💡 Cuộn chuột (Scroll) để Zoom In/Out | Kéo (Drag) để xem lịch sử</div>
+        </div>
+
+        <!-- Waveform Analysis HUD -->
+        <div class="waveform-hud">
+          <div class="hud-item phase-a">
+            <span class="hud-label"><span class="legend-box color-phase-a"></span> Phase A (Ia):</span>
+            <span class="hud-val" id="val-ia">0.00 A</span>
+          </div>
+          <div class="hud-item phase-b">
+            <span class="hud-label"><span class="legend-box color-phase-b"></span> Phase B (Ib):</span>
+            <span class="hud-val" id="val-ib">0.00 A</span>
+          </div>
+          <div class="hud-item phase-c">
+            <span class="hud-label"><span class="legend-box color-phase-c"></span> Phase C (Ic):</span>
+            <span class="hud-val" id="val-ic">0.00 A</span>
+          </div>
+          <div class="hud-item">
+            <span class="hud-label">Peak Current:</span>
+            <span class="hud-val highlight" id="val-ipeak">0.00 A</span>
+          </div>
+          <div class="hud-item">
+            <span class="hud-label">Phase Sum (Ia+Ib+Ic):</span>
+            <span class="hud-val" id="val-isum">0.00 A</span>
+          </div>
+          <div class="hud-item">
+            <span class="hud-label">Sinusoid Quality:</span>
+            <span class="hud-badge status-good" id="val-quality">BALANCED 120°</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scopes Grid (Scope 2 & Scope 3) -->
+      <div class="scopes-grid">
+        
+        <!-- Scope 2: FOC DQ Currents -->
+        <div class="scope-card" id="card-scope2">
+          <div class="scope-header">
+            <div class="scope-title">
+              <span class="scope-icon">🎯</span>
+              <h4>Scope 2: Vector Currents (Id, Iq)</h4>
+              <span class="frozen-badge" id="freeze-tag-scope2" style="display:none;">⏸️ FROZEN</span>
+            </div>
+            <div class="scope-controls-compact">
+              <button class="btn-zoom" data-scope="2" data-zoom="in" title="Zoom In">🔍+</button>
+              <button class="btn-zoom" data-scope="2" data-zoom="out" title="Zoom Out">🔍−</button>
+              <select id="timebase-scope2" class="timebase-dropdown" data-scope="2">
+                <option value="100">100ms</option>
+                <option value="250" selected>250ms</option>
+                <option value="500">500ms</option>
+                <option value="1000">1.0s</option>
+                <option value="2000">2.0s</option>
+              </select>
+              <button id="btn-pause-scope2" class="btn-scope-pause" data-scope="2" title="Freeze / Resume">⏸️</button>
+            </div>
+          </div>
+          <div class="scope-canvas-container compact">
+            <canvas id="canvas-scope2"></canvas>
+          </div>
+          <div class="hud-bar-compact">
+            <span>Id: <b id="val-id">0.00 A</b></span>
+            <span>Iq: <b id="val-iq">0.00 A</b></span>
+            <span>Iq Tgt: <b id="val-iq-tgt">0.00 A</b></span>
+          </div>
+        </div>
+
+        <!-- Scope 3: Rotor Angle & Phase -->
+        <div class="scope-card" id="card-scope3">
+          <div class="scope-header">
+            <div class="scope-title">
+              <span class="scope-icon">🔄</span>
+              <h4>Scope 3: Angle (θ Elec & Mech)</h4>
+              <span class="frozen-badge" id="freeze-tag-scope3" style="display:none;">⏸️ FROZEN</span>
+            </div>
+            <div class="scope-controls-compact">
+              <button class="btn-zoom" data-scope="3" data-zoom="in" title="Zoom In">🔍+</button>
+              <button class="btn-zoom" data-scope="3" data-zoom="out" title="Zoom Out">🔍−</button>
+              <select id="timebase-scope3" class="timebase-dropdown" data-scope="3">
+                <option value="100">100ms</option>
+                <option value="250" selected>250ms</option>
+                <option value="500">500ms</option>
+                <option value="1000">1.0s</option>
+                <option value="2000">2.0s</option>
+              </select>
+              <button id="btn-pause-scope3" class="btn-scope-pause" data-scope="3" title="Freeze / Resume">⏸️</button>
+            </div>
+          </div>
+          <div class="scope-canvas-container compact">
+            <canvas id="canvas-scope3"></canvas>
+          </div>
+          <div class="hud-bar-compact">
+            <span>θ Joint: <b id="val-joint">0.00 rad</b></span>
+            <span>θ Mech: <b id="val-mech">0.00 rad</b></span>
+            <span>θ Elec: <b id="val-phase">0.00 rad</b></span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Scope 4: Speed & ERPM Tracking -->
+      <div class="scope-card" id="card-scope4">
+        <div class="scope-header">
+          <div class="scope-title">
+            <span class="scope-icon">⚡</span>
+            <h4>Scope 4: Speed & ERPM Tracking</h4>
+            <span class="frozen-badge" id="freeze-tag-scope4" style="display:none;">⏸️ FROZEN</span>
+          </div>
+          <div class="scope-controls-compact">
+            <button class="btn-zoom" data-scope="4" data-zoom="in" title="Zoom In">🔍+</button>
+            <button class="btn-zoom" data-scope="4" data-zoom="out" title="Zoom Out">🔍−</button>
+            <select id="timebase-scope4" class="timebase-dropdown" data-scope="4">
+              <option value="250">250ms</option>
+              <option value="500" selected>500ms</option>
+              <option value="1000">1.0s</option>
+              <option value="2000">2.0s</option>
+              <option value="5000">5.0s</option>
+            </select>
+            <button id="btn-pause-scope4" class="btn-scope-pause" data-scope="4" title="Freeze / Resume">⏸️</button>
+          </div>
+        </div>
+        <div class="scope-canvas-container compact">
+          <canvas id="canvas-scope4"></canvas>
+        </div>
+        <div class="hud-bar-compact">
+          <span>Actual: <b id="val-rpm" style="color: #00d2d3;">0.0 RPM</b></span>
+          <span>Target: <b id="val-rpm-tgt" style="color: #f1c40f;">0.0 RPM</b></span>
+          <span>Error: <b id="val-rpm-err" style="color: #ff6b6b;">0.0 RPM</b></span>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Right Column: Telemetry & Smart Robot Joint Controller -->
+    <aside class="sidebar-column">
+      
+      <!-- 🚨 PRIORITY ACTIONS TOOLBAR: 2 Responsive Clean Rows -->
+      <div class="priority-actions-toolbar">
+        <div class="action-btn-row">
+          <button id="btn-estop" class="btn btn-estop">
+            🛑 DỪNG
+          </button>
+          <button id="btn-auto-tune" class="btn btn-autotune">
+            ✨ AUTO TUNE
+          </button>
+          <button id="btn-align" class="btn btn-align">
+            🎯 ALIGN
+          </button>
+          <button id="btn-reset-err" class="btn btn-reseterr" data-cmd="RESET_ERR">
+            🧹 RESET ERR
+          </button>
+        </div>
+        <div class="action-btn-row secondary-row">
+          <button class="btn btn-chip-speed" data-cmd="SPEED 100">
+            ⚡ +100
+          </button>
+          <button class="btn btn-chip-speed" data-cmd="SPEED 200">
+            ⚡ +200
+          </button>
+          <button class="btn btn-chip-speed rev" data-cmd="SPEED -100">
+            🔄 -100
+          </button>
+          <button class="btn btn-chip-speed rev" data-cmd="SPEED -200">
+            🔄 -200
+          </button>
+          <button id="btn-openloop-fwd" class="btn btn-chip-open">
+            OPEN+
+          </button>
+          <button id="btn-openloop-rev" class="btn btn-chip-open rev">
+            OPEN-
+          </button>
+        </div>
+      </div>
+
+      <!-- 📍 Hero Angle & Robot Status Dashboard -->
+      <div class="panel-card" style="border: 1px solid rgba(139, 92, 246, 0.4); background: linear-gradient(180deg, rgba(30, 27, 75, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);">
+        <div class="panel-header" style="background: rgba(139, 92, 246, 0.15);">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="panel-icon">🦾</span>
+            <h4 style="color: #a78bfa; margin: 0; font-size: 0.88rem;">ROBOT JOINT STATUS</h4>
+          </div>
+          <span class="hud-badge status-good" id="val-fault" style="margin-left: auto;">NO FAULT</span>
+        </div>
+        <div class="panel-body" style="padding: 10px;">
+          <!-- Big Prominent Angle Display -->
+          <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(0, 0, 0, 0.3); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(139, 92, 246, 0.2); margin-bottom: 8px;">
+            <div>
+              <span style="font-size: 0.72rem; color: #94a3b8; text-transform: uppercase; font-weight: bold;">Vị Trí Góc Khớp:</span>
+              <div style="font-size: 1.7rem; font-weight: 800; color: #a78bfa; font-family: 'JetBrains Mono', monospace;" id="val-joint-deg">0.0°</div>
+              <div style="font-size: 0.75rem; color: #64748b;" id="val-joint-rad">0.000 rad (Shaft 0.0°)</div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <button id="btn-quick-sethome" class="btn" style="background: #db2777; color: white; font-weight: bold; font-size: 0.72rem; padding: 5px 8px;">
+                📍 SET HOME (0°)
+              </button>
+              <button id="btn-quick-gohome" class="btn" style="background: #6366f1; color: white; font-weight: bold; font-size: 0.72rem; padding: 5px 8px;">
+                🏠 GO HOME
+              </button>
+            </div>
+          </div>
+
+          <!-- Secondary Grid Metrics -->
+          <div class="metrics-grid" style="grid-template-columns: 1fr 1fr 1fr; gap: 6px;">
+            <div class="metric-card" style="padding: 6px 8px;">
+              <span class="m-label">VẬN TỐC</span>
+              <div class="m-value" style="font-size: 1.1rem;"><span id="val-rpm-disp">0.0</span> <small>RPM</small></div>
+            </div>
+            <div class="metric-card" style="padding: 6px 8px;">
+              <span class="m-label">DÒNG IQ</span>
+              <div class="m-value" style="font-size: 1.1rem;"><span id="val-iq-disp">0.00</span> <small>A</small></div>
+            </div>
+            <div class="metric-card" style="padding: 6px 8px;">
+              <span class="m-label">ĐIỆN ÁP VBUS</span>
+              <div class="m-value" style="font-size: 1.1rem;"><span id="val-vbus">24.0</span> <small>V</small></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 💻 DIRECT CLI & ROBOT COMMAND CONSOLE -->
+      <div class="panel-card" style="border: 1px solid rgba(16, 185, 129, 0.4);">
+        <div class="panel-header" style="background: rgba(16, 185, 129, 0.1);">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="panel-icon">💻</span>
+            <h4 style="color: #34d399; margin: 0; font-size: 0.85rem;">CLI CONSOLE & COMMANDS</h4>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="cli-container" style="margin-bottom: 8px;">
+            <div class="cli-input-row" style="display: flex; gap: 6px;">
+              <input type="text" id="input-cli" placeholder="vd: SPEED 100, POS 90, ALIGN, STOP..." style="flex: 1; font-size: 0.85rem; padding: 8px; font-weight: bold; background: #0f172a; border: 1px solid #334155; color: #38bdf8; border-radius: 6px;">
+              <button id="btn-send-cli" class="cli-btn-send" style="padding: 8px 14px; font-weight: bold; font-size: 0.85rem;">
+                Gửi ↵
+              </button>
+            </div>
+          </div>
+
+          <!-- Quick Suggestion Chips -->
+          <div style="font-size: 0.68rem; color: #94a3b8; font-weight: bold; margin-bottom: 4px;">LỆNH GỢI Ý NHANH:</div>
+          <div class="quick-cli-chips" style="gap: 4px;">
+            <button class="btn-cli-chip" data-cmd="90 1.5 3.5">90° (1.5s)</button>
+            <button class="btn-cli-chip" data-cmd="180 2.0 3.5">180° (2s)</button>
+            <button class="btn-cli-chip" data-cmd="0 1.0 3.5">0° (1s)</button>
+            <button class="btn-cli-chip" data-cmd="-90 1.5 3.5">-90° (1.5s)</button>
+            <button class="btn-cli-chip" data-cmd="HOLD" style="background: rgba(236, 72, 153, 0.2); color: #f472b6;">🔒 GHIM GÓC</button>
+            <button class="btn-cli-chip" data-cmd="FREE" style="background: rgba(71, 85, 105, 0.3); color: #cbd5e1;">🆓 THẢ TỰ DO</button>
+            <button class="btn-cli-chip" data-cmd="SETHOME" style="background: rgba(219, 39, 119, 0.2); color: #f472b6;">📍 SET HOME</button>
+            <button class="btn-cli-chip" data-cmd="GOHOME 1.5" style="background: rgba(99, 102, 241, 0.2); color: #a5b4fc;">🏠 GO HOME</button>
+            <button class="btn-cli-chip" data-cmd="RESET_ERR" style="background: rgba(124, 58, 237, 0.2); color: #c4b5fd;">🧹 RESET ERR</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ⚡ TEST SPEED & VELOCITY CONTROLLER -->
+      <div class="panel-card" style="border: 1px solid rgba(14, 165, 233, 0.4);">
+        <div class="panel-header" style="background: rgba(14, 165, 233, 0.1);">
+          <span class="panel-icon">🏎️</span>
+          <h4 style="color: #38bdf8;">TEST VẬN TỐC & TỐC ĐỘ (SPEED CONTROLLER)</h4>
+        </div>
+        <div class="panel-body">
+          <div class="control-row" style="margin-bottom: 6px;">
+            <div class="label-with-val">
+              <label style="color: #38bdf8; font-weight: bold;">⚡ Đặt Tốc Độ Closed-Loop (RPM):</label>
+              <span class="slider-display" id="speed-display" style="color: #38bdf8;">0 RPM</span>
+            </div>
+            <div class="input-action-row">
+              <input type="number" id="input-speed" value="200" step="50" min="-3000" max="3000" style="font-weight: bold; font-size: 1rem;">
+              <button id="btn-set-speed" class="btn btn-action" style="background: #16a34a; font-weight: bold; font-size: 0.82rem;">
+                ⚡ CHẠY CLOSE LOOP
+              </button>
+            </div>
+            <input type="range" id="slider-speed" min="-1000" max="1000" step="50" value="0" style="margin-top: 6px;">
+            <div class="quick-speed-presets" style="margin-top: 6px;">
+              <button class="btn-preset" data-speed="50">+50</button>
+              <button class="btn-preset" data-speed="100">+100</button>
+              <button class="btn-preset" data-speed="200">+200</button>
+              <button class="btn-preset" data-speed="300">+300</button>
+              <button class="btn-preset" data-speed="500">+500</button>
+              <button class="btn-preset" data-speed="0" style="background: #dc2626; color: #fff; font-weight: bold;">0 (Stop)</button>
+              <button class="btn-preset" data-speed="-50">-50</button>
+              <button class="btn-preset" data-speed="-100">-100</button>
+              <button class="btn-preset" data-speed="-200">-200</button>
+              <button class="btn-preset" data-speed="-300">-300</button>
+              <button class="btn-preset" data-speed="-500">-500</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ⚡ TEST DÒNG ĐIỆN & MOMENT (TARGET IQ CONTROLLER) -->
+      <div class="panel-card" style="border: 1px solid rgba(234, 179, 8, 0.4);">
+        <div class="panel-header" style="background: rgba(234, 179, 8, 0.1);">
+          <span class="panel-icon">⚡</span>
+          <h4 style="color: #facc15;">TEST DÒNG ĐIỆN & MOMENT (CURRENT IQ CONTROLLER)</h4>
+        </div>
+        <div class="panel-body">
+          <div class="control-row" style="margin-bottom: 6px;">
+            <div class="label-with-val">
+              <label style="color: #facc15; font-weight: bold;">⚡ Đặt Dòng Điện Iq Mục Tiêu (Ampe):</label>
+              <span class="slider-display" id="iq-display" style="color: #facc15;">0.00 A</span>
+            </div>
+            <div class="input-action-row">
+              <input type="number" id="input-iq" value="1.00" step="0.20" min="-15.0" max="15.0" style="font-weight: bold; font-size: 1rem;">
+              <button id="btn-set-iq" class="btn btn-action" style="background: #eab308; color: #000; font-weight: bold; font-size: 0.82rem;">
+                ⚡ CHẠY DÒNG IQ
+              </button>
+            </div>
+            <input type="range" id="slider-iq" min="-5.0" max="5.0" step="0.1" value="0" style="margin-top: 6px;">
+            <div class="quick-speed-presets" style="margin-top: 6px;">
+              <button class="btn-iq-preset" data-iq="0.5">+0.5A</button>
+              <button class="btn-iq-preset" data-iq="1.0">+1.0A</button>
+              <button class="btn-iq-preset" data-iq="2.0">+2.0A</button>
+              <button class="btn-iq-preset" data-iq="3.0">+3.0A</button>
+              <button class="btn-iq-preset" data-iq="0" style="background: #dc2626; color: #fff; font-weight: bold;">0 (Stop)</button>
+              <button class="btn-iq-preset" data-iq="-0.5">-0.5A</button>
+              <button class="btn-iq-preset" data-iq="-1.0">-1.0A</button>
+              <button class="btn-iq-preset" data-iq="-2.0">-2.0A</button>
+              <button class="btn-iq-preset" data-iq="-3.0">-3.0A</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 🎛️ Real-Time FOC & PID Parameter Tuning Panel -->
+      <div class="panel-card" style="border: 1px solid rgba(56, 189, 248, 0.3);">
+        <div class="panel-header" style="background: rgba(56, 189, 248, 0.08);">
+          <span class="panel-icon">🎛️</span>
+          <h4 style="color: #38bdf8;">Real-Time FOC & PID Tuning</h4>
+        </div>
+        <div class="panel-body">
+          <!-- Speed PI Tuning -->
+          <div style="font-size: 0.82rem; font-weight: bold; color: #38bdf8; margin-bottom: 6px;">⚡ SPEED CONTROLLER (PI + FEEDFORWARD)</div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px;">
+            <div>
+              <label style="font-size: 0.72rem; color: #94a3b8;">Kp (Proportional):</label>
+              <input type="number" id="tune-skp" value="0.00200" step="0.00020" min="0.00005" max="0.05000" style="width: 100%; font-size: 0.78rem; padding: 4px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 4px;">
+            </div>
+            <div>
+              <label style="font-size: 0.72rem; color: #94a3b8;">Ki (Integral):</label>
+              <input type="number" id="tune-ski" value="0.00100" step="0.00010" min="0.00000" max="0.01000" style="width: 100%; font-size: 0.78rem; padding: 4px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 4px;">
+            </div>
+          </div>
+          <div style="margin-bottom: 8px;">
+            <label style="font-size: 0.72rem; color: #94a3b8;">Acceleration Ramp (ERPM/s, 2500 = Nhanh & Mượt):</label>
+            <div style="display: flex; gap: 6px;">
+              <input type="number" id="tune-sramp" value="2500" step="500" min="0" max="50000" style="flex: 1; font-size: 0.78rem; padding: 4px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 4px;">
+              <button class="btn btn-secondary btn-ramp-preset" data-ramp="0" style="font-size: 0.72rem; padding: 3px 8px;">0 (Instant)</button>
+              <button class="btn btn-secondary btn-ramp-preset" data-ramp="1500" style="font-size: 0.72rem; padding: 3px 8px;">1500</button>
+              <button class="btn btn-secondary btn-ramp-preset" data-ramp="2500" style="font-size: 0.72rem; padding: 3px 8px;">2500</button>
+            </div>
+          </div>
+          <button id="btn-apply-speed-pid" class="btn btn-action" style="width: 100%; margin-bottom: 12px; font-size: 0.78rem; padding: 5px; background: #0284c7;">
+            💾 Apply Speed PI & Ramp
+          </button>
+
+          <!-- Position PD Tuning -->
+          <div style="font-size: 0.82rem; font-weight: bold; color: #a78bfa; margin-bottom: 6px;">🎯 POSITION CONTROLLER (PD + VELOCITY FEEDFORWARD)</div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px;">
+            <div>
+              <label style="font-size: 0.72rem; color: #94a3b8;">Pos Kp (Stiffness):</label>
+              <input type="number" id="tune-pkp" value="20.00" step="1.0" min="0.1" max="50.0" style="width: 100%; font-size: 0.78rem; padding: 4px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 4px;">
+            </div>
+            <div>
+              <label style="font-size: 0.72rem; color: #94a3b8;">Pos Kd (Damping):</label>
+              <input type="number" id="tune-pkd" value="0.10" step="0.01" min="0.0" max="2.0" style="width: 100%; font-size: 0.78rem; padding: 4px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 4px;">
+            </div>
+          </div>
+          <button id="btn-apply-pos-pid" class="btn btn-action" style="width: 100%; margin-bottom: 12px; font-size: 0.78rem; padding: 5px; background: #7c3aed;">
+            💾 Apply Position PD Gains
+          </button>
+
+          <!-- Hardware & Commutation Overrides -->
+          <div style="font-size: 0.82rem; font-weight: bold; color: #f59e0b; margin-bottom: 6px;">⚙️ HARDWARE & COMMUTATION OVERRIDES</div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px;">
+            <button id="btn-toggle-dir" class="btn btn-secondary" style="font-size: 0.76rem; padding: 6px;">
+              🔄 Dir: <b id="display-dir">+1</b>
+            </button>
+            <button id="btn-toggle-swap" class="btn btn-secondary" style="font-size: 0.76rem; padding: 6px;">
+              🔀 Phase Swap: <b id="display-swap">OFF</b>
+            </button>
+          </div>
+
+          <!-- Zero Electric Angle Offset Nudge -->
+          <div style="margin-bottom: 8px;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">
+              <span>Zero Offset (θ₀): <b id="display-offset" style="color: #38bdf8;">0.00 rad</b></span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 4px;">
+              <button class="btn-offset-nudge btn btn-secondary" data-nudge="-0.10" style="font-size: 0.72rem; padding: 4px;">-0.10</button>
+              <button class="btn-offset-nudge btn btn-secondary" data-nudge="+0.10" style="font-size: 0.72rem; padding: 4px;">+0.10</button>
+              <button class="btn-offset-nudge btn btn-secondary" data-nudge="-1.57" style="font-size: 0.72rem; padding: 4px;">-90°</button>
+              <button class="btn-offset-nudge btn btn-secondary" data-nudge="+1.57" style="font-size: 0.72rem; padding: 4px;">+90°</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CSV Data Recorder for MATLAB -->
+      <div class="panel-card">
+        <div class="panel-header">
+          <span class="panel-icon">💾</span>
+          <h4>Data Recorder & MATLAB Export</h4>
+        </div>
+        <div class="panel-body">
+          <p class="desc-text">Capture continuous high-resolution telemetry samples and export to CSV for deep MATLAB / Python analysis.</p>
+          <div class="recorder-actions">
+            <button id="btn-record-toggle" class="btn btn-secondary">
+              🔴 Start Recording
+            </button>
+            <button id="btn-download-csv" class="btn btn-outline" disabled>
+              📥 Download CSV
+            </button>
+          </div>
+          <div class="record-counter">
+            Recorded Samples: <b id="recorded-count">0</b>
+          </div>
+        </div>
+      </div>
+
+      <!-- Throttled Diagnostic Log Console -->
+      <div class="panel-card log-panel">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <span class="panel-icon">📜</span>
+            <h4>Diagnostic Log (Throttled)</h4>
+          </div>
+          <div class="log-actions">
+            <button id="btn-copy-log" class="btn-sm">📋 Copy</button>
+            <button id="btn-clear-log" class="btn-sm">🧹 Clear</button>
+          </div>
+        </div>
+        <div class="log-console" id="log-console">
+          <div class="log-entry system">System initialized. Ready to connect.</div>
+        </div>
+      </div>
+
+    </aside>
+  </main>
+
+  <script src="app.js?v=4"></script>
+</body>
+</html>
