@@ -18,9 +18,7 @@ void vesc_conf_set_defaults(mc_configuration *conf)
 
     // Switching Frequency & Limits
     conf->foc_f_zv = 20000.0f;           // 20 kHz PWM Frequency
-    conf->l_max_duty = 0.80f;            // 80% max duty → ensures min 10µs low-side FET ON time
-                                          // for reliable ADC injected sampling of shunt current.
-                                          // At 0.95, phases B&C have only 2.5µs → ADC corrupted → Iq flips negative!
+    conf->l_max_duty = 0.88f;            // 88% max duty → 12.45V headroom, 6µs low-side window for ADC
     conf->l_min_duty = 0.005f;           // 0.5% min duty cycle
 
     // Controller phase-domain parameters for the assembled GB8115-4.
