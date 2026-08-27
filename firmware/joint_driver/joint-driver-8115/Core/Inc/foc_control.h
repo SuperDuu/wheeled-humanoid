@@ -36,6 +36,7 @@ typedef struct {
 	bool  observer_angle_active;
 	float observer_phase_interp;
 	float observer_angle_blend;
+	float virtual_lead_angle;
 
 	// Phase Mapping: Auto-detected during alignment
 	// If true, swap Phase B ↔ C at PWM output and current sensing
