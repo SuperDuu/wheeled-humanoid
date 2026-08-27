@@ -216,53 +216,7 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     float omega_mech = foc->encoder.velocity_rad_s;
     motor->m_speed_est_fast = (float)(conf_now->encoder_direction * 21) * omega_mech;
 
-    /* Automatic Kinetic Anti-Stall Escape (Hysteresis-Guarded 150ms Breakaway Wave):
-     * When running in SPEED mode (target >= 15 RPM), if rotor gets trapped in static stiction
-     * (speed < 5 RPM) for > 30ms, inject a 150ms dynamic rotating stator wave to break stiction,
-     * identical to bulletproof open-loop behavior. */
-    static float stall_timer = 0.0f;
-    static float escape_timer = 0.0f;
-    static float escape_angle = 0.0f;
-    static bool escape_active = false;
-
-    float mech_rpm = fabsf(omega_mech * (60.0f / (2.0f * (float)M_PI)));
-    if (motor->m_state == MC_STATE_RUNNING && motor->m_control_mode == CONTROL_MODE_SPEED &&
-        fabsf(motor->m_speed_pid_set_rpm) >= 15.0f * 21.0f) {
-        if (!escape_active) {
-            if (mech_rpm < 5.0f) {
-                stall_timer += dt_fast;
-                if (stall_timer > 0.030f) { // 30ms of static stall
-                    escape_active = true;
-                    escape_timer = 0.150f; // 150ms minimum escape duration
-                    escape_angle = encoder_elec_angle;
-                    motor->m_speed_i_term = 0.0f; // Clear windup
-                }
-            } else {
-                stall_timer = 0.0f;
-            }
-        } else {
-            escape_timer -= dt_fast;
-            if (escape_timer <= 0.0f && mech_rpm > 12.0f) {
-                escape_active = false;
-                stall_timer = 0.0f;
-            }
-        }
-    } else {
-        stall_timer = 0.0f;
-        escape_timer = 0.0f;
-        escape_active = false;
-    }
-
-    float elec_angle;
-    if (escape_active) {
-        float dir = (motor->m_speed_command_rpm > 0.0f) ? 1.0f : -1.0f;
-        escape_angle += dir * (50.0f * 21.0f * 2.0f * (float)M_PI / 60.0f) * dt_fast;
-        utils_norm_angle_rad(&escape_angle);
-        elec_angle = escape_angle;
-    } else {
-        elec_angle = encoder_elec_angle;
-    }
-
+    float elec_angle = encoder_elec_angle;
     state_m->phase = elec_angle;
 
     // 1c. Direct Electrical Angle for Current Sensing (30-cycle Ben Katz sincos_lut)
