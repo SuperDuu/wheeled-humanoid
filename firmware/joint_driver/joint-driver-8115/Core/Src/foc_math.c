@@ -467,15 +467,22 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	float iq_min = -iq_limit;
 	float iq_max = iq_limit;
 
-	float iq_temp = iq_friction + p_term + motor->m_speed_i_term + d_term;
-	bool pushing_high = iq_temp >= iq_max && error_erpm > 0.0f;
-	bool pushing_low = iq_temp <= iq_min && error_erpm < 0.0f;
-	if (!pushing_high && !pushing_low) {
-		motor->m_speed_i_term += conf_now->s_pid_ki * error_erpm * dt;
-		utils_truncate_number_abs(&motor->m_speed_i_term, SPEED_IQ_I_MAX_A);
+	/* Dynamic Kinetic Anti-Stall Surge: When running at steady speed (>15 RPM),
+	 * if cycloid gearbox detents cause speed to dip below 75% of target, instantly
+	 * surge Iq by up to +1.5A to punch through the detent without losing momentum.
+	 * This prevents the motor from ever entering 0 RPM static friction. */
+	float anti_stall_boost = 0.0f;
+	if (fabsf(target_mech_rpm) >= 15.0f) {
+		float speed_ratio = actual_mech_rpm / target_mech_rpm;
+		if (speed_ratio < 0.75f) {
+			float droop = 0.75f - speed_ratio;
+			anti_stall_boost = droop * 2.5f; // Proportional surge up to 1.5A
+			if (anti_stall_boost > 1.50f) anti_stall_boost = 1.50f;
+			if (target_mech_rpm < 0.0f) anti_stall_boost = -anti_stall_boost;
+		}
 	}
 
-	float iq_cmd = iq_friction + p_term + motor->m_speed_i_term + d_term;
+	float iq_cmd = iq_friction + p_term + motor->m_speed_i_term + d_term + anti_stall_boost;
 	utils_truncate_number(&iq_cmd, iq_min, iq_max);
 	motor->m_iq_set = iq_cmd;
 }
