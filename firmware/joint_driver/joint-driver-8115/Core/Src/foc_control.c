@@ -336,11 +336,17 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
         // Vector circle voltage limitation for integrators (limit_norm)
         limit_norm(&state_m->vd_int, &state_m->vq_int, max_v_mag);
 
+        // Strict Vd limit: prevent d-axis from stealing Vq torque headroom (Surface PMSM Id=0)
+        float vd_max_abs = max_v_mag * conf_now->foc_mag_vd_max;
+        if (vd_max_abs < 1.0f) vd_max_abs = 1.0f;
+        utils_truncate_number_abs(&state_m->vd_int, vd_max_abs);
+
         state_m->vd = kp * Ierr_d + state_m->vd_int + vd_ff;
         state_m->vq = kp * Ierr_q + state_m->vq_int + vq_ff;
 
         // Final vector circle voltage limitation (SVPWM circular headroom)
         limit_norm(&state_m->vd, &state_m->vq, max_v_mag);
+        utils_truncate_number_abs(&state_m->vd, vd_max_abs);
     }
 
     // Normalize voltages for Inverse Park & Modulation
