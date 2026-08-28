@@ -15,20 +15,23 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-<<<<<<< HEAD
 #include <ctype.h>
-=======
->>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
 
 /* USB Device Handle */
 extern USBD_HandleTypeDef hUsbDeviceFS;
+extern volatile int8_t g_encoder_calibration_result;
 
 /* Global references */
 static uint32_t s_last_telemetry_tx_ms = 0;
-static char s_rx_cmd_buffer[64];
-static uint8_t s_rx_cmd_idx = 0;
+#define RX_COMMAND_MAX_LEN 64U
+#define RX_COMMAND_QUEUE_DEPTH 4U
 
-<<<<<<< HEAD
+static char s_rx_cmd_buffer[RX_COMMAND_MAX_LEN];
+static uint8_t s_rx_cmd_idx = 0;
+static char s_rx_command_queue[RX_COMMAND_QUEUE_DEPTH][RX_COMMAND_MAX_LEN];
+static volatile uint8_t s_rx_queue_head = 0;
+static volatile uint8_t s_rx_queue_tail = 0;
+
 /* Open-Loop Test Run Control Globals */
 volatile uint8_t run_open_loop = 0;
 volatile float open_loop_target_rpm = 100.0f;
@@ -36,8 +39,6 @@ volatile float open_loop_current_rpm = 0.0f;
 volatile float open_loop_angle = 0.0f;
 volatile float open_loop_voltage = 9.0f; // 9.0V (~2.3A) - High torque for 1:17 Cycloid gearbox load
 
-=======
->>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
 /* Checksum calculation */
 static uint16_t CalculateChecksum(const uint8_t *data, uint16_t len)
 {
@@ -48,41 +49,50 @@ static uint16_t CalculateChecksum(const uint8_t *data, uint16_t len)
     return sum;
 }
 
+static int ParseFloatArgs(const char *text, float *values, int max_values)
+{
+    int count = 0;
+    while (text != NULL && count < max_values) {
+        while (isspace((unsigned char)*text)) text++;
+        if (*text == '\0') break;
+
+        char *end = NULL;
+        float value = strtof(text, &end);
+        if (end == text) break;
+
+        values[count++] = value;
+        text = end;
+    }
+    return count;
+}
+
 /**
   * @brief  Initialize telemetry communication (Native USB CDC)
   */
 void Comm_Telemetry_Init(void)
 {
     s_last_telemetry_tx_ms = HAL_GetTick();
-    s_rx_cmd_idx = 0;
+    /* USB is initialized before the 1.2 s ADC-offset wait. The RX state is
+     * already zeroed by BSS startup; resetting it here would discard a valid
+     * command sent by the host immediately after USB enumeration. */
 }
 
 /**
   * @brief  Transmit high-speed binary telemetry frame over Native USB CDC
   */
-<<<<<<< HEAD
 bool Comm_Telemetry_Send(FOC_Controller_t *foc)
 {
     if (foc == NULL) return false;
-=======
-void Comm_Telemetry_Send(FOC_Controller_t *foc)
-{
-    if (foc == NULL) return;
->>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
 
     motor_all_state_t *motor = &foc->motor;
     motor_state_t *state_m = &motor->m_motor_state;
     mc_configuration *conf = motor->m_conf;
 
-<<<<<<< HEAD
     /* CRITICAL: packet PHẢI là static vì CDC_Transmit_FS chỉ lưu CON TRỎ.
      * Packet 78 bytes > 64 bytes (USB FS max packet) → cần 2 USB transactions.
      * Transaction thứ 2 (14 bytes cuối) xảy ra trong USB IRQ SAU KHI hàm return.
      * Nếu packet trên stack → pointer trỏ vào rác → 14 bytes cuối corrupt → checksum fail 95%. */
     static telemetry_packet_t packet;
-=======
-    telemetry_packet_t packet;
->>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     memset(&packet, 0, sizeof(packet));
 
     packet.magic1 = TELEMETRY_MAGIC_BYTE1;
@@ -102,15 +112,9 @@ void Comm_Telemetry_Send(FOC_Controller_t *foc)
     packet.i_b = ib;
     packet.i_c = ic;
 
-<<<<<<< HEAD
     // 2. FOC Vector Currents (Filtered DC for smooth telemetry display)
     packet.i_d = state_m->id_filter;
     packet.i_q = state_m->iq_filter;
-=======
-    // 2. FOC Vector Currents
-    packet.i_d = state_m->id;
-    packet.i_q = state_m->iq;
->>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     packet.i_q_target = state_m->iq_target;
 
     // 3. 3-Phase PWM Duty Cycles
@@ -125,9 +129,12 @@ void Comm_Telemetry_Send(FOC_Controller_t *foc)
 
     // 5. Speeds (Mechanical RPM)
     float pole_pairs = (conf != NULL && conf->foc_motor_pole_pairs > 0) ? (float)conf->foc_motor_pole_pairs : 21.0f;
-    float erpm = RADPS2RPM_f(motor->m_speed_est_fast);
-    packet.speed_rpm = erpm / pole_pairs;
-    packet.speed_target_rpm = motor->m_speed_command_rpm / pole_pairs;
+    float mech_rpm = foc->encoder.velocity_rpm;
+    if (motor->m_state != MC_STATE_RUNNING) {
+        mech_rpm = 0.0f;
+    }
+    packet.speed_rpm = mech_rpm;
+    packet.speed_target_rpm = (run_open_loop == 1) ? open_loop_target_rpm : (motor->m_speed_command_rpm / pole_pairs);
 
     // 6. System Status
     extern volatile ADC_Readings_t g_adc_readings;
@@ -136,17 +143,17 @@ void Comm_Telemetry_Send(FOC_Controller_t *foc)
     packet.control_mode = (uint8_t)motor->m_control_mode;
     packet.motor_state = (uint8_t)motor->m_state;
     packet.fault_code = (uint8_t)foc->fault;
-<<<<<<< HEAD
     packet.encoder_dir = (int8_t)conf->encoder_direction;
 
     // FOC Diagnostic Fields
     packet.vd = state_m->vd;
     packet.vq = state_m->vq;
     packet.zero_elec_angle = foc->zero_electric_angle;
+    /* Restore proper id_target telemetry for current loop diagnostics.
+     * Observer-encoder error is still computed internally in the slow loop. */
     packet.id_target = state_m->id_target;
-=======
-    packet.reserved = 0;
->>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
+    packet.encoder_lut_enabled = foc->encoder.use_lut ? 1U : 0U;
+    packet.calibration_result = g_encoder_calibration_result;
 
     // Calculate Checksum over payload (excluding magic & checksum itself)
     uint8_t *raw_buf = (uint8_t*)&packet;
@@ -157,15 +164,10 @@ void Comm_Telemetry_Send(FOC_Controller_t *foc)
         USBD_CDC_HandleTypeDef *hcdc = (USBD_CDC_HandleTypeDef*)hUsbDeviceFS.pClassData;
         if (hcdc->TxState == 0) {
             CDC_Transmit_FS((uint8_t*)&packet, sizeof(packet));
-<<<<<<< HEAD
             return true;
         }
     }
     return false;
-=======
-        }
-    }
->>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
 }
 
 /**
@@ -183,6 +185,35 @@ extern volatile float speed_target_dbg;
 extern volatile float iq_target_dbg;
 extern volatile float pos_target_dbg;
 
+static void StartClosedLoopSpeed(FOC_Controller_t *foc, float mech_rpm)
+{
+    motor_all_state_t *motor = &foc->motor;
+    float pole_pairs = (motor->m_conf != NULL &&
+                        motor->m_conf->foc_motor_pole_pairs > 0U)
+                           ? (float)motor->m_conf->foc_motor_pole_pairs
+                           : 21.0f;
+    float erpm_now = RADPS2RPM_f(motor->m_speed_est_fast);
+
+    run_open_loop = 0;
+    open_loop_target_rpm = 0.0f;
+    open_loop_current_rpm = 0.0f;
+    speed_target_dbg = mech_rpm;
+    motor->m_speed_command_rpm = mech_rpm * pole_pairs;
+    motor->m_speed_pid_set_rpm = erpm_now;
+    motor->m_speed_d_filter = erpm_now;
+    motor->m_speed_d_filter_proc = erpm_now;
+    motor->m_speed_i_term = 0.0f;
+    motor->m_speed_prev_error = 0.0f;
+    motor->m_iq_set = 0.0f;
+    motor->m_openloop_spinup_active = false;
+    motor->m_openloop_spinup_time = 0.0f;
+    motor->m_control_mode = CONTROL_MODE_SPEED;
+    motor->m_state = MC_STATE_RUNNING;
+    run_foc_mode = 3;
+    foc->fault = MC_FAULT_NONE;
+    TIM1_EnsureMoeEnabled();
+}
+
 static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
 {
     if (foc == NULL || cmd == NULL) return;
@@ -198,17 +229,16 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         p++;
     }
 
-<<<<<<< HEAD
-    if (strncmp(cmd, "STOP", 4) == 0 || strncmp(cmd, "OFF", 3) == 0) {
-=======
-    if (strncmp(cmd, "STOP", 4) == 0) {
->>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
+    if (strncmp(cmd, "STOP", 4) == 0 || strcmp(cmd, "OFF") == 0) {
+        extern volatile int run_alignment;
+        extern volatile int run_calibration;
         motor->m_state = MC_STATE_OFF;
         motor->m_iq_set = 0.0f;
         motor->m_speed_command_rpm = 0.0f;
         motor->m_speed_pid_set_rpm = 0.0f;
-<<<<<<< HEAD
         motor->m_speed_i_term = 0.0f;
+        motor->m_openloop_spinup_active = false;
+        motor->m_openloop_spinup_time = 0.0f;
         motor->m_motor_state.duty_now = 0.0f;
         motor->m_motor_state.vd = 0.0f;
         motor->m_motor_state.vq = 0.0f;
@@ -217,17 +247,24 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         iq_target_dbg = 0.0f;
         run_foc_mode = 0;
         run_open_loop = 0;
-=======
-        motor->m_pos_pid_set = motor->m_joint_angle;
-        run_foc_mode = 0;
-        speed_target_dbg = 0.0f;
-        iq_target_dbg = 0.0f;
->>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
+        open_loop_target_rpm = 0.0f;
+        open_loop_current_rpm = 0.0f;
+        run_alignment = 0;
+        run_calibration = 0;
     }
     else if (strncmp(cmd, "ALIGN", 5) == 0) {
         extern volatile int run_alignment;
+        motor->m_state = MC_STATE_OFF;
+        motor->m_iq_set = 0.0f;
         run_alignment = 1;
-<<<<<<< HEAD
+        run_open_loop = 0;
+        run_foc_mode = 0;
+    }
+    else if (strncmp(cmd, "CALIB", 5) == 0 || strncmp(cmd, "CALIBRATE", 9) == 0) {
+        extern volatile int run_calibration;
+        motor->m_state = MC_STATE_OFF;
+        motor->m_iq_set = 0.0f;
+        run_calibration = 1;
         run_open_loop = 0;
         run_foc_mode = 0;
     }
@@ -238,7 +275,10 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
                           (strncmp(cmd, "TEST", 4) == 0) ? &cmd[4] : &cmd[3];
         while (*arg == ' ') arg++;
         if (*arg != '\0') {
-            int n = sscanf(arg, "%f %f", &rpm, &v_custom);
+            float values[2] = {rpm, v_custom};
+            int n = ParseFloatArgs(arg, values, 2);
+            if (n >= 1) rpm = values[0];
+            if (n >= 2) v_custom = values[1];
             if (n >= 2 && v_custom > 0.5f) {
                 open_loop_voltage = v_custom;
             }
@@ -246,6 +286,12 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         open_loop_target_rpm = rpm;
         open_loop_current_rpm = 0.0f;
         run_open_loop = 1;
+        run_foc_mode = 0;
+        motor->m_speed_command_rpm = rpm * (float)foc->conf.foc_motor_pole_pairs;
+        /* OPENLOOP is a voltage-vector diagnostic. Leaving SPEED selected
+         * made telemetry report the stale speed-loop filter instead of the
+         * encoder measurement. */
+        motor->m_control_mode = CONTROL_MODE_DUTY;
         motor->m_state = MC_STATE_RUNNING;
         foc->fault = MC_FAULT_NONE;
         TIM1_EnsureMoeEnabled();
@@ -254,7 +300,10 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         float angle = 0.0f;
         float volt = 4.0f;
         const char *arg = (strncmp(cmd, "LOCK_ANGLE ", 11) == 0) ? &cmd[11] : &cmd[5];
-        sscanf(arg, "%f %f", &angle, &volt);
+        float values[2] = {angle, volt};
+        int n = ParseFloatArgs(arg, values, 2);
+        if (n >= 1) angle = values[0];
+        if (n >= 2) volt = values[1];
         open_loop_angle = angle;
         open_loop_voltage = (volt > 0.5f) ? volt : 4.0f;
         open_loop_current_rpm = 0.0f;
@@ -274,18 +323,14 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         int m = atoi(&cmd[5]);
         run_open_loop = 0;
         foc->fault = MC_FAULT_NONE;
-=======
-    }
-    else if (strncmp(cmd, "MODE ", 5) == 0) {
-        int m = atoi(&cmd[5]);
->>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
         if (m == 0) {
             motor->m_state = MC_STATE_OFF;
             motor->m_iq_set = 0.0f;
             motor->m_speed_command_rpm = 0.0f;
-<<<<<<< HEAD
             motor->m_speed_pid_set_rpm = 0.0f;
             motor->m_speed_i_term = 0.0f;
+            motor->m_openloop_spinup_active = false;
+            motor->m_openloop_spinup_time = 0.0f;
             motor->m_motor_state.duty_now = 0.0f;
             speed_target_dbg = 0.0f;
             iq_target_dbg = 0.0f;
@@ -293,16 +338,10 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         } else if (m >= 1 && m <= 5) {
             motor->m_state = MC_STATE_RUNNING;
             TIM1_EnsureMoeEnabled();
-=======
-            run_foc_mode = 0;
-        } else if (m >= 1 && m <= 4) {
-            motor->m_state = MC_STATE_RUNNING;
->>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
             if (m == 1) { motor->m_control_mode = CONTROL_MODE_CURRENT; run_foc_mode = 1; }
             else if (m == 2) { motor->m_control_mode = CONTROL_MODE_CURRENT_BRAKE; run_foc_mode = 1; }
             else if (m == 3) { motor->m_control_mode = CONTROL_MODE_SPEED; run_foc_mode = 3; }
             else if (m == 4) { motor->m_control_mode = CONTROL_MODE_POS; run_foc_mode = 2; }
-<<<<<<< HEAD
             else if (m == 5) { motor->m_control_mode = CONTROL_MODE_DUTY; run_foc_mode = 4; }
         }
     }
@@ -310,40 +349,11 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         float rpm = 100.0f;
         if (strncmp(cmd, "CLOSELOOP ", 10) == 0) rpm = atof(&cmd[10]);
         else if (strncmp(cmd, "CLOSE_LOOP ", 11) == 0) rpm = atof(&cmd[11]);
-        speed_target_dbg = rpm;
-        motor->m_speed_command_rpm = rpm * 21.0f;
-        motor->m_speed_pid_set_rpm = RADPS2RPM_f(motor->m_speed_est_fast);
-        motor->m_speed_d_filter = motor->m_speed_pid_set_rpm;
-        motor->m_speed_i_term = 0.0f;
-        motor->m_speed_prev_error = 0.0f;
-        motor->m_speed_d_filter_proc = 0.0f;
-        motor->m_control_mode = CONTROL_MODE_SPEED;
-        motor->m_state = MC_STATE_RUNNING;
-        run_foc_mode = 3;
-        foc->fault = MC_FAULT_NONE;
-        TIM1_EnsureMoeEnabled();
+        StartClosedLoopSpeed(foc, rpm);
     }
-=======
-        }
-    }
->>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     else if (strncmp(cmd, "SPEED ", 6) == 0) {
         float mech_rpm = atof(&cmd[6]);
-        float pole_pairs = (motor->m_conf != NULL) ? (float)motor->m_conf->foc_motor_pole_pairs : 21.0f;
-        speed_target_dbg = mech_rpm;
-<<<<<<< HEAD
-        run_open_loop = 0;
-        motor->m_speed_command_rpm = mech_rpm * pole_pairs;
-        motor->m_speed_pid_set_rpm = RADPS2RPM_f(motor->m_speed_est_fast);
-        motor->m_speed_d_filter = motor->m_speed_pid_set_rpm;
-        motor->m_speed_i_term = 0.0f;
-        motor->m_speed_prev_error = 0.0f;
-        motor->m_speed_d_filter_proc = 0.0f;
-        motor->m_control_mode = CONTROL_MODE_SPEED;
-        motor->m_state = MC_STATE_RUNNING;
-        run_foc_mode = 3;
-        foc->fault = MC_FAULT_NONE;
-        TIM1_EnsureMoeEnabled();
+        StartClosedLoopSpeed(foc, mech_rpm);
     }
     else if (strncmp(cmd, "IQ ", 3) == 0 || strncmp(cmd, "CURRENT ", 8) == 0 || strncmp(cmd, "TORQUE ", 7) == 0 || strncmp(cmd, "FORCE ", 6) == 0) {
         float iq = 0.0f;
@@ -424,7 +434,11 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         float target_deg = 0.0f;
         float duration_s = 1.0f;       // Mặc định 1.0 giây
         float hold_limit = 3.0f;       // Mặc định 3.0A
-        int count = sscanf(p, "%f %f %f", &target_deg, &duration_s, &hold_limit);
+        float values[3] = {target_deg, duration_s, hold_limit};
+        int count = ParseFloatArgs(p, values, 3);
+        if (count >= 1) target_deg = values[0];
+        if (count >= 2) duration_s = values[1];
+        if (count >= 3) hold_limit = values[2];
 
         if (count >= 1) {
             // Nếu người dùng nhập lực dạng Nm lớn (> 15Nm) -> quy đổi sang dòng Ampe (I = Tau / (Kt * Gear))
@@ -524,11 +538,17 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
     else if (strncmp(cmd, "OFFSET ", 7) == 0) {
         float off = atof(&cmd[7]);
         foc->zero_electric_angle = off;
+        foc->aligned = true;
     }
     else if (strncmp(cmd, "SET_SPEED_PID ", 14) == 0 || strncmp(cmd, "SPID ", 5) == 0) {
         float kp = 0.0015f, ki = 0.0010f, ramp = 3000.0f;
         const char *arg = (strncmp(cmd, "SET_SPEED_PID ", 14) == 0) ? &cmd[14] : &cmd[5];
-        if (sscanf(arg, "%f %f %f", &kp, &ki, &ramp) >= 2) {
+        float values[3] = {kp, ki, ramp};
+        int count = ParseFloatArgs(arg, values, 3);
+        if (count >= 2) {
+            kp = values[0];
+            ki = values[1];
+            if (count >= 3) ramp = values[2];
             foc->conf.s_pid_kp = kp;
             foc->conf.s_pid_ki = ki;
             if (ramp > 0.0f) foc->conf.s_pid_ramp_erpms_s = ramp;
@@ -539,10 +559,20 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
             }
         }
     }
+    else if (strncmp(cmd, "SET_SPEED_FILTER ", 17) == 0 || strncmp(cmd, "SFILT ", 6) == 0) {
+        float value = atof((strncmp(cmd, "SET_SPEED_FILTER ", 17) == 0) ? &cmd[17] : &cmd[6]);
+        if (value >= 0.01f && value <= 1.0f) {
+            foc->conf.s_pid_kd_filter = value;
+            if (motor->m_conf != NULL) motor->m_conf->s_pid_kd_filter = value;
+        }
+    }
     else if (strncmp(cmd, "SET_POS_PID ", 12) == 0 || strncmp(cmd, "PPID ", 5) == 0) {
         float kp = 20.0f, kd = 0.10f;
         const char *arg = (strncmp(cmd, "SET_POS_PID ", 12) == 0) ? &cmd[12] : &cmd[5];
-        if (sscanf(arg, "%f %f", &kp, &kd) >= 2) {
+        float values[2] = {kp, kd};
+        if (ParseFloatArgs(arg, values, 2) >= 2) {
+            kp = values[0];
+            kd = values[1];
             foc->conf.p_pid_kp = kp;
             foc->conf.p_pid_kd = kd;
             if (motor->m_conf != NULL) {
@@ -622,43 +652,26 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         int idx = 0;
         int val = 0;
         if (sscanf(&cmd[4], "%d %d", &idx, &val) >= 2) {
-            if (idx >= 0 && idx < ENCODER_LUT_SIZE) {
-                foc->encoder_lut[idx] = (int16_t)val;
-                foc->use_encoder_lut = true;
+            if (idx >= 0 && idx < AS5048A_LUT_SIZE && val >= -128 && val <= 128) {
+                foc->encoder.offset_lut[idx] = (int16_t)val;
             }
         }
     }
     else if (strncmp(cmd, "USE_LUT ", 8) == 0 || strncmp(cmd, "ENABLE_LUT ", 11) == 0) {
         int en = atoi((strncmp(cmd, "USE_LUT ", 8) == 0) ? &cmd[8] : &cmd[11]);
-        foc->use_encoder_lut = (en != 0);
+        foc->encoder.use_lut = (en != 0);
+    }
+    else if (strcmp(cmd, "CLEAR_LUT") == 0) {
+        foc->encoder.use_lut = 0;
+        for (int i = 0; i < AS5048A_LUT_SIZE; i++) {
+            foc->encoder.offset_lut[i] = 0;
+        }
     }
     else if (strncmp(cmd, "TEST_VQ ", 8) == 0 || strncmp(cmd, "STATIC_TEST ", 12) == 0) {
         float val = atof((strncmp(cmd, "TEST_VQ ", 8) == 0) ? &cmd[8] : &cmd[12]);
         motor->m_control_mode = CONTROL_MODE_DUTY;
         motor->m_motor_state.duty_now = val / motor->m_motor_state.v_bus;
         motor->m_state = MC_STATE_RUNNING;
-=======
-        motor->m_speed_command_rpm = mech_rpm * pole_pairs;
-        motor->m_control_mode = CONTROL_MODE_SPEED;
-        motor->m_state = MC_STATE_RUNNING;
-        run_foc_mode = 3;
-    }
-    else if (strncmp(cmd, "IQ ", 3) == 0 || strncmp(cmd, "CURRENT ", 8) == 0) {
-        float iq = atof((strncmp(cmd, "IQ ", 3) == 0) ? &cmd[3] : &cmd[8]);
-        iq_target_dbg = iq;
-        motor->m_iq_set = iq;
-        motor->m_control_mode = CONTROL_MODE_CURRENT;
-        motor->m_state = MC_STATE_RUNNING;
-        run_foc_mode = 1;
-    }
-    else if (strncmp(cmd, "POS ", 4) == 0) {
-        float pos = atof(&cmd[4]);
-        pos_target_dbg = pos;
-        motor->m_pos_pid_set = pos;
-        motor->m_control_mode = CONTROL_MODE_POS;
-        motor->m_state = MC_STATE_RUNNING;
-        run_foc_mode = 2;
->>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     }
 }
 
@@ -669,17 +682,18 @@ void Comm_Telemetry_Process(FOC_Controller_t *foc)
 {
     if (foc == NULL) return;
 
+    while (s_rx_queue_tail != s_rx_queue_head) {
+        uint8_t tail = s_rx_queue_tail;
+        ProcessCommand(foc, s_rx_command_queue[tail]);
+        s_rx_queue_tail = (uint8_t)((tail + 1U) % RX_COMMAND_QUEUE_DEPTH);
+    }
+
     // Transmit telemetry at 100Hz (every 10ms)
     uint32_t now = HAL_GetTick();
     if (now - s_last_telemetry_tx_ms >= 10) {
-<<<<<<< HEAD
         if (Comm_Telemetry_Send(foc)) {
             s_last_telemetry_tx_ms = now;
         }
-=======
-        s_last_telemetry_tx_ms = now;
-        Comm_Telemetry_Send(foc);
->>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
     }
 }
 
@@ -691,8 +705,12 @@ void Comm_Telemetry_RxByte(uint8_t rx_byte)
     if (rx_byte == '\n' || rx_byte == '\r') {
         if (s_rx_cmd_idx > 0) {
             s_rx_cmd_buffer[s_rx_cmd_idx] = '\0';
-            extern FOC_Controller_t g_foc_controller;
-            ProcessCommand(&g_foc_controller, s_rx_cmd_buffer);
+            uint8_t next_head = (uint8_t)((s_rx_queue_head + 1U) % RX_COMMAND_QUEUE_DEPTH);
+            if (next_head != s_rx_queue_tail) {
+                memcpy(s_rx_command_queue[s_rx_queue_head], s_rx_cmd_buffer,
+                       (size_t)s_rx_cmd_idx + 1U);
+                s_rx_queue_head = next_head;
+            }
             s_rx_cmd_idx = 0;
         }
     } else {

@@ -24,7 +24,12 @@ class MotorCommand(BaseModel):
     """Command payload for controlling motor modes, targets, and limits."""
     control_mode: int = Field(..., ge=0, le=4, description="Control mode: 0=IDLE, 1=CURRENT, 2=BRAKE, 3=SPEED, 4=POSITION")
     target_value: float = Field(0.0, description="Target value (Amperes for mode 1, RPM for mode 3, Radians for mode 4)")
-    brake_current: Optional[float] = Field(0.0, ge=0.0, description="Brake current in Amperes for mode 2")
+    brake_current: Optional[float] = Field(None, description="Optional brake current for BRAKE mode.")
+
+
+class TextCommand(BaseModel):
+    """ASCII text command payload (CALIB, ALIGN, SPEED, VOLT, STOP)."""
+    command: str = Field(..., description="ASCII text command string (e.g. CALIB, ALIGN, STOP, SPEED 150)")
 
 
 class SystemStatus(BaseModel):
@@ -37,6 +42,8 @@ class SystemStatus(BaseModel):
     samples_received: int = Field(0, description="Total telemetry samples received")
     recorded_samples: int = Field(0, description="Current recorded samples count")
     is_recording: bool = Field(False, description="Whether data recorder is active")
+    error_count: int = Field(0, description="Telemetry parse or serial error count")
+    diagnostic_logs: List[str] = Field(default_factory=list, description="Recent serial diagnostic log lines")
 
 
 class TelemetryFrame(BaseModel):
@@ -65,3 +72,5 @@ class TelemetryFrame(BaseModel):
     control_mode: int
     motor_state: int
     fault_code: int
+    encoder_lut_enabled: int = 0
+    calibration_result: int = 0

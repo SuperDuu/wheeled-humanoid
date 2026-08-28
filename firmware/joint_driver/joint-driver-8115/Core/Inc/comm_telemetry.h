@@ -59,7 +59,6 @@ typedef struct {
     uint8_t  control_mode;       // Current control mode (0:Idle, 1:Current, 2:Brake, 3:Speed, 4:Pos)
     uint8_t  motor_state;        // MC State
     uint8_t  fault_code;         // Fault flags
-<<<<<<< HEAD
     int8_t   encoder_dir;        // Encoder direction (+1 or -1) from ALIGN
     
     // FOC Diagnostic Fields (for debugging closed-loop)
@@ -67,15 +66,13 @@ typedef struct {
     float    vq;                 // Q-axis PI voltage output (V)
     float    zero_elec_angle;    // Electrical zero offset from ALIGN (rad)
     float    id_target;          // D-axis target current (A)
-=======
-    uint8_t  reserved;
->>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
+    uint8_t  encoder_lut_enabled;// 1 when the validated 128-point LUT is active
+    int8_t   calibration_result; // 0:none, 1:running, 2:saved, 3:loaded, negative:error
     
     uint16_t checksum;           // 16-bit XOR/Sum CRC
 } telemetry_packet_t;
 #pragma pack(pop)
 
-<<<<<<< HEAD
 /* Open-Loop Test Run Control Globals (Bypasses PID/Current loops) */
 extern volatile uint8_t run_open_loop;
 extern volatile float open_loop_target_rpm;
@@ -87,12 +84,6 @@ extern volatile float open_loop_voltage;
 void Comm_Telemetry_Init(void);
 void Comm_Telemetry_Process(FOC_Controller_t *foc);
 bool Comm_Telemetry_Send(FOC_Controller_t *foc);
-=======
-/* Public Functions (Pure USB CDC Telemetry) */
-void Comm_Telemetry_Init(void);
-void Comm_Telemetry_Process(FOC_Controller_t *foc);
-void Comm_Telemetry_Send(FOC_Controller_t *foc);
->>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
 void Comm_Telemetry_RxByte(uint8_t rx_byte);
 void Comm_Telemetry_RxBuffer(const uint8_t *buf, uint32_t len);
 
