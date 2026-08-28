@@ -10,6 +10,7 @@ import glob
 import time
 import math
 import struct
+import subprocess
 import threading
 from typing import List, Dict, Any, Optional, Callable
 
@@ -21,7 +22,7 @@ except ImportError:
     HAS_PYSERIAL = False
 
 from .models import PortInfo
-from .telemetry_parser import TelemetryParser, PACKET_SIZE, MAGIC1, MAGIC2
+from .telemetry_parser import TelemetryParser, PACKET_SIZES, MAGIC1, MAGIC2
 
 
 class SerialManager:
@@ -36,13 +37,16 @@ class SerialManager:
         self.is_simulation: bool = False
         self.running: bool = False
         self.thread: Optional[threading.Thread] = None
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
 
         # Telemetry metrics
         self.sample_count: int = 0
         self.last_hz_calc_time: float = time.time()
         self.hz_counter: int = 0
         self.telemetry_hz: float = 0.0
+        self.error_count: int = 0
+        self.diagnostic_logs: List[str] = []
+        self.max_diagnostic_logs: int = 100
 
         # Simulation state variables
         self.sim_theta_e: float = 0.0
@@ -56,20 +60,17 @@ class SerialManager:
 
     def list_available_ports(self) -> List[PortInfo]:
         """Scan system for available serial ports and simulation option."""
-        ports_list: List[PortInfo] = []
-
-        # Always include the Demo Simulation Mode
-        ports_list.append(PortInfo(
-            device="SIMULATION",
-            description="⚡ Virtual FOC Motor Simulation (Demo Mode)",
-            hwid="SIM-VIRTUAL-FOC"
-        ))
+        physical_ports: List[PortInfo] = []
 
         # Check physical ports via PySerial if available
         if HAS_PYSERIAL:
             try:
                 for p in serial.tools.list_ports.comports():
-                    ports_list.append(PortInfo(
+                    # Ignore motherboard dummy UARTs on Linux. app_driver did this
+                    # and it prevents users from selecting /dev/ttyS0..ttyS31 by mistake.
+                    if p.device.startswith("/dev/ttyS"):
+                        continue
+                    physical_ports.append(PortInfo(
                         device=p.device,
                         description=f"{p.description} ({p.device})",
                         hwid=p.hwid
@@ -78,16 +79,37 @@ class SerialManager:
                 pass
 
         # Also fallback glob scan for Linux
-        found_devices = {p.device for p in ports_list}
+        found_devices = {p.device for p in physical_ports}
         for dev in sorted(glob.glob("/dev/ttyUSB*") + glob.glob("/dev/ttyACM*")):
             if dev not in found_devices:
-                ports_list.append(PortInfo(
+                physical_ports.append(PortInfo(
                     device=dev,
                     description=f"Serial Device ({dev})",
                     hwid=dev
                 ))
 
+        usb_ports = [
+            p for p in physical_ports
+            if "USB" in p.description.upper() or "ACM" in p.device.upper() or "USB" in p.device.upper()
+        ]
+        other_ports = [p for p in physical_ports if p not in usb_ports]
+
+        ports_list = usb_ports + other_ports
+        ports_list.append(PortInfo(
+            device="SIMULATION",
+            description="Virtual FOC Motor Simulation (Demo Mode)",
+            hwid="SIM-VIRTUAL-FOC"
+        ))
         return ports_list
+
+    def log_diagnostic(self, message: str) -> None:
+        timestamp = time.strftime("%H:%M:%S")
+        entry = f"[{timestamp}] {message}"
+        with self.lock:
+            self.diagnostic_logs.append(entry)
+            if len(self.diagnostic_logs) > self.max_diagnostic_logs:
+                self.diagnostic_logs.pop(0)
+        print(entry)
 
     def connect(self, port: str, baudrate: int = 115200) -> bool:
         """Connect to real hardware serial port or start simulation engine."""
@@ -103,6 +125,7 @@ class SerialManager:
                 self.running = True
                 self.thread = threading.Thread(target=self._simulation_worker, daemon=True)
                 self.thread.start()
+                self.log_diagnostic("Simulation mode started.")
                 return True
 
             if not HAS_PYSERIAL:
@@ -113,17 +136,20 @@ class SerialManager:
                     port=port,
                     baudrate=baudrate,
                     timeout=0.1,
-                    write_timeout=0.2
+                    write_timeout=0.2,
+                    exclusive=True
                 )
                 self.is_simulation = False
                 self.is_connected = True
                 self.running = True
                 self.thread = threading.Thread(target=self._hardware_read_worker, daemon=True)
                 self.thread.start()
+                self.log_diagnostic(f"Connected to {port} @ {baudrate} baud.")
                 return True
             except Exception as e:
                 self.is_connected = False
                 self.ser = None
+                self.log_diagnostic(f"Connection failed to {port}: {e}")
                 raise ConnectionError(f"Failed to open port {port}: {e}")
 
     def disconnect(self) -> None:
@@ -142,6 +168,7 @@ class SerialManager:
             self.is_connected = False
             self.is_simulation = False
             self.telemetry_hz = 0.0
+        self.log_diagnostic("Disconnected.")
 
     def send_command(self, cmd_bytes: bytes) -> bool:
         """Send raw binary command to hardware STM32."""
@@ -160,8 +187,49 @@ class SerialManager:
                     return False
         return False
 
+    def send_ascii_command(self, text: str) -> bool:
+        """Send ASCII text command like 'CALIB\n' or 'ALIGN\n' to STM32."""
+        text = text.strip()
+        if self.is_simulation:
+            return self._apply_sim_ascii_command(text)
+        if not text.endswith("\r\n"):
+            text += "\r\n"
+        return self.send_command(text.encode("utf-8"))
+
+    def _apply_sim_ascii_command(self, text: str) -> bool:
+        """Apply common app_driver ASCII commands to the simulation engine."""
+        parts = text.strip().split()
+        if not parts:
+            return False
+        cmd = parts[0].upper()
+        try:
+            if cmd in ("STOP", "IDLE"):
+                self.sim_mode = 0
+                self.sim_target_rpm = 0.0
+                self.sim_iq_target = 0.0
+            elif cmd == "MODE" and len(parts) >= 2:
+                self.sim_mode = int(float(parts[1]))
+            elif cmd == "SPEED" and len(parts) >= 2:
+                self.sim_mode = 3
+                self.sim_target_rpm = float(parts[1])
+            elif cmd == "IQ" and len(parts) >= 2:
+                self.sim_mode = 1
+                self.sim_iq_target = float(parts[1])
+            elif cmd == "OPENLOOP" and len(parts) >= 2:
+                self.sim_mode = 7
+                self.sim_target_rpm = float(parts[1])
+                if len(parts) >= 3:
+                    self.sim_vbus = max(0.0, min(60.0, float(parts[2]) * 2.4))
+            elif cmd == "POS" and len(parts) >= 2:
+                self.sim_mode = 4
+            self.log_diagnostic(f"Simulation command: {text}")
+            return True
+        except Exception as e:
+            self.log_diagnostic(f"Simulation command failed [{text}]: {e}")
+            return False
+
     def send_motor_control(self, mode: int, target_val: float) -> bool:
-        """Construct binary motor control packet (0xBB 0x66 ...) and send."""
+        """Send motor control in the same ASCII command style as app_driver."""
         if self.is_simulation:
             self.sim_mode = mode
             if mode == 3:
@@ -173,12 +241,15 @@ class SerialManager:
                 self.sim_iq_target = 0.0
             return True
 
-        # Binary packet: 0xBB, 0x66, 0x02 (cmd), len=5, mode (u8), target (float), checksum (u16)
-        pkt = bytearray([0xBB, 0x66, 0x02, 0x05, mode & 0xFF])
-        pkt.extend(struct.pack("<f", float(target_val)))
-        cs = sum(pkt) & 0xFFFF
-        pkt.extend(struct.pack("<H", cs))
-        return self.send_command(bytes(pkt))
+        if mode == 0:
+            return self.send_ascii_command("STOP")
+        if mode == 1:
+            return self.send_ascii_command(f"IQ {float(target_val):.3f}")
+        if mode == 3:
+            return self.send_ascii_command(f"SPEED {float(target_val):.1f}")
+        if mode == 4:
+            return self.send_ascii_command(f"POS {float(target_val):.3f}")
+        return self.send_ascii_command(f"MODE {int(mode)}")
 
     def _hardware_read_worker(self) -> None:
         """Background reader for hardware serial port with sliding window packet search."""
@@ -192,21 +263,44 @@ class SerialManager:
                         buffer.extend(raw)
 
                 # Search for packet magic 0xAA 0x55
-                while len(buffer) >= PACKET_SIZE:
-                    if buffer[0] == MAGIC1 and buffer[1] == MAGIC2:
-                        candidate = bytes(buffer[:PACKET_SIZE])
-                        parsed = TelemetryParser.parse_packet(candidate)
-                        if parsed:
-                            del buffer[:PACKET_SIZE]
-                            self._handle_new_frame(parsed)
-                            continue
+                while len(buffer) >= 4:
+                    if buffer[0] != MAGIC1 or buffer[1] != MAGIC2:
+                        del buffer[0]
+                        continue
+
+                    packet_size = int(buffer[3]) + 4
+                    if packet_size not in PACKET_SIZES:
+                        self.error_count += 1
+                        del buffer[0]
+                        continue
+                    if len(buffer) < packet_size:
+                        break
+
+                    candidate = bytes(buffer[:packet_size])
+                    parsed = TelemetryParser.parse_packet(candidate)
+                    if parsed:
+                        del buffer[:packet_size]
+                        self._handle_new_frame(parsed)
+                        continue
+                    self.error_count += 1
                     del buffer[0]
 
                 if len(buffer) > 4096:
                     buffer.clear()
 
                 time.sleep(0.002)
-            except Exception:
+            except Exception as e:
+                self.log_diagnostic(f"Serial read error: {e}")
+                with self.lock:
+                    self.running = False
+                    self.is_connected = False
+                    self.telemetry_hz = 0.0
+                    if self.ser:
+                        try:
+                            self.ser.close()
+                        except Exception:
+                            pass
+                        self.ser = None
                 break
 
     def _simulation_worker(self) -> None:
@@ -294,3 +388,45 @@ class SerialManager:
 
         if self.on_frame_callback:
             self.on_frame_callback(frame)
+
+    def run_auto_tune(self) -> Dict[str, Any]:
+        """Run the existing OSS auto-identification script without keeping serial open."""
+        was_connected = self.is_connected
+        saved_port = self.port
+        saved_baud = self.baudrate
+
+        if was_connected:
+            self.disconnect()
+            time.sleep(0.5)
+
+        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        script_path = os.path.join(root_dir, "auto_identify_motor.py")
+        profile_path = os.path.join(root_dir, "motor_calib_profile.json")
+        if os.path.exists(profile_path):
+            try:
+                os.remove(profile_path)
+            except Exception:
+                pass
+
+        profile: Dict[str, Any] = {}
+        try:
+            cmd_args = [sys.executable, script_path]
+            if saved_port and saved_port.upper() != "SIMULATION":
+                cmd_args.append(saved_port)
+            result = subprocess.run(cmd_args, capture_output=True, text=True, timeout=90)
+            output = result.stdout or result.stderr or ""
+            if os.path.exists(profile_path):
+                import json
+                with open(profile_path, "r", encoding="utf-8") as f:
+                    profile = json.load(f)
+            success = result.returncode == 0 and bool(profile)
+            return {"success": success, "message": output, "profile": profile}
+        except Exception as e:
+            return {"success": False, "message": str(e), "profile": profile}
+        finally:
+            if was_connected and saved_port:
+                time.sleep(0.3)
+                try:
+                    self.connect(saved_port, saved_baud)
+                except Exception:
+                    pass

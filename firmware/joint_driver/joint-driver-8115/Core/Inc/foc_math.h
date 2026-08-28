@@ -78,6 +78,10 @@ typedef struct {
 	float m_pos_holding_current_limit;  // Maximum holding current in Amperes (e.g. 3.0A, 5.0A)
 	bool  m_traj_active;
 
+	// Open-to-Closed Spinup Handover (Ben Katz & VESC standard for 1:17 Cycloid stiction)
+	bool  m_openloop_spinup_active;
+	float m_openloop_spinup_time;
+
 	// Sensor Flag
 	bool m_using_encoder;
 } motor_all_state_t;

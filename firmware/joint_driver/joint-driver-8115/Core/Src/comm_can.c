@@ -4,6 +4,7 @@
  */
 
 #include "comm_can.h"
+#include "vesc_utils.h"
 #include <string.h>
 
 static FDCAN_HandleTypeDef *g_hfdcan = NULL;
@@ -76,18 +77,84 @@ uint8_t comm_can_get_node_id(void)
 }
 
 /**
-  * @brief  Process Received VESC CAN Frame
+  * @brief  Process Received CAN Frame (Supports both MIT Mini Cheetah Standard & VESC Extended)
   */
 void comm_can_process_rx_frame(FDCAN_RxHeaderTypeDef *rx_header, uint8_t *rx_data)
 {
     if (rx_header == NULL || rx_data == NULL) return;
 
-    /* Extract VESC Command ID and Target Node ID from 29-bit Extended CAN ID */
+    /* =========================================================================
+     * 1. MIT MINI CHEETAH STANDARD 11-BIT CAN PROTOCOL
+     * ========================================================================= */
+    if (rx_header->IdType == FDCAN_STANDARD_ID) {
+        uint32_t std_id = rx_header->Identifier;
+        if (std_id != g_node_id && std_id != CAN_BROADCAST_ID) {
+            return;
+        }
+
+        /* Check for Special MIT Mode Switching Payloads */
+        if (rx_data[0] == 0xFF && rx_data[1] == 0xFF && rx_data[2] == 0xFF &&
+            rx_data[3] == 0xFF && rx_data[4] == 0xFF && rx_data[5] == 0xFF && rx_data[6] == 0xFF) {
+            if (rx_data[7] == 0xFC) {
+                /* Enter Motor Mode */
+                g_foc_controller.motor.m_state = MC_STATE_RUNNING;
+                g_foc_controller.motor.m_control_mode = CONTROL_MODE_CURRENT;
+                g_foc_controller.fault = MC_FAULT_NONE;
+                TIM1_EnsureMoeEnabled();
+                return;
+            } else if (rx_data[7] == 0xFD) {
+                /* Exit Motor Mode */
+                g_foc_controller.motor.m_state = MC_STATE_OFF;
+                g_foc_controller.motor.m_iq_set = 0.0f;
+                return;
+            } else if (rx_data[7] == 0xFE) {
+                /* Zero Position (Set Home) */
+                foc_set_home_position(&g_foc_controller.motor);
+                return;
+            }
+        }
+
+        /* Unpack MIT 8-byte Impedance Control Payload */
+        int p_int  = (rx_data[0] << 8) | rx_data[1];
+        int v_int  = (rx_data[2] << 4) | (rx_data[3] >> 4);
+        int kp_int = ((rx_data[3] & 0x0F) << 8) | rx_data[4];
+        int kd_int = (rx_data[5] << 4) | (rx_data[6] >> 4);
+        int t_int  = ((rx_data[6] & 0x0F) << 8) | rx_data[7];
+
+        float p_des = uint_to_float(p_int,  MIT_P_MIN,  MIT_P_MAX,  16);
+        float v_des = uint_to_float(v_int,  MIT_V_MIN,  MIT_V_MAX,  12);
+        float kp    = uint_to_float(kp_int, MIT_KP_MIN, MIT_KP_MAX, 12);
+        float kd    = uint_to_float(kd_int, MIT_KD_MIN, MIT_KD_MAX, 12);
+        float t_ff  = uint_to_float(t_int,  MIT_T_MIN,  MIT_T_MAX,  12);
+
+        /* Real-Time Impedance Control: Tau = Kp*(p_des - p) + Kd*(v_des - v) + t_ff */
+        float p_actual = g_foc_controller.motor.m_joint_angle; // Output rad
+        float gear_ratio = (g_foc_controller.conf.gear_ratio > 0.1f) ? g_foc_controller.conf.gear_ratio : 17.0f;
+        float pole_pairs = (float)g_foc_controller.conf.foc_motor_pole_pairs;
+        float v_actual = (g_foc_controller.motor.m_speed_est_fast / pole_pairs) / gear_ratio; // Output rad/s
+
+        float torque_cmd = kp * (p_des - p_actual) + kd * (v_des - v_actual) + t_ff;
+        float kt_joint = g_foc_controller.conf.foc_motor_flux_linkage * 1.5f * pole_pairs * gear_ratio;
+        float iq_cmd = torque_cmd / (kt_joint > 0.1f ? kt_joint : 6.2f);
+
+        utils_truncate_number_abs(&iq_cmd, g_foc_controller.conf.l_current_max);
+        g_foc_controller.motor.m_iq_set = iq_cmd;
+        g_foc_controller.motor.m_control_mode = CONTROL_MODE_CURRENT;
+        g_foc_controller.motor.m_state = MC_STATE_RUNNING;
+        TIM1_EnsureMoeEnabled();
+
+        /* Immediate Packed Reply (p_actual, v_actual, torque_actual) */
+        comm_can_send_mit_reply(p_actual, v_actual, torque_cmd);
+        return;
+    }
+
+    /* =========================================================================
+     * 2. VESC EXTENDED 29-BIT CAN PROTOCOL
+     * ========================================================================= */
     uint32_t can_id = rx_header->Identifier;
     uint8_t cmd_id = (can_id >> 8) & 0xFF;
     uint8_t target_id = can_id & 0xFF;
 
-    /* Filter by Target Node ID (Accept target_id matching node_id or broadcast 255) */
     if (target_id != g_node_id && target_id != CAN_BROADCAST_ID) {
         return;
     }
@@ -96,7 +163,6 @@ void comm_can_process_rx_frame(FDCAN_RxHeaderTypeDef *rx_header, uint8_t *rx_dat
 
     switch (cmd_id) {
     case CAN_PACKET_SET_POS: {
-        /* Joint Position Command in Degrees (Scale = 100,000) */
         int32_t pos_scaled = buffer_get_int32(rx_data, &idx);
         float pos_deg = (float)pos_scaled / 100000.0f;
         motor_set_position(pos_deg);
@@ -104,7 +170,6 @@ void comm_can_process_rx_frame(FDCAN_RxHeaderTypeDef *rx_header, uint8_t *rx_dat
     }
 
     case CAN_PACKET_SET_CURRENT: {
-        /* Torque Current Iq Command in Amperes (Scale = 1,000) */
         int32_t current_scaled = buffer_get_int32(rx_data, &idx);
         float current_amps = (float)current_scaled / 1000.0f;
         motor_set_current(current_amps);
@@ -112,14 +177,12 @@ void comm_can_process_rx_frame(FDCAN_RxHeaderTypeDef *rx_header, uint8_t *rx_dat
     }
 
     case CAN_PACKET_SET_RPM: {
-        /* Output Joint Velocity Command in RPM */
         int32_t rpm = buffer_get_int32(rx_data, &idx);
         motor_set_speed((float)rpm);
         break;
     }
 
     case CAN_PACKET_SET_DUTY: {
-        /* Direct Duty Cycle Command (Scale = 100,000) */
         int32_t duty_scaled = buffer_get_int32(rx_data, &idx);
         float duty = (float)duty_scaled / 100000.0f;
         g_foc_controller.motor.m_control_mode = CONTROL_MODE_CURRENT;
@@ -130,6 +193,39 @@ void comm_can_process_rx_frame(FDCAN_RxHeaderTypeDef *rx_header, uint8_t *rx_dat
     default:
         break;
     }
+}
+
+/**
+  * @brief  Transmit MIT Mini Cheetah Packed Reply Packet (6 Bytes)
+  */
+void comm_can_send_mit_reply(float p_actual, float v_actual, float t_actual)
+{
+    if (g_hfdcan == NULL) return;
+
+    FDCAN_TxHeaderTypeDef tx_header;
+    tx_header.Identifier = CAN_MASTER_ID;
+    tx_header.IdType = FDCAN_STANDARD_ID;
+    tx_header.TxFrameType = FDCAN_DATA_FRAME;
+    tx_header.DataLength = FDCAN_DLC_BYTES_6;
+    tx_header.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+    tx_header.BitRateSwitch = FDCAN_BRS_OFF;
+    tx_header.FDFormat = FDCAN_CLASSIC_CAN;
+    tx_header.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
+    tx_header.MessageMarker = 0;
+
+    int p_int = float_to_uint(p_actual, MIT_P_MIN, MIT_P_MAX, 16);
+    int v_int = float_to_uint(v_actual, MIT_V_MIN, MIT_V_MAX, 12);
+    int t_int = float_to_uint(t_actual, MIT_T_MIN, MIT_T_MAX, 12);
+
+    uint8_t data[6];
+    data[0] = g_node_id;
+    data[1] = (uint8_t)(p_int >> 8);
+    data[2] = (uint8_t)(p_int & 0xFF);
+    data[3] = (uint8_t)(v_int >> 4);
+    data[4] = (uint8_t)(((v_int & 0x0F) << 4) | (t_int >> 8));
+    data[5] = (uint8_t)(t_int & 0xFF);
+
+    HAL_FDCAN_AddMessageToTxFifoQ(g_hfdcan, &tx_header, data);
 }
 
 /**
