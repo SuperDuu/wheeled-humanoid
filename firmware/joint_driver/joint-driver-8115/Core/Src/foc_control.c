@@ -302,9 +302,9 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
         fabsf(motor->m_speed_pid_set_rpm) >= 15.0f * (float)conf_now->foc_motor_pole_pairs) {
 
         if (!ol_active) {
-            if (mech_rpm_fb < 3.0f) {
+            if (mech_rpm_fb < 8.0f) {
                 ol_stall_time += dt_fast;
-                if (ol_stall_time > 0.050f) {
+                if (ol_stall_time > 0.040f) {
                     ol_active = true;
                     ol_angle = elec_angle;
                     ol_recovery_time = 0.0f;
@@ -316,9 +316,9 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
                 ol_stall_time = 0.0f;
             }
         } else {
-            if (mech_rpm_fb > 15.0f) {
+            if (mech_rpm_fb > 20.0f) {
                 ol_recovery_time += dt_fast;
-                if (ol_recovery_time > 0.030f) {
+                if (ol_recovery_time > 0.025f) {
                     ol_active = false;
                     ol_stall_time = 0.0f;
                     state_m->vd_int = 0.0f;
