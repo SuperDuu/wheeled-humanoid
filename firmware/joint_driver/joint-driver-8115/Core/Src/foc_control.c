@@ -302,7 +302,7 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
             if (mech_rpm_now < 8.0f) {
                 stall_detect_time += dt_fast;
                 if (stall_detect_time > 0.040f) {
-                    sweep_timer = 0.350f; // 350ms continuous open-loop sweep
+                    sweep_timer = 0.750f; // 750ms continuous open-loop sweep (225° motor rotation)
                     sweep_angle = elec_angle;
                     stall_detect_time = 0.0f;
                     state_m->vd_int = 0.0f;
@@ -331,8 +331,8 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
         if (v_open > v_max_ol) v_open = v_max_ol;
 
         float alpha_blend = 0.0f;
-        if (sweep_timer < 0.060f) {
-            alpha_blend = (0.060f - sweep_timer) / 0.060f; // 0.0 -> 1.0
+        if (sweep_timer < 0.080f) {
+            alpha_blend = (0.080f - sweep_timer) / 0.080f; // 0.0 -> 1.0
         }
         float target_angle = elec_angle + (dir > 0.0f ? 1.5707963f : -1.5707963f);
         float angle_diff = target_angle - sweep_angle;
