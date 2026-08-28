@@ -441,9 +441,9 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	float iq_min = -iq_limit;
 	float iq_max = iq_limit;
 	if (target_mech_rpm > 10.0f) {
-		iq_min = -0.30f;
+		iq_min = 0.00f;
 	} else if (target_mech_rpm < -10.0f) {
-		iq_max = 0.30f;
+		iq_max = 0.00f;
 	}
 
 	float iq_cmd = iq_friction + p_term + motor->m_speed_i_term + d_term;
