@@ -389,7 +389,6 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	UTILS_LP_FAST(motor->m_speed_d_filter, erpm_raw, speed_filter);
 
 	float erpm = motor->m_speed_d_filter;
-	float actual_mech_rpm = erpm / pole_pairs;
 
 	if (SIGN(motor->m_speed_command_rpm) != SIGN(motor->m_speed_pid_set_rpm)) {
 		motor->m_speed_i_term = 0.0f;
@@ -447,19 +446,7 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		iq_max = 0.30f;
 	}
 
-	/* Instant Breakaway Torque Surge:
-	 * In SPEED mode (target >= 15 RPM), if cycloidal tooth mesh tight spot causes speed
-	 * to drop below 10 RPM, instantly surge Iq up to +3.5A (92 Nm) to punch through the
-	 * detent within 15ms without waiting for the slow integrator. */
-	float anti_stall_surge = 0.0f;
-	float mech_actual_rpm = erpm / pole_pairs;
-	if (fabsf(target_mech_rpm) >= 15.0f && fabsf(mech_actual_rpm) < 10.0f) {
-		float droop = 10.0f - fabsf(mech_actual_rpm);
-		anti_stall_surge = droop * 0.35f; // Up to +3.5A at 0 RPM
-		if (target_mech_rpm < 0.0f) anti_stall_surge = -anti_stall_surge;
-	}
-
-	float iq_cmd = iq_friction + p_term + motor->m_speed_i_term + d_term + anti_stall_surge;
+	float iq_cmd = iq_friction + p_term + motor->m_speed_i_term + d_term;
 	utils_truncate_number(&iq_cmd, iq_min, iq_max);
 	motor->m_iq_set = iq_cmd;
 }
