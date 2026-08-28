@@ -47,7 +47,7 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->s_pid_kp = 0.00220f;             // Critically-damped smooth speed tracking
     conf->s_pid_ki = 0.00350f;             // Fast integral ramp to full 6.6A headroom across cycloid gear detents
     conf->s_pid_kd = 0.0f;                 // Zero D-term for noise-free, silent operation
-    conf->s_pid_kd_filter = 0.08f;         // Clean 12 Hz speed feedback filter
+    conf->s_pid_kd_filter = 0.35f;         // Test 2: Fast 55 Hz speed feedback filter (lag ~2.8ms)
     conf->s_pid_min_erpm = 10.0f;          // 10 ERPM deadband (~0.48 RPM motor)
     conf->s_pid_ramp_erpms_s = 1200.0f;    // 1200 ERPM/s (~57 RPM/s motor, silky smooth ramp to 50 in 0.85s)
 
