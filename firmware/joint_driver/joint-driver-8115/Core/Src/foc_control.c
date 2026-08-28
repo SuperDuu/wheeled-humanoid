@@ -284,6 +284,85 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
         return;
     }
 
+    // ---- Open-Loop Breakaway Sweep (Cycloidal Pin Detent Anti-Stall) ----
+    // In Speed Control mode, if mechanical binding stops the rotor (< 8 RPM for > 40ms),
+    // trigger a continuous 350ms Open-Loop V/f sweep (0.30 mechanical revolutions)
+    // with Vd=9.0V advancing at 50 RPM to drag the rotor completely through and past
+    // the tight pin detent zone, then seamlessly hand back to Closed-Loop FOC.
+    static float stall_detect_time = 0.0f;
+    static float sweep_timer = 0.0f;
+    static float sweep_angle = 0.0f;
+
+    float mech_rpm_now = fabsf(omega_mech * (60.0f / (2.0f * (float)M_PI)));
+
+    if (motor->m_control_mode == CONTROL_MODE_SPEED &&
+        fabsf(motor->m_speed_pid_set_rpm) >= 15.0f * (float)conf_now->foc_motor_pole_pairs) {
+
+        if (sweep_timer <= 0.0f) {
+            if (mech_rpm_now < 8.0f) {
+                stall_detect_time += dt_fast;
+                if (stall_detect_time > 0.040f) {
+                    sweep_timer = 0.350f; // 350ms continuous open-loop sweep
+                    sweep_angle = elec_angle;
+                    stall_detect_time = 0.0f;
+                    state_m->vd_int = 0.0f;
+                    state_m->vq_int = 0.0f;
+                    motor->m_speed_i_term = 0.0f;
+                }
+            } else {
+                stall_detect_time = 0.0f;
+            }
+        }
+    } else {
+        stall_detect_time = 0.0f;
+        sweep_timer = 0.0f;
+    }
+
+    if (sweep_timer > 0.0f) {
+        sweep_timer -= dt_fast;
+        float dir = (motor->m_speed_command_rpm > 0.0f) ? 1.0f : -1.0f;
+        float pp = (float)conf_now->foc_motor_pole_pairs;
+        float target_elec_rad_s = dir * (50.0f * pp * 2.0f * (float)M_PI / 60.0f);
+        sweep_angle += target_elec_rad_s * dt_fast;
+        utils_norm_angle_rad(&sweep_angle);
+
+        float v_open = 9.0f + conf_now->foc_motor_flux_linkage * fabsf(target_elec_rad_s);
+        float v_max_ol = ONE_BY_SQRT3 * conf_now->l_max_duty * state_m->v_bus;
+        if (v_open > v_max_ol) v_open = v_max_ol;
+
+        float sin_sw, cos_sw;
+        sincos_lut(sweep_angle, &sin_sw, &cos_sw);
+        float v_norm = v_open / state_m->v_bus;
+
+        state_m->vd = v_open;
+        state_m->vq = 0.0f;
+        state_m->mod_d = v_norm;
+        state_m->mod_q = 0.0f;
+        state_m->mod_alpha_raw = cos_sw * v_norm;
+        state_m->mod_beta_raw  = sin_sw * v_norm;
+        state_m->v_alpha = state_m->mod_alpha_raw * state_m->v_bus;
+        state_m->v_beta  = state_m->mod_beta_raw * state_m->v_bus;
+        state_m->duty_now = v_norm;
+
+        state_m->vd_int = 0.0f;
+        state_m->vq_int = 0.0f;
+        motor->m_speed_i_term = 0.0f;
+
+        uint32_t ta_sw, tb_sw, tc_sw, sector_sw;
+        foc_svm(state_m->mod_alpha_raw, state_m->mod_beta_raw,
+                conf_now->l_max_duty, 1000, &ta_sw, &tb_sw, &tc_sw, &sector_sw);
+
+        foc->duty_a = (float)ta_sw / 1000.0f;
+        if (foc->phase_swap_bc) {
+            foc->duty_b = (float)tc_sw / 1000.0f;
+            foc->duty_c = (float)tb_sw / 1000.0f;
+        } else {
+            foc->duty_b = (float)tb_sw / 1000.0f;
+            foc->duty_c = (float)tc_sw / 1000.0f;
+        }
+        return; // Complete open-loop sweep bypass
+    }
+
     // Strict Voltage Vector Circle Limitation (Max = Vbus / sqrt(3))
     float max_v_mag = ONE_BY_SQRT3 * conf_now->l_max_duty * state_m->v_bus * conf_now->foc_overmod_factor;
 
@@ -352,29 +431,8 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     float phase_advance = (1.5f * dt_fast) * motor->m_speed_est_fast;
     utils_truncate_number_abs(&phase_advance, 0.35f); // Max ~20 deg electrical
 
-    /* Dynamic Breakaway Field Advance for Cycloidal Pin Detents:
-     * When motor is running normally (>=8 RPM), breakaway_angle is 0 (pure 90° MTPA FOC).
-     * When mechanical gearbox detent stops the rotor (<8 RPM), advance the stator field
-     * forward dynamically at the command speed to create the sweeping magnetic wave
-     * that pulls the rotor across the pin detent, then smoothly return to MTPA. */
-    static float breakaway_angle = 0.0f;
-    float mech_rpm = fabsf(omega_mech * (60.0f / (2.0f * (float)M_PI)));
-    if (motor->m_control_mode == CONTROL_MODE_SPEED &&
-        fabsf(motor->m_speed_pid_set_rpm) >= 15.0f * (float)conf_now->foc_motor_pole_pairs) {
-        if (mech_rpm < 8.0f) {
-            float dir = (motor->m_speed_command_rpm > 0.0f) ? 1.0f : -1.0f;
-            float pp = (float)conf_now->foc_motor_pole_pairs;
-            breakaway_angle += dir * (50.0f * pp * 2.0f * (float)M_PI / 60.0f) * dt_fast;
-            utils_norm_angle_rad(&breakaway_angle);
-        } else {
-            breakaway_angle = 0.0f;
-        }
-    } else {
-        breakaway_angle = 0.0f;
-    }
-
     // Maintain 100% optimal 90° torque angle (Id=0, max torque per ampere)
-    float theta_svm = elec_angle + phase_advance + breakaway_angle;
+    float theta_svm = elec_angle + phase_advance;
     utils_norm_angle_rad(&theta_svm);
 
     float sin_svm, cos_svm;
