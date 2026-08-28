@@ -330,8 +330,18 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
         float v_max_ol = ONE_BY_SQRT3 * conf_now->l_max_duty * state_m->v_bus;
         if (v_open > v_max_ol) v_open = v_max_ol;
 
+        float alpha_blend = 0.0f;
+        if (sweep_timer < 0.060f) {
+            alpha_blend = (0.060f - sweep_timer) / 0.060f; // 0.0 -> 1.0
+        }
+        float target_angle = elec_angle + (dir > 0.0f ? 1.5707963f : -1.5707963f);
+        float angle_diff = target_angle - sweep_angle;
+        utils_norm_angle_rad(&angle_diff);
+        float current_angle = sweep_angle + alpha_blend * angle_diff;
+        utils_norm_angle_rad(&current_angle);
+
         float sin_sw, cos_sw;
-        sincos_lut(sweep_angle, &sin_sw, &cos_sw);
+        sincos_lut(current_angle, &sin_sw, &cos_sw);
         float v_norm = v_open / state_m->v_bus;
 
         state_m->vd = v_open;
