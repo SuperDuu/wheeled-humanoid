@@ -352,8 +352,29 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
     float phase_advance = (1.5f * dt_fast) * motor->m_speed_est_fast;
     utils_truncate_number_abs(&phase_advance, 0.35f); // Max ~20 deg electrical
 
+    /* Dynamic Breakaway Field Advance for Cycloidal Pin Detents:
+     * When motor is running normally (>=8 RPM), breakaway_angle is 0 (pure 90° MTPA FOC).
+     * When mechanical gearbox detent stops the rotor (<8 RPM), advance the stator field
+     * forward dynamically at the command speed to create the sweeping magnetic wave
+     * that pulls the rotor across the pin detent, then smoothly return to MTPA. */
+    static float breakaway_angle = 0.0f;
+    float mech_rpm = fabsf(omega_mech * (60.0f / (2.0f * (float)M_PI)));
+    if (motor->m_control_mode == CONTROL_MODE_SPEED &&
+        fabsf(motor->m_speed_pid_set_rpm) >= 15.0f * (float)conf_now->foc_motor_pole_pairs) {
+        if (mech_rpm < 8.0f) {
+            float dir = (motor->m_speed_command_rpm > 0.0f) ? 1.0f : -1.0f;
+            float pp = (float)conf_now->foc_motor_pole_pairs;
+            breakaway_angle += dir * (50.0f * pp * 2.0f * (float)M_PI / 60.0f) * dt_fast;
+            utils_norm_angle_rad(&breakaway_angle);
+        } else {
+            breakaway_angle = 0.0f;
+        }
+    } else {
+        breakaway_angle = 0.0f;
+    }
+
     // Maintain 100% optimal 90° torque angle (Id=0, max torque per ampere)
-    float theta_svm = elec_angle + phase_advance;
+    float theta_svm = elec_angle + phase_advance + breakaway_angle;
     utils_norm_angle_rad(&theta_svm);
 
     float sin_svm, cos_svm;
