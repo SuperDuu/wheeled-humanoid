@@ -49,7 +49,9 @@ __pycache__/
 docs/*.md
 !docs/GB8115_FOC_CURRENT_STATE.md
 
-#Mechanical
+# Mechanical
 *.STL
 *.stl
 .agents/
+AGENTS.md
+GEMINI.md
