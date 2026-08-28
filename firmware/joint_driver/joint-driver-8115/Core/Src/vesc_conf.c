@@ -44,8 +44,8 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_cc_decoupling = FOC_CC_DECOUPLING_BEMF; // Bù khử ghép chéo d-q
 
     // Speed Controller (Cascaded Current-Mode FOC: Outputs Iq command in Amperes)
-    conf->s_pid_kp = 0.00650f;             // Stiff instantaneous torque response (1.36A instant torque on 10 RPM dip)
-    conf->s_pid_ki = 0.00800f;             // Fast 0.5s integral ramp across cycloid gear friction lobes
+    conf->s_pid_kp = 0.0120f;              // High-stiffness instant torque punch (2.52A instant torque on 10 RPM dip)
+    conf->s_pid_ki = 0.0150f;              // Fast 0.2s integral ramp through cycloidal mechanical lobes
     conf->s_pid_kd = 0.0f;                 // Zero D-term for noise-free, silent operation
     conf->s_pid_kd_filter = 0.35f;         // Fast 55 Hz speed feedback filter (lag ~2.8ms)
     conf->s_pid_min_erpm = 10.0f;          // 10 ERPM deadband (~0.48 RPM motor)
@@ -80,8 +80,8 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_mag_vd_max = 0.1f;           // Max 10% voltage in Vd (prevent d-axis stealing sampling margin)
 
     // Protection & Safety Limits (Datasheet: Nominal 2.1A, Stall 6.6A, Max Speed 534 RPM = 11214 ERPM)
-    conf->l_current_max = 6.6f;            // 6.6A Stall current limit
-    conf->l_current_min = -6.6f;           // -6.6A Braking current limit
+    conf->l_current_max = 5.5f;            // 5.5A Max physically reachable by 24V supply (Vmax/R = 12.75V/2.263 = 5.63A)
+    conf->l_current_min = -5.5f;           // -5.5A Braking current limit
     conf->l_in_current_max = 20.0f;        // 20A max power supply input
     conf->l_in_current_min = -10.0f;       // -10A max regen charging
     conf->l_max_erpm = 11214.0f;           // 534 RPM * 21 = 11214 ERPM (Max Datasheet Speed)
