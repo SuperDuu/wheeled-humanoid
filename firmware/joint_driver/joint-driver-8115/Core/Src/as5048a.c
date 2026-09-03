@@ -130,6 +130,9 @@ HAL_StatusTypeDef AS5048A_Sample(AS5048A_t *enc, float dt)
             enc->consecutive_errors++;
         }
         enc->error_count++;
+        if (enc->consecutive_errors >= 2 && (enc->consecutive_errors % 5 == 0)) {
+            AS5048A_ClearError(enc);
+        }
     }
 
     // 3. Linearization (128-point LUT bit-shift interpolation, AS5048A 14-bit: 16384 >> 7 = 128)
