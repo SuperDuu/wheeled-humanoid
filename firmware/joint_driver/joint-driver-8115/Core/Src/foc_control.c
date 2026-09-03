@@ -284,6 +284,34 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
         return;
     }
 
+    /* Startup Transient Blanking (25 cycles = 2.5ms):
+     * Holds safe 50% duty (0V differential) while bootstrap capacitors charge
+     * and switching ringing settles to true zero before closing current loops. */
+    static uint16_t s_startup_settle_cycles = 0;
+    static mc_state s_last_motor_state = MC_STATE_OFF;
+    if (s_last_motor_state != MC_STATE_RUNNING && motor->m_state == MC_STATE_RUNNING) {
+        s_startup_settle_cycles = 25U; // 2.5ms settle
+    }
+    s_last_motor_state = motor->m_state;
+
+    if (s_startup_settle_cycles > 0U) {
+        s_startup_settle_cycles--;
+        state_m->i_alpha = 0.0f;
+        state_m->i_beta = 0.0f;
+        state_m->id = 0.0f;
+        state_m->iq = 0.0f;
+        state_m->id_filter = 0.0f;
+        state_m->iq_filter = 0.0f;
+        state_m->vd_int = 0.0f;
+        state_m->vq_int = 0.0f;
+        state_m->vd = 0.0f;
+        state_m->vq = 0.0f;
+        foc->duty_a = 0.5f;
+        foc->duty_b = 0.5f;
+        foc->duty_c = 0.5f;
+        return;
+    }
+
     // Strict Voltage Vector Circle Limitation (Max = Vbus / sqrt(3))
     float max_v_mag = ONE_BY_SQRT3 * conf_now->l_max_duty * state_m->v_bus * conf_now->foc_overmod_factor;
 
@@ -336,17 +364,11 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
         // Vector circle voltage limitation for integrators (limit_norm)
         limit_norm(&state_m->vd_int, &state_m->vq_int, max_v_mag);
 
-        // Strict Vd limit: prevent d-axis from stealing Vq torque headroom (Surface PMSM Id=0)
-        float vd_max_abs = max_v_mag * conf_now->foc_mag_vd_max;
-        if (vd_max_abs < 1.0f) vd_max_abs = 1.0f;
-        utils_truncate_number_abs(&state_m->vd_int, vd_max_abs);
-
         state_m->vd = kp * Ierr_d + state_m->vd_int + vd_ff;
         state_m->vq = kp * Ierr_q + state_m->vq_int + vq_ff;
 
         // Final vector circle voltage limitation (SVPWM circular headroom)
         limit_norm(&state_m->vd, &state_m->vq, max_v_mag);
-        utils_truncate_number_abs(&state_m->vd, vd_max_abs);
     }
 
     // Normalize voltages for Inverse Park & Modulation
