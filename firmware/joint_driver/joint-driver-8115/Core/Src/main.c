@@ -405,6 +405,9 @@ void Run_EncoderAlignment(void)
 {
   if (run_alignment != 1) return;
   align_result = 1;
+  g_foc_controller.fault = MC_FAULT_NONE;
+  g_foc_controller.encoder.consecutive_errors = 0;
+  AS5048A_ClearError(&g_foc_controller.encoder);
 
   mc_state old_state = g_foc_controller.motor.m_state;
   g_foc_controller.motor.m_state = MC_STATE_DETECTING;
@@ -453,7 +456,8 @@ void Run_EncoderAlignment(void)
 
   for (int pass = 0; pass < 2; pass++) {
     float direction = (pass == 0) ? 1.0f : -1.0f;
-    int32_t pass_start = g_foc_controller.encoder.count_buff[0];
+    int32_t pass_accum = 0;
+    int32_t last_count = g_foc_controller.encoder.count_buff[0];
 
     for (int point = 0; point < points_per_mech_rev; point++) {
       if (run_alignment != 1 || g_foc_controller.fault != MC_FAULT_NONE)
@@ -465,12 +469,24 @@ void Run_EncoderAlignment(void)
         Apply_SvmVector(vd_align, theta, vbus, period);
         HAL_Delay(2);
         AS5048A_Sample(&g_foc_controller.encoder, 0.002f);
+        int32_t cur_cnt = g_foc_controller.encoder.count_buff[0];
+        int32_t d_cnt = cur_cnt - last_count;
+        if (d_cnt > (AS5048A_CPR / 2)) d_cnt -= AS5048A_CPR;
+        if (d_cnt < -(AS5048A_CPR / 2)) d_cnt += AS5048A_CPR;
+        pass_accum += d_cnt;
+        last_count = cur_cnt;
       }
 
       for (int sample = 0; sample < settle_samples; sample++) {
         Apply_SvmVector(vd_align, theta, vbus, period);
         HAL_Delay(5);
         AS5048A_Sample(&g_foc_controller.encoder, sample_dt);
+        int32_t cur_cnt = g_foc_controller.encoder.count_buff[0];
+        int32_t d_cnt = cur_cnt - last_count;
+        if (d_cnt > (AS5048A_CPR / 2)) d_cnt -= AS5048A_CPR;
+        if (d_cnt < -(AS5048A_CPR / 2)) d_cnt += AS5048A_CPR;
+        pass_accum += d_cnt;
+        last_count = cur_cnt;
       }
 
       float zero_sample = encoder_scale *
@@ -482,8 +498,7 @@ void Run_EncoderAlignment(void)
       Comm_Telemetry_Process(&g_foc_controller);
     }
 
-    sweep_progress[pass] = g_foc_controller.conf.encoder_direction *
-        (g_foc_controller.encoder.count_buff[0] - pass_start);
+    sweep_progress[pass] = g_foc_controller.conf.encoder_direction * pass_accum;
   }
 
   int32_t min_progress = (AS5048A_CPR * 3) / 4;
@@ -1087,10 +1102,10 @@ int main(void)
 
         ADC_ReadAllChannels();
 
-        /* Đọc trạng thái DRV8353 qua SoftSPI (Fault, OTW, OTSD) */
-        DRV8353_ReadStatus();
-
-
+        /* Đọc trạng thái DRV8353 qua SoftSPI (Fault, OTW, OTSD) chỉ khi nFAULT kích hoạt hoặc motor đang dừng */
+        if (g_adc_readings.drv_has_fault || g_foc_controller.motor.m_state != MC_STATE_RUNNING) {
+          DRV8353_ReadStatus();
+        }
 
         /* LED Heartbeat (chớp mỗi 500ms = 1Hz, thay vì chớp cuồng ở tốc độ main loop) */
         HAL_GPIO_TogglePin(LED_1_GPIO_Port, LED_1_Pin);
