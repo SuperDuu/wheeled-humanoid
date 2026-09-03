@@ -44,17 +44,17 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_cc_decoupling = FOC_CC_DECOUPLING_BEMF; // Bù khử ghép chéo d-q
 
     // Speed Controller (Cascaded Current-Mode FOC: Outputs Iq command in Amperes)
-    conf->s_pid_kp = 0.0120f;              // High-stiffness instant torque punch (2.52A instant torque on 10 RPM dip)
-    conf->s_pid_ki = 0.0150f;              // Fast 0.2s integral ramp through cycloidal mechanical lobes
-    conf->s_pid_kd = 0.0f;                 // Zero D-term for noise-free, silent operation
-    conf->s_pid_kd_filter = 0.35f;         // Fast 55 Hz speed feedback filter (lag ~2.8ms)
+    conf->s_pid_kp = 0.0018f;             // Calibrated smooth speed gain (0.038 A/mech RPM)
+    conf->s_pid_ki = 0.0012f;             // Stable integration without overshoot/oscillation
+    conf->s_pid_kd = 0.0f;                 // Zero D-term (prevents derivative kick)
+    conf->s_pid_kd_filter = 0.05f;         // Clean ~8Hz low-pass filter (eliminates 14-bit quantization chatter)
     conf->s_pid_min_erpm = 10.0f;          // 10 ERPM deadband (~0.48 RPM motor)
-    conf->s_pid_ramp_erpms_s = 1200.0f;    // 1200 ERPM/s (~57 RPM/s motor, silky smooth ramp to 50 in 0.85s)
+    conf->s_pid_ramp_erpms_s = 3000.0f;    // 3000 ERPM/s (~143 RPM/s smooth motor ramp)
 
     // Position Controller (MIT Mini Cheetah Impedance PD: Outputs Iq command in Amperes)
     conf->p_pid_kp = 8.0f;                 // Kp_pos = 8.0 A/rad (Virtual Joint Stiffness)
     conf->p_pid_ki = 0.0f;                 // Zero I-term (No windup, elastic ground impact absorption)
-    conf->p_pid_kd = 0.25f;                // Kd_pos = 0.25 A/(rad/s) (Virtual Joint Damping)
+    conf->p_pid_kd = 0.25f;                // Kd_pos = 0.25 A/(rad/s) (Virtual Damping)
     conf->p_pid_kd_proc = 0.05f;           // Damping on measurement
     conf->p_pid_kd_filter = 0.2f;
     conf->p_pid_ang_div = 1.0f;
@@ -70,8 +70,8 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_sl_erpm = 2000.0f;
 
     // Field Weakening
-    conf->foc_fw_current_max = 5.0f;       // 5A max field weakening
-    conf->foc_fw_duty_start = 0.70f;       // Start FW at 70% duty (was 0.90, unreachable with l_max_duty=0.80)
+    conf->foc_fw_current_max = 1.0f;       // 1.0A max field weakening for low-L GB8115
+    conf->foc_fw_duty_start = 0.85f;       // Start FW only near voltage boundary (85% duty)
     conf->foc_fw_ramp_time = 0.2f;         // 200ms ramp time
     conf->foc_fw_backoff = 0.5f;
 
@@ -80,8 +80,8 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_mag_vd_max = 0.1f;           // Max 10% voltage in Vd (prevent d-axis stealing sampling margin)
 
     // Protection & Safety Limits (Datasheet: Nominal 2.1A, Stall 6.6A, Max Speed 534 RPM = 11214 ERPM)
-    conf->l_current_max = 5.5f;            // 5.5A Max physically reachable by 24V supply (Vmax/R = 12.75V/2.263 = 5.63A)
-    conf->l_current_min = -5.5f;           // -5.5A Braking current limit
+    conf->l_current_max = 5.00f;           // 5.0A burst for breakaway from cycloidal stiction
+    conf->l_current_min = -5.00f;          // -5.0A Braking current limit
     conf->l_in_current_max = 20.0f;        // 20A max power supply input
     conf->l_in_current_min = -10.0f;       // -10A max regen charging
     conf->l_max_erpm = 11214.0f;           // 534 RPM * 21 = 11214 ERPM (Max Datasheet Speed)
