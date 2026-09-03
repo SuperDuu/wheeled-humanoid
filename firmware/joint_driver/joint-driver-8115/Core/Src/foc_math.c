@@ -18,12 +18,12 @@
 #define SPEED_DELTA_V_I_MAX             1.10f
 #define SPEED_DELTA_V_P_MAX             1.30f
 #define SPEED_IQ_BREAKAWAY_A            1.00f
-#define SPEED_IQ_FRICTION_A             0.00f
+#define SPEED_IQ_FRICTION_A             0.25f
 #define SPEED_IQ_CONT_MAX_A             5.00f
 #define SPEED_IQ_STALL_BOOST_A          5.00f
 #define SPEED_IQ_STALL_BOOST_RATE_A_S   25.0f
 #define SPEED_IQ_CMD_RATE_A_S           100.00f
-#define SPEED_IQ_I_MAX_A                4.00f
+#define SPEED_IQ_I_MAX_A                1.00f
 #define SPEED_IQ_D_MAX_A                0.50f
 #define SPEED_IQ_BRAKE_MAX_A            0.30f
 #define SPEED_OVERSPEED_BAND_RPM        3.00f
@@ -248,20 +248,14 @@ void foc_set_home_position(motor_all_state_t *motor) {
 void foc_start_trajectory(motor_all_state_t *motor, float target_angle_rad, float duration_s, float max_current_a) {
 	if (motor == NULL || motor->m_conf == NULL) return;
 
-	// Đảm bảo thời gian chuyển động nhanh gọn: 1.5s - 2.0s cho mọi góc quay (không quá 2s)
 	float delta_angle = fabsf(target_angle_rad - motor->m_joint_angle);
 	if (duration_s <= 0.05f) {
-		duration_s = 1.5f;
+		// Natural smooth duration: ~0.8s for 45 deg, ~1.1s for 90 deg, ~1.6s for 180 deg
+		duration_s = 0.5f + delta_angle * 0.35f;
+		if (duration_s > 3.0f) duration_s = 3.0f;
 	}
-	if (duration_s > 2.0f) {
-		duration_s = 2.0f; // Khống chế tối đa 2.0s
-	}
-	if (duration_s < 1.0f && delta_angle > 0.5f) {
-		duration_s = 1.5f;
-	}
-
 	if (max_current_a < 0.5f) max_current_a = 0.5f;
-	if (max_current_a > 10.0f) max_current_a = 10.0f; // Max 10A safety limit
+	if (max_current_a > 5.0f) max_current_a = 5.0f;
 
 	motor->m_traj_start_angle = motor->m_joint_angle;
 	motor->m_traj_target_angle = target_angle_rad;
@@ -412,9 +406,8 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		return;
 	}
 
-	/* PI controller */
+	/* Proportional + Damping controller (ZERO I-term) */
 	float speed_kp = conf_now->s_pid_kp;
-	float speed_ki = conf_now->s_pid_ki;
 	float p_term = speed_kp * error_erpm;
 
 	float erpm_diff = erpm - motor->m_speed_d_filter_proc;
@@ -430,29 +423,26 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		iq_friction = -SPEED_IQ_FRICTION_A;
 	}
 
-	/* Symmetrical speed clamping across full configured current limits */
+	/* Unidirectional speed clamping: prevent regenerative braking from bouncing against gearbox backlash */
 	float iq_limit = conf_now->l_current_max;
 	if (iq_limit < 0.1f || iq_limit > SPEED_IQ_CONT_MAX_A) {
 		iq_limit = SPEED_IQ_CONT_MAX_A;
 	}
 	float iq_min = -iq_limit;
 	float iq_max = iq_limit;
-
-	float iq_unclamped = iq_friction + p_term + motor->m_speed_i_term + d_term;
-
-	/* Conditional Anti-Windup Clamping: freeze integration only when truly saturated */
-	bool saturated_pos = (iq_unclamped >= iq_max) && (error_erpm > 0.0f);
-	bool saturated_neg = (iq_unclamped <= iq_min) && (error_erpm < 0.0f);
-
-	if (!saturated_pos && !saturated_neg) {
-		motor->m_speed_i_term += speed_ki * error_erpm * dt;
-		utils_truncate_number(&motor->m_speed_i_term, -SPEED_IQ_I_MAX_A, SPEED_IQ_I_MAX_A);
+	if (target_mech_rpm > 5.0f) {
+		iq_min = 0.00f;
+	} else if (target_mech_rpm < -5.0f) {
+		iq_max = 0.00f;
 	}
 
-	float iq_cmd = iq_friction + p_term + motor->m_speed_i_term + d_term;
+	/* Robot Joint Velocity Control: Pure Proportional + Damping + Feedforward (ZERO I-term) */
+	motor->m_speed_i_term = 0.0f;
+
+	float iq_cmd = iq_friction + p_term + d_term;
 	utils_truncate_number(&iq_cmd, iq_min, iq_max);
-	/* Dynamic Iq rate-limit (250 A/s) to ensure fast loop phase response without latency oscillation */
-	utils_step_towards((float*)&motor->m_iq_set, iq_cmd, 250.0f * dt);
+	/* Dynamic Iq rate-limit (500 A/s) to ensure fast loop phase response without latency oscillation */
+	utils_step_towards((float*)&motor->m_iq_set, iq_cmd, 500.0f * dt);
 }
 
 /**
