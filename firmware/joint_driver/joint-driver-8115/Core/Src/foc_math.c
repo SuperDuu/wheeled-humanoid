@@ -19,11 +19,11 @@
 #define SPEED_DELTA_V_P_MAX             1.30f
 #define SPEED_IQ_BREAKAWAY_A            1.00f
 #define SPEED_IQ_FRICTION_A             0.00f
-#define SPEED_IQ_CONT_MAX_A             6.60f
-#define SPEED_IQ_STALL_BOOST_A          6.60f
-#define SPEED_IQ_STALL_BOOST_RATE_A_S   35.0f
-#define SPEED_IQ_CMD_RATE_A_S           50.00f
-#define SPEED_IQ_I_MAX_A                6.60f
+#define SPEED_IQ_CONT_MAX_A             5.00f
+#define SPEED_IQ_STALL_BOOST_A          5.00f
+#define SPEED_IQ_STALL_BOOST_RATE_A_S   25.0f
+#define SPEED_IQ_CMD_RATE_A_S           100.00f
+#define SPEED_IQ_I_MAX_A                4.00f
 #define SPEED_IQ_D_MAX_A                0.50f
 #define SPEED_IQ_BRAKE_MAX_A            0.30f
 #define SPEED_OVERSPEED_BAND_RPM        3.00f
@@ -417,9 +417,6 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	float speed_ki = conf_now->s_pid_ki;
 	float p_term = speed_kp * error_erpm;
 
-	motor->m_speed_i_term += speed_ki * error_erpm * dt;
-	utils_truncate_number(&motor->m_speed_i_term, -SPEED_IQ_I_MAX_A, SPEED_IQ_I_MAX_A);
-
 	float erpm_diff = erpm - motor->m_speed_d_filter_proc;
 	motor->m_speed_d_filter_proc += 0.20f * erpm_diff;
 	float d_term = -conf_now->s_pid_kd * erpm_diff / dt;
@@ -433,22 +430,29 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		iq_friction = -SPEED_IQ_FRICTION_A;
 	}
 
-	/* Unidirectional speed clamping: prevent deep regenerative braking from bouncing against gearbox backlash */
+	/* Symmetrical speed clamping across full configured current limits */
 	float iq_limit = conf_now->l_current_max;
 	if (iq_limit < 0.1f || iq_limit > SPEED_IQ_CONT_MAX_A) {
 		iq_limit = SPEED_IQ_CONT_MAX_A;
 	}
 	float iq_min = -iq_limit;
 	float iq_max = iq_limit;
-	if (target_mech_rpm > 10.0f) {
-		iq_min = 0.00f;
-	} else if (target_mech_rpm < -10.0f) {
-		iq_max = 0.00f;
+
+	float iq_unclamped = iq_friction + p_term + motor->m_speed_i_term + d_term;
+
+	/* Conditional Anti-Windup Clamping: freeze integration only when truly saturated */
+	bool saturated_pos = (iq_unclamped >= iq_max) && (error_erpm > 0.0f);
+	bool saturated_neg = (iq_unclamped <= iq_min) && (error_erpm < 0.0f);
+
+	if (!saturated_pos && !saturated_neg) {
+		motor->m_speed_i_term += speed_ki * error_erpm * dt;
+		utils_truncate_number(&motor->m_speed_i_term, -SPEED_IQ_I_MAX_A, SPEED_IQ_I_MAX_A);
 	}
 
 	float iq_cmd = iq_friction + p_term + motor->m_speed_i_term + d_term;
 	utils_truncate_number(&iq_cmd, iq_min, iq_max);
-	motor->m_iq_set = iq_cmd;
+	/* Dynamic Iq rate-limit (250 A/s) to ensure fast loop phase response without latency oscillation */
+	utils_step_towards((float*)&motor->m_iq_set, iq_cmd, 250.0f * dt);
 }
 
 /**
@@ -460,25 +464,29 @@ void foc_run_fw(motor_all_state_t *motor, float dt) {
 
 	if (conf->foc_fw_current_max < 0.001f) return;
 
-	float current_max = conf->l_current_max;
-	float i_mag = NORM2_f(state_m->id, state_m->iq);
-
-	if (i_mag > current_max) {
+	if (motor->m_state != MC_STATE_RUNNING) {
 		motor->m_i_fw_set = 0.0f;
 		return;
 	}
+
+	float current_max = conf->l_current_max;
+	float i_mag = NORM2_f(state_m->id, state_m->iq);
 
 	float duty = state_m->duty_now;
 	float duty_target = conf->foc_fw_duty_start;
 
 	if (duty > duty_target) {
-		float duty_err = duty - duty_target;
-		motor->m_i_fw_set += duty_err * conf->foc_fw_current_max * dt * 2.0f;
-		if (motor->m_i_fw_set > conf->foc_fw_current_max) {
-			motor->m_i_fw_set = conf->foc_fw_current_max;
+		/* Only advance field weakening if total current is within limit */
+		if (i_mag < current_max) {
+			float duty_err = duty - duty_target;
+			motor->m_i_fw_set += duty_err * conf->foc_fw_current_max * dt * 10.0f;
+			if (motor->m_i_fw_set > conf->foc_fw_current_max) {
+				motor->m_i_fw_set = conf->foc_fw_current_max;
+			}
 		}
 	} else {
-		motor->m_i_fw_set -= (duty_target - duty) * conf->foc_fw_current_max * dt * 4.0f;
+		/* Always allow field weakening to ramp down to zero */
+		motor->m_i_fw_set -= (duty_target - duty) * conf->foc_fw_current_max * dt * 20.0f;
 		if (motor->m_i_fw_set < 0.0f) {
 			motor->m_i_fw_set = 0.0f;
 		}
