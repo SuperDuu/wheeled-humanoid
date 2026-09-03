@@ -43,18 +43,18 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_current_filter_const = 0.18f;
     conf->foc_cc_decoupling = FOC_CC_DECOUPLING_BEMF; // Bù khử ghép chéo d-q
 
-    // Speed Controller (Cascaded Current-Mode FOC: Outputs Iq command in Amperes)
-    conf->s_pid_kp = 0.0018f;             // Calibrated smooth speed gain (0.038 A/mech RPM)
-    conf->s_pid_ki = 0.0012f;             // Stable integration without overshoot/oscillation
-    conf->s_pid_kd = 0.0f;                 // Zero D-term (prevents derivative kick)
-    conf->s_pid_kd_filter = 0.05f;         // Clean ~8Hz low-pass filter (eliminates 14-bit quantization chatter)
+    // Speed Controller (Feedforward + Damping only: ZERO I-term for robot safety)
+    conf->s_pid_kp = 0.0015f;             // Damping stiffness
+    conf->s_pid_ki = 0.0f;                // ZERO I-term (No windup, no stiction stall)
+    conf->s_pid_kd = 0.0f;                // Zero D-term
+    conf->s_pid_kd_filter = 0.08f;        // 12 Hz filter
     conf->s_pid_min_erpm = 10.0f;          // 10 ERPM deadband (~0.48 RPM motor)
-    conf->s_pid_ramp_erpms_s = 3000.0f;    // 3000 ERPM/s (~143 RPM/s smooth motor ramp)
+    conf->s_pid_ramp_erpms_s = 1500.0f;    // 1500 ERPM/s (~71 RPM/s smooth ramp)
 
     // Position Controller (MIT Mini Cheetah Impedance PD: Outputs Iq command in Amperes)
-    conf->p_pid_kp = 8.0f;                 // Kp_pos = 8.0 A/rad (Virtual Joint Stiffness)
-    conf->p_pid_ki = 0.0f;                 // Zero I-term (No windup, elastic ground impact absorption)
-    conf->p_pid_kd = 0.25f;                // Kd_pos = 0.25 A/(rad/s) (Virtual Damping)
+    conf->p_pid_kp = 12.0f;                // Kp_pos = 12.0 A/rad (~16.3 Nm/rad Joint Stiffness)
+    conf->p_pid_ki = 0.0f;                 // ZERO I-term (Pure elastic compliance, no windup)
+    conf->p_pid_kd = 0.40f;                // Kd_pos = 0.40 A/(rad/s) (Virtual Joint Damping)
     conf->p_pid_kd_proc = 0.05f;           // Damping on measurement
     conf->p_pid_kd_filter = 0.2f;
     conf->p_pid_ang_div = 1.0f;
@@ -79,9 +79,9 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_overmod_factor = 1.0f;       // Standard space vector modulation
     conf->foc_mag_vd_max = 0.1f;           // Max 10% voltage in Vd (prevent d-axis stealing sampling margin)
 
-    // Protection & Safety Limits (Datasheet: Nominal 2.1A, Stall 6.6A, Max Speed 534 RPM = 11214 ERPM)
-    conf->l_current_max = 5.00f;           // 5.0A burst for breakaway from cycloidal stiction
-    conf->l_current_min = -5.00f;          // -5.0A Braking current limit
+    // Protection & Safety Limits (Nominal 2.1A, Dynamic Acceleration Peak 4.00A)
+    conf->l_current_max = 4.00f;           // 4.0A peak for dynamic acceleration & breakaway
+    conf->l_current_min = -4.00f;          // -4.0A braking limit
     conf->l_in_current_max = 20.0f;        // 20A max power supply input
     conf->l_in_current_min = -10.0f;       // -10A max regen charging
     conf->l_max_erpm = 11214.0f;           // 534 RPM * 21 = 11214 ERPM (Max Datasheet Speed)
