@@ -162,9 +162,20 @@ bool Comm_Telemetry_Send(FOC_Controller_t *foc)
     // Transmit via Native USB CDC (Virtual COM Port /dev/ttyACM*)
     if (hUsbDeviceFS.dev_state == USBD_STATE_CONFIGURED && hUsbDeviceFS.pClassData != NULL) {
         USBD_CDC_HandleTypeDef *hcdc = (USBD_CDC_HandleTypeDef*)hUsbDeviceFS.pClassData;
+        static uint32_t s_tx_busy_start_ms = 0;
         if (hcdc->TxState == 0) {
+            s_tx_busy_start_ms = 0;
             CDC_Transmit_FS((uint8_t*)&packet, sizeof(packet));
             return true;
+        } else {
+            /* USB CDC Tx Busy Watchdog: If stuck for > 30ms, force unstick endpoint */
+            uint32_t now_ms = HAL_GetTick();
+            if (s_tx_busy_start_ms == 0) {
+                s_tx_busy_start_ms = now_ms;
+            } else if (now_ms - s_tx_busy_start_ms > 30) {
+                hcdc->TxState = 0; // Unstick USB CDC endpoint
+                s_tx_busy_start_ms = 0;
+            }
         }
     }
     return false;
