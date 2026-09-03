@@ -370,9 +370,10 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         else if (strncmp(cmd, "CURRENT ", 8) == 0) iq = atof(&cmd[8]);
         else if (strncmp(cmd, "FORCE ", 6) == 0) iq = atof(&cmd[6]);
         else if (strncmp(cmd, "TORQUE ", 7) == 0) {
-            float tau = atof(&cmd[7]); // Nm
-            float kt = (motor->m_conf != NULL && motor->m_conf->foc_motor_flux_linkage > 0.0f) ? (1.5f * 21.0f * motor->m_conf->foc_motor_flux_linkage) : 0.67f;
-            iq = (kt > 0.01f) ? (tau / kt) : tau;
+            float tau = atof(&cmd[7]); // Joint Torque in Nm
+            float gear_ratio = (motor->m_conf != NULL && motor->m_conf->gear_ratio > 0.1f) ? motor->m_conf->gear_ratio : 17.0f;
+            float kt_joint = 0.318f * gear_ratio; // ~5.4 Nm/A at joint output
+            iq = (kt_joint > 0.1f) ? (tau / kt_joint) : tau;
         }
         iq_target_dbg = iq;
         motor->m_iq_set = iq;
