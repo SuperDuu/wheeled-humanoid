@@ -124,7 +124,7 @@ bool Comm_Telemetry_Send(FOC_Controller_t *foc)
 
     // 4. Angles
     packet.phase_elec = state_m->phase;
-    packet.mech_angle = motor->m_mech_angle_single;
+    packet.mech_angle = foc->encoder.angle_singleturn;
     packet.joint_angle = motor->m_joint_angle;
 
     // 5. Speeds (Mechanical RPM)
@@ -205,8 +205,13 @@ static void StartClosedLoopSpeed(FOC_Controller_t *foc, float mech_rpm)
     motor->m_speed_i_term = 0.0f;
     motor->m_speed_prev_error = 0.0f;
     motor->m_iq_set = 0.0f;
+    motor->m_motor_state.vd_int = 0.0f;
+    motor->m_motor_state.vq_int = 0.0f;
+    motor->m_motor_state.vd = 0.0f;
+    motor->m_motor_state.vq = 0.0f;
     motor->m_openloop_spinup_active = false;
     motor->m_openloop_spinup_time = 0.0f;
+    motor->m_i_fw_set = 0.0f;
     motor->m_control_mode = CONTROL_MODE_SPEED;
     motor->m_state = MC_STATE_RUNNING;
     run_foc_mode = 3;
@@ -234,6 +239,7 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         extern volatile int run_calibration;
         motor->m_state = MC_STATE_OFF;
         motor->m_iq_set = 0.0f;
+        motor->m_i_fw_set = 0.0f;
         motor->m_speed_command_rpm = 0.0f;
         motor->m_speed_pid_set_rpm = 0.0f;
         motor->m_speed_i_term = 0.0f;
@@ -256,6 +262,9 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         extern volatile int run_alignment;
         motor->m_state = MC_STATE_OFF;
         motor->m_iq_set = 0.0f;
+        foc->fault = MC_FAULT_NONE;
+        foc->encoder.consecutive_errors = 0;
+        AS5048A_ClearError(&foc->encoder);
         run_alignment = 1;
         run_open_loop = 0;
         run_foc_mode = 0;
