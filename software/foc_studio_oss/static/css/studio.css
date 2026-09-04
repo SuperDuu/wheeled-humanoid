@@ -1160,3 +1160,68 @@ canvas.scope-canvas {
     grid-template-columns: 1fr;
   }
 }
+
+/* Robot Joint Control UI Enhancements */
+.badge-warning-note {
+  display: block;
+  padding: 8px 12px;
+  background: rgba(229, 165, 10, 0.12);
+  border: 1px solid rgba(229, 165, 10, 0.35);
+  border-radius: var(--radius-md);
+  color: var(--warning);
+  font-size: 0.73rem;
+  line-height: 1.45;
+  margin-top: 8px;
+}
+.badge-deprecated {
+  background: rgba(224, 49, 49, 0.15);
+  color: #ff6b6b;
+  border: 1px solid rgba(224, 49, 49, 0.3);
+  font-size: 0.68rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.badge-todo {
+  background: rgba(120, 131, 145, 0.2);
+  color: var(--text-muted);
+  border: 1px dashed var(--border-strong);
+  font-size: 0.68rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.btn-pos-preset {
+  background: var(--bg-surface);
+  border: 1px solid var(--accent) !important;
+  color: var(--accent-strong) !important;
+  font-weight: 800;
+}
+.btn-pos-preset:hover {
+  background: var(--accent-soft) !important;
+}
+.btn-rel-preset {
+  border: 1px solid var(--border-strong) !important;
+  color: var(--text-primary) !important;
+}
+.btn-torque-preset {
+  border: 1px solid var(--color-iq) !important;
+  color: #a78bfa !important;
+}
+.btn-torque-preset:hover {
+  background: rgba(124, 58, 237, 0.15) !important;
+}
+.btn-disabled-todo {
+  opacity: 0.55;
+  cursor: not-allowed;
+  border: 1px dashed var(--border-color) !important;
+}
+.joint-hero-display {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.joint-target-text {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
