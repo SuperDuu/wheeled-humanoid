@@ -428,13 +428,8 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	float d_term = -conf_now->s_pid_kd * erpm_diff / dt;
 	utils_truncate_number_abs(&d_term, SPEED_IQ_D_MAX_A);
 
-	/* Friction feedforward */
-	float iq_friction = 0.0f;
-	if (target_mech_rpm > 1.0f) {
-		iq_friction = SPEED_IQ_FRICTION_A;
-	} else if (target_mech_rpm < -1.0f) {
-		iq_friction = -SPEED_IQ_FRICTION_A;
-	}
+	/* Smooth continuous friction feedforward (replaces discontinuous step) */
+	float iq_friction = 0.12f * tanhf(target_mech_rpm / 15.0f);
 
 	/* Bidirectional speed current limits */
 	float iq_limit = conf_now->l_current_max;
