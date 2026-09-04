@@ -333,14 +333,27 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 	// 3. Smooth Cycloid Friction Feedforward
 	float iq_friction_ff = 0.35f * tanhf(target_vel_rad_s / 0.05f);
 
-	// 4. MIT Impedance PD Controller: Iq_cmd = Kp * e_pos + Kd * e_vel + Iq_ff
-	float p_gain = conf_now->p_pid_kp; // 10.0 A/rad (Virtual joint stiffness)
-	float d_gain = conf_now->p_pid_kd; // 0.30 A/(rad/s) (Virtual joint damping)
+	// 4. MIT Impedance PD Controller with bounded stiction integral
+	float p_gain = conf_now->p_pid_kp; // Virtual joint stiffness
+	float d_gain = conf_now->p_pid_kd; // Virtual joint damping
 	float p_term = error * p_gain;
 	float d_term = vel_error * d_gain;
-	motor->m_pos_i_term = 0.0f;        // Zero I-term (No windup, elastic impact absorption)
 
-	float iq_cmd = p_term + d_term + iq_friction_ff;
+	float ki_gain = conf_now->p_pid_ki;
+	if (ki_gain > 0.0f) {
+		// Only accumulate when near target (< 5 deg / 0.087 rad) to prevent windup during moves
+		if (fabsf(error) < 0.087f) {
+			motor->m_pos_i_term += ki_gain * error * dt;
+			// Bounded to 0.50A (~2.7 Nm output) to overcome stiction without limit cycle
+			utils_truncate_number_abs(&motor->m_pos_i_term, 0.50f);
+		} else {
+			motor->m_pos_i_term = 0.0f;
+		}
+	} else {
+		motor->m_pos_i_term = 0.0f;
+	}
+
+	float iq_cmd = p_term + d_term + motor->m_pos_i_term + iq_friction_ff;
 
 	// 5. Holding Current Limit (Max 6.6A stall limit)
 	float hold_limit_a = (conf_now->l_current_max > 0.1f) ? conf_now->l_current_max : 6.60f;
@@ -423,23 +436,24 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		iq_friction = -SPEED_IQ_FRICTION_A;
 	}
 
-	/* Unidirectional speed clamping: prevent regenerative braking from bouncing against gearbox backlash */
+	/* Bidirectional speed current limits */
 	float iq_limit = conf_now->l_current_max;
 	if (iq_limit < 0.1f || iq_limit > SPEED_IQ_CONT_MAX_A) {
 		iq_limit = SPEED_IQ_CONT_MAX_A;
 	}
 	float iq_min = -iq_limit;
 	float iq_max = iq_limit;
-	if (target_mech_rpm > 5.0f) {
-		iq_min = 0.00f;
-	} else if (target_mech_rpm < -5.0f) {
-		iq_max = 0.00f;
+
+	/* Speed Integral action with anti-windup */
+	float speed_ki = conf_now->s_pid_ki;
+	if (speed_ki > 0.0f) {
+		motor->m_speed_i_term += speed_ki * error_erpm * dt;
+		utils_truncate_number_abs(&motor->m_speed_i_term, SPEED_IQ_I_MAX_A);
+	} else {
+		motor->m_speed_i_term = 0.0f;
 	}
 
-	/* Robot Joint Velocity Control: Pure Proportional + Damping + Feedforward (ZERO I-term) */
-	motor->m_speed_i_term = 0.0f;
-
-	float iq_cmd = iq_friction + p_term + d_term;
+	float iq_cmd = iq_friction + p_term + motor->m_speed_i_term + d_term;
 	utils_truncate_number(&iq_cmd, iq_min, iq_max);
 	/* Dynamic Iq rate-limit (500 A/s) to ensure fast loop phase response without latency oscillation */
 	utils_step_towards((float*)&motor->m_iq_set, iq_cmd, 500.0f * dt);
