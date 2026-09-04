@@ -48,11 +48,6 @@ typedef struct {
 	bool    use_encoder_lut;
 	int16_t encoder_lut[ENCODER_LUT_SIZE]; // in units of 0.0001 rad (0.1 mrad)
 
-	// Phase Mapping: Auto-detected during alignment
-	// If true, swap Phase B ↔ C at PWM output and current sensing
-	// This compensates for PCB trace routing where SOB/SOC or PWM_B/PWM_C are swapped
-	bool  phase_swap_bc;
-
 	// Output Duty Cycles (0.0 to 1.0)
 	float duty_a, duty_b, duty_c;
 } FOC_Controller_t;
@@ -64,10 +59,7 @@ extern FOC_Controller_t g_foc_controller;
 void FOC_Control_Init(FOC_Controller_t *foc, SPI_HandleTypeDef *hspi1_drv, SPI_HandleTypeDef *hspi3_enc);
 void FOC_Control_AdcCalibrate(FOC_Controller_t *foc, uint16_t raw_adc_a, uint16_t raw_adc_b);
 void FOC_Control_AlignEncoder(FOC_Controller_t *foc);
-<<<<<<< HEAD
 float FOC_Control_CorrectEncoderAngle(const FOC_Controller_t *foc, float raw_rad);
-=======
->>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
 void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float current_b, float vbus, float temp_fet, float dt);
 void FOC_Control_SlowLoop(FOC_Controller_t *foc, float dt);
 bool FOC_Control_CheckSafety(FOC_Controller_t *foc, float current_a, float current_b, float vbus, float temp_fet);
