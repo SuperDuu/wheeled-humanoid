@@ -143,8 +143,9 @@ void comm_can_process_rx_frame(FDCAN_RxHeaderTypeDef *rx_header, uint8_t *rx_dat
         g_foc_controller.motor.m_state = MC_STATE_RUNNING;
         TIM1_EnsureMoeEnabled();
 
-        /* Immediate Packed Reply (p_actual, v_actual, torque_actual) */
-        comm_can_send_mit_reply(p_actual, v_actual, torque_cmd);
+        /* Immediate Packed Reply (p_actual, v_actual, torque_actual from measured Iq) */
+        float t_actual = g_foc_controller.motor.m_motor_state.iq_filter * kt_joint;
+        comm_can_send_mit_reply(p_actual, v_actual, t_actual);
         return;
     }
 
