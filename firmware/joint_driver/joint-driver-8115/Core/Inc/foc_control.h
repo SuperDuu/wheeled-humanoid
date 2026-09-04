@@ -35,6 +35,14 @@ typedef struct {
 	// Encoder Zero Alignment
 	float zero_electric_angle;
 	bool  aligned;
+	bool  observer_angle_active;
+	float observer_phase_interp;
+	float observer_angle_blend;
+
+	// Phase Mapping: Auto-detected during alignment
+	// If true, swap Phase B ↔ C at PWM output and current sensing
+	// This compensates for PCB trace routing where SOB/SOC or PWM_B/PWM_C are swapped
+	bool  phase_swap_bc;
 
 	// Encoder Non-Linearity Calibration Lookup Table (Ben Katz / MIT Cheetah method)
 	bool    use_encoder_lut;

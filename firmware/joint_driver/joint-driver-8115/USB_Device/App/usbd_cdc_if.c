@@ -155,10 +155,7 @@ static int8_t CDC_Init_FS(void)
   /* Set Application Buffers */
   USBD_CDC_SetTxBuffer(&hUsbDeviceFS, UserTxBufferFS, 0);
   USBD_CDC_SetRxBuffer(&hUsbDeviceFS, UserRxBufferFS);
-<<<<<<< HEAD
   USBD_CDC_ReceivePacket(&hUsbDeviceFS);
-=======
->>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
   return (USBD_OK);
   /* USER CODE END 3 */
 }
@@ -265,23 +262,14 @@ static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
 static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
 {
   /* USER CODE BEGIN 6 */
-<<<<<<< HEAD
-=======
-  USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]);
-  USBD_CDC_ReceivePacket(&hUsbDeviceFS);
-  
->>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
   if (Buf != NULL && Len != NULL && *Len > 0) {
     extern void Comm_Telemetry_RxBuffer(const uint8_t *buf, uint32_t len);
     Comm_Telemetry_RxBuffer(Buf, *Len);
   }
   
-<<<<<<< HEAD
   USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]);
   USBD_CDC_ReceivePacket(&hUsbDeviceFS);
   
-=======
->>>>>>> 8e44a795456836680c75c6d0526c6dd48d62f00d
   return (USBD_OK);
   /* USER CODE END 6 */
 }
