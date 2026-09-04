@@ -649,7 +649,10 @@ static float Measure_AlignmentTorqueScore(float electric_offset,
     motor->m_state = MC_STATE_OFF;
     motor->m_iq_set = 0.0f;
     run_foc_mode = 0;
-    HAL_Delay(120);
+    for (int d = 0; d < 12; d++) {
+      Comm_Telemetry_Process(&g_foc_controller);
+      HAL_Delay(10);
+    }
 
     if (g_foc_controller.fault != MC_FAULT_NONE)
       return 0.0f;
@@ -663,7 +666,10 @@ static float Measure_AlignmentTorqueScore(float electric_offset,
     motor->m_state = MC_STATE_RUNNING;
     run_foc_mode = 1;
     TIM1_EnsureMoeEnabled();
-    HAL_Delay(200);
+    for (int d = 0; d < 20; d++) {
+      Comm_Telemetry_Process(&g_foc_controller);
+      HAL_Delay(10);
+    }
 
     int32_t end_count = g_foc_controller.encoder.count_buff[0];
     signed_travel += (float)direction * (float)(end_count - start_count);
@@ -672,7 +678,10 @@ static float Measure_AlignmentTorqueScore(float electric_offset,
   motor->m_state = MC_STATE_OFF;
   motor->m_iq_set = 0.0f;
   run_foc_mode = 0;
-  HAL_Delay(120);
+  for (int d = 0; d < 12; d++) {
+    Comm_Telemetry_Process(&g_foc_controller);
+    HAL_Delay(10);
+  }
   return 0.5f * signed_travel;
 }
 
