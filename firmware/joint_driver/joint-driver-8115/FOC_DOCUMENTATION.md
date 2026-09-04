@@ -17,9 +17,9 @@ $$\begin{aligned}
 \end{aligned}$$
 
 Trong đó:
-* $R_s = 0.090\,\Omega$: Điện trở cuộn dây pha.
-* $L_d = L_q = L_s = 0.000120\,\text{H}$ ($120\,\mu\text{H}$): Độ tự cảm pha.
-* $\psi_m = 0.0045\,\text{Wb}$: Từ thông liên kết nam ma sát Neodymium.
+* $R_s = 2.263\,\Omega$: Điện trở cuộn dây pha (đo thực nghiệm locked-rotor regression).
+* $L_d = L_q = L_s = 0.000100\,\text{H}$ ($100\,\mu\text{H}$): Độ tự cảm pha.
+* $\psi_m = \lambda = 0.0300\,\text{Wb}$: Từ thông liên kết nam ma sát Neodymium.
 * $\omega_e = P_{pairs} \cdot \omega_m = 21 \cdot \omega_m$: Vận tốc góc điện.
 
 #### Phân tích thành phần chéo (Cross-coupling terms):
@@ -41,7 +41,7 @@ Mô hình hàm truyền của cuộn dây động cơ (Plant):
 $$G_{plant}(s) = \frac{I(s)}{V(s)} = \frac{1}{L_s s + R_s} = \frac{1/R_s}{\frac{L_s}{R_s} s + 1}$$
 
 Hằng số thời gian cuộn dây:
-$$\tau_m = \frac{L_s}{R_s} = \frac{0.000120}{0.090} = 1.333\,\text{ms}$$
+$$\tau_m = \frac{L_s}{R_s} = \frac{0.000100}{2.263} = 44.19\,\mu\text{s}$$
 
 Bộ điều khiển PI có dạng:
 $$C_{PI}(s) = K_p + \frac{K_i}{s} = \frac{K_p s + K_i}{s} = K_p \frac{s + \frac{K_i}{K_p}}{s}$$
@@ -181,19 +181,19 @@ graph TD
 | Tham số | Giá trị | Đơn vị | Ý nghĩa kỹ thuật |
 |:---|:---|:---|:---|
 | `foc_f_zv` | 20000.0 | Hz | Tần số phát xung PWM TIM1 |
-| `foc_motor_pole_pairs` | 21 | - | Số cặp cực động cơ GB8115-4 |
-| `foc_motor_r` | 0.090 | $\Omega$ | Điện trở pha cuộn dây ($90\,\text{m}\Omega$) |
-| `foc_motor_l` | 0.000120 | H | Độ tự cảm pha cuộn dây ($120\,\mu\text{H}$) |
-| `foc_motor_flux_linkage` | 0.0045 | Wb | Từ thông nam ma sát Neodymium |
+| `foc_motor_pole_pairs` | 21 | - | Số cặp cực động cơ GB8115-4 (42 nam châm) |
+| `foc_motor_r` | 2.263 | $\Omega$ | Điện trở pha cuộn dây ($2.263\,\Omega$) |
+| `foc_motor_l` | 0.000100 | H | Độ tự cảm pha cuộn dây ($100\,\mu\text{H}$) |
+| `foc_motor_flux_linkage` | 0.0300 | Wb | Từ thông nam ma sát Neodymium ($30.0\,\text{mWb}$) |
 | `gear_ratio` | 17.0 | - | Tỉ số truyền Hộp số Cycloid (17:1) |
-| `joint_pos_min` | -3.14159 | rad | Giới hạn góc khớp mềm tối thiểu ($-180^\circ$) |
-| `joint_pos_max` | +3.14159 | rad | Giới hạn góc khớp mềm tối đa ($+180^\circ$) |
-| `foc_current_kp` | 0.25 | V/A | Hệ số Kp bộ điều khiển PI dòng điện |
-| `foc_current_ki` | 150.0 | V/(A·s) | Hệ số Ki bộ điều khiển PI dòng điện |
-| `p_pid_kp` | 15.0 | (A/rad) | Hệ số Kp bộ điều khiển Vị trí góc khớp |
-| `p_pid_kd` | 0.03 | A/(rad/s) | Hệ số Kd sai số vị trí |
-| `p_pid_kd_proc` | 0.02 | A/(rad/s) | Hệ số Kd trên biến đo vị trí ($D$-on-measurement) |
-| `l_current_max` | 25.0 | A | Giới hạn dòng điện motor tối đa |
+| `joint_pos_min` | -1000000.0 | rad | Giới hạn góc quay liên tục |
+| `joint_pos_max` | +1000000.0 | rad | Giới hạn góc quay liên tục |
+| `foc_current_kp` | 0.80 | V/A | Hệ số Kp bộ điều khiển PI dòng điện (BW ~1270 Hz) |
+| `foc_current_ki` | 18100.0 | V/(A·s) | Hệ số Ki bộ điều khiển PI dòng điện (Ki/Kp = R/L) |
+| `p_pid_kp` | 12.0 | A/rad | Độ cứng khớp ảo MIT Mini Cheetah (~16.3 Nm/rad) |
+| `p_pid_ki` | 1.0 | A/(rad·s)| Khử ma sát tĩnh vùng đích (< 5 độ, kẹp 0.5A) |
+| `p_pid_kd` | 0.40 | A/(rad/s) | Độ cản nhớt khớp ảo MIT Mini Cheetah |
+| `l_current_max` | 4.00 | A | Giới hạn dòng điện cực đại an toàn cho GB8115 |
 | `l_voltage_max` | 50.0 | V | Ngắt bảo vệ quá áp VBUS (OVP) |
 | `l_voltage_min` | 12.0 | V | Ngắt bảo vệ áp thấp VBUS (UVP) |
 
