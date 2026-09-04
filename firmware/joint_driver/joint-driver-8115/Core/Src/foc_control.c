@@ -1,5 +1,5 @@
 /*
-	Copyright 2016 - 2022 Benjamin Vedder	benjamin@vedder.se
+	Author: Vu Duc Du
 	Adapted for STM32G4 HAL Joint Driver - Cycloidal Actuator Project
 
 	This file is part of the VESC firmware.
