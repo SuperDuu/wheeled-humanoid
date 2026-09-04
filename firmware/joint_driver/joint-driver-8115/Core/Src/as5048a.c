@@ -29,6 +29,39 @@ uint16_t AS5048A_CalculateEvenParity(uint16_t value)
     return value;
 }
 
+static inline HAL_StatusTypeDef AS5048A_FastSpiTransfer16(AS5048A_t *enc, uint16_t tx_val, uint16_t *rx_val)
+{
+    SPI_TypeDef *spi = enc->hspi->Instance;
+
+    /* Ensure 16-bit RX threshold and SPI peripheral enabled */
+    CLEAR_BIT(spi->CR2, SPI_RXFIFO_THRESHOLD);
+    if (!(spi->CR1 & SPI_CR1_SPE)) {
+        SET_BIT(spi->CR1, SPI_CR1_SPE);
+    }
+
+    /* Drain stale RX data and clear overrun */
+    while (spi->SR & SPI_SR_RXNE) {
+        (void)spi->DR;
+    }
+    if (spi->SR & SPI_SR_OVR) {
+        (void)spi->DR;
+        (void)spi->SR;
+    }
+
+    uint32_t to = 4000;
+    while (!(spi->SR & SPI_SR_TXE) && --to);
+    if (to == 0) return HAL_ERROR;
+
+    spi->DR = (uint32_t)tx_val;
+
+    to = 4000;
+    while (!(spi->SR & SPI_SR_RXNE) && --to);
+    if (to == 0) return HAL_ERROR;
+
+    *rx_val = (uint16_t)(spi->DR & 0xFFFFU);
+    return HAL_OK;
+}
+
 HAL_StatusTypeDef AS5048A_ClearError(AS5048A_t *enc)
 {
     if (enc == NULL || enc->hspi == NULL) return HAL_ERROR;
@@ -36,9 +69,13 @@ HAL_StatusTypeDef AS5048A_ClearError(AS5048A_t *enc)
     uint16_t response = 0;
     HAL_GPIO_WritePin(enc->cs_port, enc->cs_pin, GPIO_PIN_RESET);
     for (volatile int i = 0; i < 6; i++) { __NOP(); }
-    HAL_StatusTypeDef status = HAL_SPI_TransmitReceive(enc->hspi, (uint8_t*)&command, (uint8_t*)&response, 1, 2);
+    HAL_StatusTypeDef status = AS5048A_FastSpiTransfer16(enc, command, &response);
     for (volatile int i = 0; i < 3; i++) { __NOP(); }
     HAL_GPIO_WritePin(enc->cs_port, enc->cs_pin, GPIO_PIN_SET);
+    if (status != HAL_OK) {
+        enc->hspi->State = HAL_SPI_STATE_READY;
+        __HAL_SPI_CLEAR_OVRFLAG(enc->hspi);
+    }
     return status;
 }
 
@@ -212,8 +249,8 @@ HAL_StatusTypeDef AS5048A_ReadRawAngle(AS5048A_t *enc, uint16_t *raw_angle)
     HAL_GPIO_WritePin(enc->cs_port, enc->cs_pin, GPIO_PIN_RESET);
     for (volatile int i = 0; i < 6; i++) { __NOP(); } // CS setup time > 350ns
 
-    // Perform 16-bit SPI transfer (takes ~3.0µs at 5.3Mbps SPI clock)
-    HAL_StatusTypeDef status = HAL_SPI_TransmitReceive(enc->hspi, (uint8_t*)&command, (uint8_t*)&response, 1, 2);
+    // Perform 16-bit SPI transfer via fast register access (deterministic ~3.0µs, no HAL_GetTick dependency)
+    HAL_StatusTypeDef status = AS5048A_FastSpiTransfer16(enc, command, &response);
 
     for (volatile int i = 0; i < 3; i++) { __NOP(); } // CS hold time > 50ns
     // Deassert CS (HIGH)
