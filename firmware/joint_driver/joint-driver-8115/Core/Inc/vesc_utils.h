@@ -132,13 +132,13 @@ static inline void utils_step_towards(float *value, float goal, float step) {
 }
 
 static inline void utils_norm_angle(float *angle) {
-	while (*angle < 0.0) { *angle += 360.0; }
-	while (*angle > 360.0) { *angle -= 360.0; }
+	while (*angle < 0.0f) { *angle += 360.0f; }
+	while (*angle > 360.0f) { *angle -= 360.0f; }
 }
 
 static inline void utils_norm_angle_rad(float *angle) {
-	while (*angle < -M_PI) { *angle += 2.0 * M_PI; }
-	while (*angle >=  M_PI) { *angle -= 2.0 * M_PI; }
+	while (*angle < -(float)M_PI) { *angle += (float)(2.0 * M_PI); }
+	while (*angle >=  (float)M_PI) { *angle -= (float)(2.0 * M_PI); }
 }
 
 static inline void utils_truncate_number(float *number, float min, float max) {
