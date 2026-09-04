@@ -496,6 +496,19 @@ const App = {
     this.fetchPorts();
     this.initWebSocket();
     this.startAnimationLoop();
+    this.checkInitialStatus();
+  },
+
+  async checkInitialStatus() {
+    try {
+      const res = await fetch('/api/status');
+      if (res.ok) {
+        const s = await res.json();
+        const hzEl = document.getElementById('telemetry-hz');
+        if (hzEl) hzEl.innerText = `${s.telemetry_hz} Hz`;
+        this.updateConnectionStatus(s.connected, s.is_simulation, s.port);
+      }
+    } catch (e) {}
   },
 
   loadThemePreference() {
@@ -698,31 +711,26 @@ const App = {
       });
     });
 
-    // Speed Slider
+    // Speed Slider (Optional / Legacy)
     const slider = document.getElementById('speed-slider');
-    slider.addEventListener('input', (e) => {
-      document.getElementById('slider-val-text').innerText = e.target.value;
+    slider?.addEventListener('input', (e) => {
+      const txt = document.getElementById('slider-val-text');
+      if (txt) txt.innerText = e.target.value;
     });
-    slider.addEventListener('change', (e) => {
+    slider?.addEventListener('change', (e) => {
       this.sendSpeedCommand(parseFloat(e.target.value));
     });
 
     // Emergency Stop
-    document.getElementById('btn-estop').addEventListener('click', () => this.emergencyStop());
+    document.getElementById('btn-estop')?.addEventListener('click', () => this.emergencyStop());
 
     // Calibration & Align Buttons (MIT Mini Cheetah)
-    const btnCalib = document.getElementById('btn-calib-lut');
-    if (btnCalib) {
-      btnCalib.addEventListener('click', () => this.sendCustomCommand('CALIB'));
-    }
-    const btnAlign = document.getElementById('btn-align-zero');
-    if (btnAlign) {
-      btnAlign.addEventListener('click', () => this.sendCustomCommand('ALIGN'));
-    }
+    document.getElementById('btn-calib-lut')?.addEventListener('click', () => this.sendCustomCommand('CALIB'));
+    document.getElementById('btn-align-zero')?.addEventListener('click', () => this.sendCustomCommand('ALIGN'));
 
     // Recording Controls
-    document.getElementById('btn-record-toggle').addEventListener('click', () => this.toggleRecording());
-    document.getElementById('btn-download-csv').addEventListener('click', () => this.downloadCsv());
+    document.getElementById('btn-record-toggle')?.addEventListener('click', () => this.toggleRecording());
+    document.getElementById('btn-download-csv')?.addEventListener('click', () => this.downloadCsv());
 
     this.setupDriverFeatureHandlers();
 
@@ -730,8 +738,9 @@ const App = {
     document.getElementById('btn-copy-log')?.addEventListener('click', () => this.copyLogToClipboard());
 
     // Clear Log
-    document.getElementById('btn-clear-log').addEventListener('click', () => {
-      document.getElementById('log-terminal').innerHTML = '<div class="log-line system">[SYSTEM] Log cleared.</div>';
+    document.getElementById('btn-clear-log')?.addEventListener('click', () => {
+      const term = document.getElementById('log-terminal');
+      if (term) term.innerHTML = '<div class="log-line system">[SYSTEM] Log cleared.</div>';
     });
   },
 
@@ -842,6 +851,55 @@ const App = {
     });
     document.querySelectorAll('.btn-pos-preset').forEach(btn => {
       btn.addEventListener('click', () => setPosition(btn.dataset.deg));
+    });
+
+    // Robot Joint Trajectory Control
+    const runJointMove = (degVal, timeVal) => {
+      const deg = parseFloat(degVal) || 0;
+      const time = parseFloat(timeVal) || 1.2;
+      this.currentTargetAngle = deg;
+      const targetTxt = document.getElementById('val-joint-target');
+      if (targetTxt) targetTxt.innerText = `Mục tiêu: ${deg.toFixed(1)}°`;
+      const slider = document.getElementById('joint-angle-slider');
+      if (slider) slider.value = deg;
+      const sliderTxt = document.getElementById('joint-slider-text');
+      if (sliderTxt) sliderTxt.innerText = `${deg.toFixed(1)}°`;
+      this.sendCustomCommand(`MOVE ${deg} ${time}`);
+    };
+
+    document.getElementById('btn-run-joint-move')?.addEventListener('click', () => {
+      const deg = document.getElementById('input-joint-deg')?.value || 0;
+      const time = document.getElementById('input-joint-time')?.value || 1.2;
+      runJointMove(deg, time);
+    });
+
+    document.getElementById('input-joint-deg')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const deg = e.target.value;
+        const time = document.getElementById('input-joint-time')?.value || 1.2;
+        runJointMove(deg, time);
+      }
+    });
+
+    const jointSlider = document.getElementById('joint-angle-slider');
+    jointSlider?.addEventListener('input', (e) => {
+      const deg = parseFloat(e.target.value) || 0;
+      const sliderTxt = document.getElementById('joint-slider-text');
+      if (sliderTxt) sliderTxt.innerText = `${deg.toFixed(1)}°`;
+      const degInput = document.getElementById('input-joint-deg');
+      if (degInput) degInput.value = deg;
+    });
+
+    jointSlider?.addEventListener('change', (e) => {
+      const deg = parseFloat(e.target.value) || 0;
+      const time = document.getElementById('input-joint-time')?.value || 1.2;
+      runJointMove(deg, time);
+    });
+
+    // Custom Torque Command Handler
+    document.getElementById('btn-send-torque')?.addEventListener('click', () => {
+      const tau = parseFloat(document.getElementById('input-custom-torque')?.value) || 0;
+      this.sendCustomCommand(`TORQUE ${tau}`);
     });
 
     document.getElementById('btn-quick-sethome')?.addEventListener('click', () => this.sendCustomCommand('SETHOME'));
@@ -1248,6 +1306,12 @@ const App = {
     setTxt('val-joint-rad', `${(data.joint_angle || 0).toFixed(3)} rad (shaft ${mechDeg.toFixed(1)} deg)`);
     setTxt('val-rpm-disp', data.speed_rpm.toFixed(1));
     setTxt('val-iq-disp', data.i_q.toFixed(2));
+    const torqueEst = (data.i_q || 0) * 5.4;
+    setTxt('val-torque-disp', `${torqueEst >= 0 ? '+' : ''}${torqueEst.toFixed(2)}`);
+    if (this.currentTargetAngle !== undefined) {
+      const err = jointDeg - this.currentTargetAngle;
+      setTxt('val-joint-error', `Sai số: ${err >= 0 ? '+' : ''}${err.toFixed(1)}°`);
+    }
     const modeNames = ['IDLE', 'CURRENT', 'BRAKE', 'SPEED', 'POSITION', 'VOLTAGE', 'HANDBRAKE', 'OPENLOOP'];
     setTxt('val-mode', modeNames[data.control_mode] || `MODE ${data.control_mode}`);
 
