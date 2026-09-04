@@ -191,11 +191,17 @@ volatile int8_t g_encoder_calibration_result = 0;
 
 typedef struct {
   float zero_electric_angle;  /* Góc điện offset (rad) */
+  float coarse_electric_angle;/* Offset from the quasi-static sweep */
+  float phase_correction;     /* Closed-loop torque-axis correction (rad) */
   float encoder_rad;          /* Góc encoder tại thời điểm lock (rad) */
   float vbus;                 /* VBUS khi alignment */
   float concentration;        /* Circular concentration of static zero samples */
   int32_t forward_counts;     /* Encoder travel during forward sweep */
   int32_t backward_counts;    /* Encoder travel during backward sweep */
+  float torque_score_neg90;   /* Signed encoder response at correction -pi/2 */
+  float torque_score_zero;    /* Signed encoder response at correction 0 */
+  float torque_score_pos90;   /* Signed encoder response at correction +pi/2 */
+  float torque_score_final;   /* Signed response after applying correction */
   float current_a;            /* Dòng pha A khi lock (A) */
   float current_b;            /* Dòng pha B khi lock (A) */
   float current_c;            /* Dòng pha C khi lock (A) */
@@ -258,6 +264,8 @@ void TIM1_EnsureMoeEnabled(void);
 static void Apply_SvmVector(float vd, float theta_e, float vbus, uint32_t period);
 static void Ramp_SvmVector(float vd_from, float vd_to, float theta_e,
                            float vbus, uint32_t period, int steps, int delay_ms);
+static float Measure_AlignmentTorqueScore(float electric_offset,
+                                          float test_current_a);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -408,6 +416,12 @@ void Run_EncoderAlignment(void)
   g_foc_controller.fault = MC_FAULT_NONE;
   g_foc_controller.encoder.consecutive_errors = 0;
   AS5048A_ClearError(&g_foc_controller.encoder);
+  g_dbg_align.aligned = 0;
+  g_dbg_align.phase_correction = 0.0f;
+  g_dbg_align.torque_score_neg90 = 0.0f;
+  g_dbg_align.torque_score_zero = 0.0f;
+  g_dbg_align.torque_score_pos90 = 0.0f;
+  g_dbg_align.torque_score_final = 0.0f;
 
   mc_state old_state = g_foc_controller.motor.m_state;
   g_foc_controller.motor.m_state = MC_STATE_DETECTING;
@@ -514,27 +528,81 @@ void Run_EncoderAlignment(void)
   if (!forward_valid || !backward_valid || concentration < 0.95f)
     goto alignment_abort;
 
-  float elec_offset = atan2f(zero_sin_sum, zero_cos_sum);
+  float coarse_offset = atan2f(zero_sin_sum, zero_cos_sum);
   AS5048A_Sample(&g_foc_controller.encoder, sample_dt);
   float enc_zero = g_foc_controller.encoder.angle_singleturn;
+
+  /* Remove the direct alignment field before closing the current loop. */
+  for (int i = 40; i >= 0; i--) {
+    Apply_SvmVector(vd_align * (float)i / 40.0f, theta, vbus, period);
+    Comm_Telemetry_Process(&g_foc_controller);
+    HAL_Delay(5);
+  }
+
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, period / 2);
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, period / 2);
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, period / 2);
+  g_foc_controller.duty_a = 0.5f;
+  g_foc_controller.duty_b = 0.5f;
+  g_foc_controller.duty_c = 0.5f;
+
+  /*
+   * The sweep proves encoder travel and repeatability, but it does not prove
+   * that the estimated q-axis maximizes signed torque. Measure the response
+   * at three orthogonal phase corrections. For
+   *
+   *   score(delta) = gain * cos(delta - phase_error),
+   *
+   * phase_error is recovered without a hard-coded correction as
+   * atan2((score(+pi/2) - score(-pi/2))/2, score(0)).
+   */
+  run_alignment = 2; /* Allow the normal 10 kHz current loop during validation. */
+  const float test_current_a = 0.50f;
+  float score_neg90 = Measure_AlignmentTorqueScore(
+      coarse_offset - 0.5f * (float)M_PI, test_current_a);
+  float score_zero = Measure_AlignmentTorqueScore(coarse_offset,
+                                                   test_current_a);
+  float score_pos90 = Measure_AlignmentTorqueScore(
+      coarse_offset + 0.5f * (float)M_PI, test_current_a);
+
+  if (g_foc_controller.fault != MC_FAULT_NONE)
+    goto alignment_abort;
+
+  float quadrature_score = 0.5f * (score_pos90 - score_neg90);
+  float response_magnitude = sqrtf(score_zero * score_zero +
+                                   quadrature_score * quadrature_score);
+  /* 64 counts = 1.41 motor degrees = 0.083 joint degrees through 17:1.
+   * This is well above one-count quantization while keeping the validation
+   * motion below the joint position tolerance used by the HIL tests. */
+  if (response_magnitude < 64.0f)
+    goto alignment_abort;
+
+  float phase_correction = atan2f(quadrature_score, score_zero);
+  float elec_offset = coarse_offset + phase_correction;
+  utils_norm_angle_rad(&elec_offset);
+
+  float final_score = Measure_AlignmentTorqueScore(elec_offset,
+                                                    test_current_a);
+  if (g_foc_controller.fault != MC_FAULT_NONE || final_score < 64.0f)
+    goto alignment_abort;
+
   g_foc_controller.zero_electric_angle = elec_offset;
   g_foc_controller.aligned = true;
 
   g_dbg_align.vbus = vbus;
   g_dbg_align.enc_dir = g_foc_controller.conf.encoder_direction;
   g_dbg_align.zero_electric_angle = elec_offset;
+  g_dbg_align.coarse_electric_angle = coarse_offset;
+  g_dbg_align.phase_correction = phase_correction;
   g_dbg_align.encoder_rad = enc_zero;
   g_dbg_align.concentration = concentration;
   g_dbg_align.forward_counts = sweep_progress[0];
   g_dbg_align.backward_counts = sweep_progress[1];
+  g_dbg_align.torque_score_neg90 = score_neg90;
+  g_dbg_align.torque_score_zero = score_zero;
+  g_dbg_align.torque_score_pos90 = score_pos90;
+  g_dbg_align.torque_score_final = final_score;
   g_dbg_align.aligned = 1;
-
-  /* Ramp down gently */
-  for (int i = 40; i >= 0; i--) {
-    Apply_SvmVector(vd_align * (float)i / 40.0f, theta, vbus, period);
-    Comm_Telemetry_Process(&g_foc_controller);
-    HAL_Delay(5);
-  }
 
   align_result = 2;
   goto alignment_done;
@@ -544,6 +612,10 @@ alignment_abort:
   g_foc_controller.aligned = false;
 
 alignment_done:
+  run_foc_mode = 0;
+  g_foc_controller.motor.m_iq_set = 0.0f;
+  g_foc_controller.motor.m_i_fw_set = 0.0f;
+  g_foc_controller.motor.m_state = MC_STATE_OFF;
   __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, period / 2);
   __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, period / 2);
   __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, period / 2);
@@ -565,6 +637,43 @@ alignment_done:
   g_foc_controller.motor.m_speed_d_filter_proc = 0.0f;
   g_foc_controller.motor.m_state = old_state;
   run_alignment = 0;
+}
+
+static float Measure_AlignmentTorqueScore(float electric_offset,
+                                          float test_current_a)
+{
+  motor_all_state_t *motor = &g_foc_controller.motor;
+  float signed_travel = 0.0f;
+
+  for (int direction = 1; direction >= -1; direction -= 2) {
+    motor->m_state = MC_STATE_OFF;
+    motor->m_iq_set = 0.0f;
+    run_foc_mode = 0;
+    HAL_Delay(120);
+
+    if (g_foc_controller.fault != MC_FAULT_NONE)
+      return 0.0f;
+
+    g_foc_controller.zero_electric_angle = electric_offset;
+    int32_t start_count = g_foc_controller.encoder.count_buff[0];
+
+    motor->m_control_mode = CONTROL_MODE_CURRENT;
+    motor->m_i_fw_set = 0.0f;
+    motor->m_iq_set = test_current_a * (float)direction;
+    motor->m_state = MC_STATE_RUNNING;
+    run_foc_mode = 1;
+    TIM1_EnsureMoeEnabled();
+    HAL_Delay(200);
+
+    int32_t end_count = g_foc_controller.encoder.count_buff[0];
+    signed_travel += (float)direction * (float)(end_count - start_count);
+  }
+
+  motor->m_state = MC_STATE_OFF;
+  motor->m_iq_set = 0.0f;
+  run_foc_mode = 0;
+  HAL_Delay(120);
+  return 0.5f * signed_travel;
 }
 
 static void Apply_SvmVector(float vd, float theta_e, float vbus, uint32_t period)
