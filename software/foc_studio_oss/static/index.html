@@ -53,9 +53,9 @@
       <label class="field field-baud">
         <span>Baud</span>
         <select id="baud-select" class="form-select form-select-sm custom-input">
-          <option value="115200" selected>115,200</option>
+          <option value="115200">115,200</option>
           <option value="460800">460,800</option>
-          <option value="921600">921,600</option>
+          <option value="921600" selected>921,600 (Native USB CDC)</option>
           <option value="2000000">2,000,000</option>
         </select>
       </label>
@@ -291,119 +291,195 @@
           </div>
         </section>
 
+        <!-- 1. ROBOT JOINT TRAJECTORY & ANGLE CONTROL (PRIMARY) -->
         <section class="panel-card joint-panel">
           <div class="panel-header">
             <div>
-              <h2>Joint status</h2>
-              <p>Position, fault, and quick homing</p>
+              <h2>🦾 Robot Joint Control</h2>
+              <p>Quỹ đạo S-Curve bậc 5 & Trở kháng MIT Impedance</p>
             </div>
             <span class="data-badge fault-ok" id="val-fault">NO FAULT</span>
           </div>
+
+          <!-- Live Joint Angle Display -->
           <div class="joint-readout">
-            <span>Joint angle</span>
+            <div class="joint-hero-display">
+              <span>Góc khớp đầu ra</span>
+              <span class="joint-target-text" id="val-joint-target">Mục tiêu: 0.0°</span>
+            </div>
             <strong id="val-joint-deg">0.0 deg</strong>
-            <small id="val-joint-rad">0.000 rad</small>
-          </div>
-          <div class="mini-metrics">
-            <div><span>Speed</span><b><span id="val-rpm-disp">0.0</span> RPM</b></div>
-            <div><span>Iq</span><b><span id="val-iq-disp">0.00</span> A</b></div>
-            <div><span>Mode</span><b id="val-mode">SPEED</b></div>
-          </div>
-          <div class="command-grid two">
-            <button class="quiet-button" id="btn-quick-sethome" type="button">Set home</button>
-            <button class="quiet-button" id="btn-quick-gohome" type="button">Go home</button>
-          </div>
-        </section>
-
-        <section class="panel-card control-panel">
-          <div class="panel-header">
-            <div>
-              <h2>Motor control</h2>
-              <p>Direct mode and target command</p>
+            <div class="joint-hero-display">
+              <small id="val-joint-rad">0.000 rad</small>
+              <small id="val-joint-error" style="color: var(--color-target); font-weight: 700;">Sai số: 0.0°</small>
             </div>
-            <span class="data-badge active-mode" id="active-mode-badge">SPEED (3)</span>
           </div>
 
-          <div class="mode-grid" role="group" aria-label="Motor mode">
-            <button class="btn-mode" data-mode="0" type="button">Idle</button>
-            <button class="btn-mode" data-mode="1" type="button">Current</button>
-            <button class="btn-mode" data-mode="2" type="button">Brake</button>
-            <button class="btn-mode active" data-mode="3" type="button">Speed</button>
-            <button class="btn-mode" data-mode="4" type="button">Position</button>
+          <!-- Mini Metrics Row -->
+          <div class="mini-metrics" style="grid-template-columns: repeat(4, minmax(0, 1fr));">
+            <div><span>Iq (Dòng)</span><b><span id="val-iq-disp">0.00</span> A</b></div>
+            <div><span>Mô-men</span><b><span id="val-torque-disp">0.00</span> Nm</b></div>
+            <div><span>Vận tốc</span><b><span id="val-rpm-disp">0.0</span> RPM</b></div>
+            <div><span>Chế độ</span><b id="val-mode">POS</b></div>
           </div>
 
-          <div class="calibration-row">
-            <button id="btn-calib-lut" class="quiet-button" type="button" title="128-point full revolution encoder calibration">
-              Calibrate LUT
+          <!-- Core Robot Joint Actions -->
+          <div class="command-grid four" style="margin-top: 10px;">
+            <button class="quiet-button success-outline" data-cmd="HOLD" type="button" title="Ghim góc hiện tại với lò xo đàn hồi ảo">
+              🔒 HOLD (Ghim)
             </button>
-            <button id="btn-align-zero" class="quiet-button" type="button" title="Fast electrical zero alignment">
-              Align zero
+            <button class="quiet-button" data-cmd="FREE" type="button" title="Thả tự do motor để xoay tay">
+              🕊️ FREE (Thả tay)
+            </button>
+            <button class="quiet-button" data-cmd="ZERO" type="button" title="Đặt vị trí hiện tại làm mốc 0 độ">
+              🎯 ZERO (Set 0°)
+            </button>
+            <button class="quiet-button" data-cmd="ALIGN" type="button" title="Cân chỉnh cực điện">
+              🔄 ALIGN
             </button>
           </div>
 
-          <label class="target-control" for="speed-slider">
-            <span>Target speed</span>
-            <strong><span id="slider-val-text">150</span> RPM</strong>
+          <!-- Quick Angle Presets -->
+          <label class="target-control" style="margin-top: 12px;">
+            <span>Góc đặt nhanh (S-Curve Trajectory)</span>
+            <span class="badge-deprecated" style="background: rgba(47,128,237,0.15); color: var(--accent-strong); border-color: var(--accent);">Mượt • 0% vọt lố</span>
           </label>
-          <input type="range" class="form-range" id="speed-slider" min="-300" max="300" step="10" value="150">
-
-          <div class="quick-rpm-grid" aria-label="Quick RPM presets">
-            <button type="button" onclick="setQuickRpm(0)">0</button>
-            <button type="button" onclick="setQuickRpm(50)">50</button>
-            <button type="button" onclick="setQuickRpm(100)">100</button>
-            <button type="button" onclick="setQuickRpm(150)">150</button>
-            <button type="button" onclick="setQuickRpm(180)">180</button>
-            <button type="button" onclick="setQuickRpm(200)">200</button>
+          <div class="command-grid five compact-grid" style="margin-top: 4px;">
+            <button class="btn-pos-preset" data-cmd="MOVE 0 1.2" type="button">0° Home</button>
+            <button class="btn-pos-preset" data-cmd="MOVE 30 1.2" type="button">30°</button>
+            <button class="btn-pos-preset" data-cmd="MOVE 45 1.2" type="button">45°</button>
+            <button class="btn-pos-preset" data-cmd="MOVE 60 1.2" type="button">60°</button>
+            <button class="btn-pos-preset" data-cmd="MOVE 90 1.5" type="button">90°</button>
+            <button class="btn-pos-preset" data-cmd="MOVE 120 1.5" type="button">120°</button>
+            <button class="btn-pos-preset" data-cmd="MOVE 180 1.5" type="button">180°</button>
+            <button class="btn-pos-preset" data-cmd="MOVE -45 1.2" type="button">-45°</button>
+            <button class="btn-pos-preset" data-cmd="MOVE -90 1.5" type="button">-90°</button>
+            <button class="btn-pos-preset" data-cmd="MOVE -180 1.5" type="button">-180°</button>
           </div>
 
-          <button id="btn-estop" class="danger-button" type="button">Emergency stop</button>
+          <!-- Relative Jog Steps -->
+          <label class="target-control" style="margin-top: 10px;">
+            <span>Nhích góc tương đối (Relative Step)</span>
+          </label>
+          <div class="command-grid six compact-grid" style="margin-top: 4px;">
+            <button class="btn-rel-preset" data-cmd="REL 10" type="button">+10°</button>
+            <button class="btn-rel-preset" data-cmd="REL 30" type="button">+30°</button>
+            <button class="btn-rel-preset" data-cmd="REL 90" type="button">+90°</button>
+            <button class="btn-rel-preset" data-cmd="REL -10" type="button">-10°</button>
+            <button class="btn-rel-preset" data-cmd="REL -30" type="button">-30°</button>
+            <button class="btn-rel-preset" data-cmd="REL -90" type="button">-90°</button>
+          </div>
+
+          <!-- Custom Trajectory Move Slider & Input -->
+          <label class="target-control" for="joint-angle-slider" style="margin-top: 12px;">
+            <span>Thanh trượt góc tùy chỉnh</span>
+            <strong id="joint-slider-text">0.0°</strong>
+          </label>
+          <input type="range" class="form-range" id="joint-angle-slider" min="-180" max="180" step="5" value="0">
+
+          <div class="triple-input-row" style="margin-top: 6px;">
+            <input id="input-joint-deg" class="control-input" type="number" value="45" step="5" min="-360" max="360" placeholder="Góc (°)">
+            <input id="input-joint-time" class="control-input" type="number" value="1.2" step="0.1" min="0.2" max="5.0" placeholder="Thời gian (s)">
+            <button id="btn-run-joint-move" class="primary-button" type="button">🚀 Chạy góc</button>
+          </div>
+
+          <button id="btn-estop" class="danger-button" data-cmd="STOP" type="button" style="margin-top: 12px;">
+            🛑 DỪNG KHẨN CẤP (STOP)
+          </button>
         </section>
 
-        <section class="panel-card driver-actions-panel">
+        <!-- 2. TORQUE & FORCE CONTROL PANEL -->
+        <section class="panel-card torque-panel">
           <div class="panel-header">
             <div>
-              <h2>Driver actions</h2>
-              <p>Fast commands from app_driver</p>
+              <h2>⚡ Kiểm Soát Lực & Mô-men</h2>
+              <p>Mô-men đầu ra khớp (Kt = 5.4 Nm/A) & Dòng Iq 10kHz</p>
+            </div>
+            <span class="data-badge" style="border-color: var(--color-iq); color: #a78bfa;">TORQUE</span>
+          </div>
+
+          <!-- Joint Torque Presets -->
+          <label class="target-control">
+            <span>Mô-men đặt nhanh (Joint Torque Nm)</span>
+          </label>
+          <div class="command-grid six compact-grid" style="margin-top: 4px;">
+            <button class="btn-torque-preset" data-cmd="TORQUE 0.5" type="button">+0.5 Nm</button>
+            <button class="btn-torque-preset" data-cmd="TORQUE 1.0" type="button">+1.0 Nm</button>
+            <button class="btn-torque-preset" data-cmd="TORQUE 1.5" type="button">+1.5 Nm</button>
+            <button class="btn-torque-preset" data-cmd="TORQUE 2.0" type="button">+2.0 Nm</button>
+            <button class="btn-torque-preset" data-cmd="TORQUE -1.0" type="button">-1.0 Nm</button>
+            <button class="btn-torque-preset" data-cmd="TORQUE 0.0" type="button">0.0 Nm</button>
+          </div>
+
+          <!-- Direct Iq Current Presets -->
+          <label class="target-control" style="margin-top: 10px;">
+            <span>Dòng điện motor trực tiếp (Iq Amperes)</span>
+          </label>
+          <div class="command-grid six compact-grid" style="margin-top: 4px;">
+            <button class="quiet-button" data-cmd="IQ 0.2" type="button">+0.2 A</button>
+            <button class="quiet-button" data-cmd="IQ 0.5" type="button">+0.5 A</button>
+            <button class="quiet-button" data-cmd="IQ 1.0" type="button">+1.0 A</button>
+            <button class="quiet-button" data-cmd="IQ 1.5" type="button">+1.5 A</button>
+            <button class="quiet-button" data-cmd="IQ -0.5" type="button">-0.5 A</button>
+            <button class="quiet-button" data-cmd="IQ 0.0" type="button">0.0 A</button>
+          </div>
+
+          <!-- Custom Torque Input -->
+          <div class="input-action-row" style="margin-top: 10px;">
+            <input id="input-custom-torque" class="control-input" type="number" value="1.0" step="0.2" min="-15" max="15" placeholder="Mô-men (Nm)">
+            <button id="btn-send-torque" class="quiet-button" type="button">Cấp mô-men (TORQUE)</button>
+          </div>
+        </section>
+
+        <!-- 3. COMMAND CONSOLE (ASCII CLI) -->
+        <section class="panel-card cli-panel">
+          <div class="panel-header">
+            <div>
+              <h2>Command console</h2>
+              <p>Gửi lệnh trực tiếp (MOVE, TORQUE, IQ, REL, HOLD, FREE)</p>
             </div>
           </div>
-          <div class="command-grid three">
-            <button class="quiet-button danger-outline" data-cmd="STOP" type="button">Stop</button>
+          <div class="cli-row">
+            <input id="input-cli" class="control-input mono-input" type="text" placeholder="MOVE 90 1.5, TORQUE 1.0, IQ 0.5, REL 30, HOLD, FREE">
+            <button id="btn-send-cli" class="primary-button" type="button">Send</button>
+          </div>
+        </section>
+
+        <!-- 4. CHẨN ĐOÁN & CHỨC NĂNG CŨ (CẦN LƯU Ý / SỬA SAU) -->
+        <section class="panel-card legacy-panel">
+          <div class="panel-header">
+            <div>
+              <h2>⚠️ Chẩn đoán & Chức năng cũ</h2>
+              <p>Công cụ phần cứng & Các mục cần cập nhật sau</p>
+            </div>
+            <span class="badge-deprecated">NOTE</span>
+          </div>
+
+          <!-- Warning Note Box -->
+          <div class="badge-warning-note">
+            <strong>📌 Ghi chú kỹ thuật & Chức năng cần sửa sau:</strong><br>
+            • <b>Vận tốc PI cũ (SPEED):</b> Sinh ra cho xe điện/drone, không phù hợp cho hộp số Cycloid 17 lobes (gây cộng hưởng ma sát răng). Đã chuyển sang điều khiển Góc S-Curve & Mô-men ở trên.<br>
+            • <b>Hở mạch V/F (OP):</b> Chỉ dùng để chẩn đoán thông mạch phần cứng, không áp dụng cho khớp robot.<br>
+            • <b>Auto Tune:</b> <span class="badge-todo">Chưa hỗ trợ - Sẽ bổ sung sau</span>
+          </div>
+
+          <div class="command-grid three" style="margin-top: 10px;">
             <button class="quiet-button" data-cmd="RESET_ERR" type="button">Reset error</button>
             <button class="quiet-button" data-cmd="RESET" type="button">Reset driver</button>
-            <button class="quiet-button" data-cmd="ALIGN" type="button">Align</button>
-            <button class="quiet-button" data-cmd="CALIB" type="button">Calib LUT</button>
-            <button class="quiet-button" id="btn-auto-tune" type="button">Auto tune</button>
+            <button class="quiet-button btn-disabled-todo" id="btn-auto-tune" type="button" title="Chức năng này chưa hoạt động hoàn chỉnh, sẽ sửa sau">
+              Auto tune <span class="badge-todo">Sửa sau</span>
+            </button>
           </div>
-          <div class="command-grid five compact-grid">
-            <button data-cmd="SPEED 100" type="button">+100</button>
-            <button data-cmd="SPEED 200" type="button">+200</button>
-            <button data-cmd="SPEED 0" type="button">0</button>
-            <button data-cmd="SPEED -100" type="button">-100</button>
-            <button data-cmd="SPEED -200" type="button">-200</button>
+
+          <!-- Diagnostic Openloop Buttons -->
+          <label class="target-control" style="margin-top: 10px;">
+            <span>Chẩn đoán hở mạch V/F (Hardware Diagnostic Only)</span>
+          </label>
+          <div class="command-grid five compact-grid" style="margin-top: 4px;">
             <button data-cmd="OPENLOOP 200 9.0" type="button">OP 200</button>
             <button data-cmd="OPENLOOP 350 10.5" type="button">OP 350</button>
             <button data-cmd="OPENLOOP 0 0" type="button">OP 0</button>
             <button data-cmd="OPENLOOP -200 9.0" type="button">OP -200</button>
             <button data-cmd="OPENLOOP -350 10.5" type="button">OP -350</button>
-          </div>
-        </section>
-
-        <section class="panel-card cli-panel">
-          <div class="panel-header">
-            <div>
-              <h2>Command console</h2>
-              <p>ASCII command path used by app_driver</p>
-            </div>
-          </div>
-          <div class="cli-row">
-            <input id="input-cli" class="control-input mono-input" type="text" placeholder="SPEED 100, IQ 1.0, POS 90, ALIGN, STOP">
-            <button id="btn-send-cli" class="primary-button" type="button">Send</button>
-          </div>
-          <div class="command-grid four compact-grid">
-            <button class="btn-cli-chip" data-cmd="HOLD" type="button">HOLD</button>
-            <button class="btn-cli-chip" data-cmd="FREE" type="button">FREE</button>
-            <button class="btn-cli-chip" data-cmd="SETHOME" type="button">SETHOME</button>
-            <button class="btn-cli-chip" data-cmd="GOHOME 1.5" type="button">GOHOME</button>
           </div>
         </section>
 
