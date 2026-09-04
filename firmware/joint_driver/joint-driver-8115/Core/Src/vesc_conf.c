@@ -43,17 +43,17 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_current_filter_const = 0.18f;
     conf->foc_cc_decoupling = FOC_CC_DECOUPLING_BEMF; // Bù khử ghép chéo d-q
 
-    // Speed Controller (Feedforward + Damping only: ZERO I-term for robot safety)
+    // Speed Controller (Feedforward + Damping + bounded Integral for zero steady-state error)
     conf->s_pid_kp = 0.0015f;             // Damping stiffness
-    conf->s_pid_ki = 0.0f;                // ZERO I-term (No windup, no stiction stall)
+    conf->s_pid_ki = 0.0020f;             // Bounded I-term (zero steady-state speed error)
     conf->s_pid_kd = 0.0f;                // Zero D-term
     conf->s_pid_kd_filter = 0.08f;        // 12 Hz filter
     conf->s_pid_min_erpm = 10.0f;          // 10 ERPM deadband (~0.48 RPM motor)
     conf->s_pid_ramp_erpms_s = 1500.0f;    // 1500 ERPM/s (~71 RPM/s smooth ramp)
 
-    // Position Controller (MIT Mini Cheetah Impedance PD: Outputs Iq command in Amperes)
+    // Position Controller (MIT Mini Cheetah Impedance PD with near-target stiction compensation)
     conf->p_pid_kp = 12.0f;                // Kp_pos = 12.0 A/rad (~16.3 Nm/rad Joint Stiffness)
-    conf->p_pid_ki = 0.0f;                 // ZERO I-term (Pure elastic compliance, no windup)
+    conf->p_pid_ki = 1.0f;                 // Stiction compensation (< 5 deg, bounded to 0.5A)
     conf->p_pid_kd = 0.40f;                // Kd_pos = 0.40 A/(rad/s) (Virtual Joint Damping)
     conf->p_pid_kd_proc = 0.05f;           // Damping on measurement
     conf->p_pid_kd_filter = 0.2f;
