@@ -235,14 +235,17 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
     if (foc == NULL || cmd == NULL) return;
     motor_all_state_t *motor = &foc->motor;
 
-    // Strip trailing newline / carriage return
-    char *p = cmd;
-    while (*p) {
-        if (*p == '\r' || *p == '\n') {
-            *p = '\0';
-            break;
-        }
-        p++;
+    // Skip leading whitespace and non-printable control characters
+    while (*cmd && ((unsigned char)*cmd <= ' ' || (unsigned char)*cmd > 126)) {
+        cmd++;
+    }
+    if (*cmd == '\0') return;
+
+    // Strip trailing newline / carriage return / spaces / control chars
+    char *p = cmd + strlen(cmd) - 1;
+    while (p >= cmd && ((unsigned char)*p <= ' ' || (unsigned char)*p > 126)) {
+        *p = '\0';
+        p--;
     }
 
     if (strncmp(cmd, "STOP", 4) == 0 || strcmp(cmd, "OFF") == 0) {
@@ -735,6 +738,9 @@ void Comm_Telemetry_RxByte(uint8_t rx_byte)
             s_rx_cmd_idx = 0;
         }
     } else {
+        if (s_rx_cmd_idx == 0 && (rx_byte <= ' ' || rx_byte > 126)) {
+            return;
+        }
         if (s_rx_cmd_idx < sizeof(s_rx_cmd_buffer) - 1) {
             s_rx_cmd_buffer[s_rx_cmd_idx++] = (char)rx_byte;
         }
