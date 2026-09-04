@@ -386,7 +386,9 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         else if (strncmp(cmd, "TORQUE ", 7) == 0) {
             float tau = atof(&cmd[7]); // Joint Torque in Nm
             float gear_ratio = (motor->m_conf != NULL && motor->m_conf->gear_ratio > 0.1f) ? motor->m_conf->gear_ratio : 17.0f;
-            float kt_joint = 0.318f * gear_ratio; // ~5.4 Nm/A at joint output
+            float pole_pairs = (motor->m_conf != NULL && motor->m_conf->foc_motor_pole_pairs > 0) ? (float)motor->m_conf->foc_motor_pole_pairs : 21.0f;
+            float lambda = (motor->m_conf != NULL && motor->m_conf->foc_motor_flux_linkage > 0.001f) ? motor->m_conf->foc_motor_flux_linkage : 0.030f;
+            float kt_joint = 1.5f * pole_pairs * lambda * gear_ratio; // ~16.06 Nm/A (ideal), ~12.85 Nm/A (with cycloid friction)
             iq = (kt_joint > 0.1f) ? (tau / kt_joint) : tau;
         }
         iq_target_dbg = iq;
@@ -400,6 +402,25 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         motor->m_control_mode = CONTROL_MODE_CURRENT;
         motor->m_state = MC_STATE_RUNNING;
         run_foc_mode = 1;
+        foc->fault = MC_FAULT_NONE;
+        TIM1_EnsureMoeEnabled();
+    }
+    else if (strncmp(cmd, "IMP ", 4) == 0 || strncmp(cmd, "MIT ", 4) == 0) {
+        // IMP <pos_deg> [kp_A_rad] [kd_A_rad_s] - Real-time Impedance Tuning via USB
+        float p_des_deg = 0.0f;
+        float kp = 12.0f;
+        float kd = 0.40f;
+        int parsed = sscanf((strncmp(cmd, "IMP ", 4) == 0) ? &cmd[4] : &cmd[4], "%f %f %f", &p_des_deg, &kp, &kd);
+        if (parsed >= 1) {
+            motor->m_pos_pid_set = DEG2RAD_f(p_des_deg);
+            pos_target_dbg = p_des_deg;
+            motor->m_traj_active = false;
+        }
+        if (parsed >= 2 && motor->m_conf != NULL) motor->m_conf->p_pid_kp = kp;
+        if (parsed >= 3 && motor->m_conf != NULL) motor->m_conf->p_pid_kd = kd;
+        motor->m_control_mode = CONTROL_MODE_POS;
+        motor->m_state = MC_STATE_RUNNING;
+        run_foc_mode = 3;
         foc->fault = MC_FAULT_NONE;
         TIM1_EnsureMoeEnabled();
     }
