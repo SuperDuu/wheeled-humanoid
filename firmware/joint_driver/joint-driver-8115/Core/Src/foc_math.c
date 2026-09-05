@@ -330,12 +330,13 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 	float actual_joint_vel = (motor->m_speed_est_fast / pole_pairs) / gear_ratio; // Output rad/s
 	float vel_error = target_vel_rad_s - actual_joint_vel;
 
-	// 3. Smooth Cycloid Friction Feedforward
-	float iq_friction_ff = 0.35f * tanhf(target_vel_rad_s / 0.05f);
+	// 3. Friction Feedforward (Zero for direct drive bare motor, 0.35A for cycloid gearbox)
+	float iq_friction_ff = (gear_ratio <= 1.05f) ? 0.0f : (0.35f * tanhf(target_vel_rad_s / 0.05f));
 
 	// 4. MIT Impedance PD Controller with bounded stiction integral
-	float p_gain = conf_now->p_pid_kp; // Virtual joint stiffness
-	float d_gain = conf_now->p_pid_kd; // Virtual joint damping
+	// Direct drive bare motor requires lower Kp (2.5 A/rad) to prevent high-current saturation
+	float p_gain = (gear_ratio <= 1.05f) ? 2.5f : conf_now->p_pid_kp;
+	float d_gain = (gear_ratio <= 1.05f) ? 0.12f : conf_now->p_pid_kd;
 	float p_term = error * p_gain;
 	float d_term = vel_error * d_gain;
 
@@ -428,8 +429,9 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	float d_term = -conf_now->s_pid_kd * erpm_diff / dt;
 	utils_truncate_number_abs(&d_term, SPEED_IQ_D_MAX_A);
 
-	/* Smooth continuous friction feedforward (replaces discontinuous step) */
-	float iq_friction = 0.12f * tanhf(target_mech_rpm / 15.0f);
+	/* Smooth continuous friction feedforward (zero for direct drive bare motor) */
+	float gear_ratio_speed = (conf_now->gear_ratio > 0.1f) ? conf_now->gear_ratio : 17.0f;
+	float iq_friction = (gear_ratio_speed <= 1.05f) ? 0.0f : (0.12f * tanhf(target_mech_rpm / 15.0f));
 
 	/* Bidirectional speed current limits */
 	float iq_limit = conf_now->l_current_max;
