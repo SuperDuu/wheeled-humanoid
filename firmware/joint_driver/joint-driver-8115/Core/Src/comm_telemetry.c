@@ -12,6 +12,7 @@
 #include "foc_math.h"
 #include "usb_device.h"
 #include "usbd_cdc_if.h"
+#include "as5600.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -72,6 +73,11 @@ static int ParseFloatArgs(const char *text, float *values, int max_values)
 void Comm_Telemetry_Init(void)
 {
     s_last_telemetry_tx_ms = HAL_GetTick();
+
+    /* Initialize secondary AS5600 output link encoder on I2C3 */
+    extern I2C_HandleTypeDef hi2c3;
+    AS5600_Init(&g_as5600, &hi2c3);
+
     /* USB is initialized before the 1.2 s ADC-offset wait. The RX state is
      * already zeroed by BSS startup; resetting it here would discard a valid
      * command sent by the host immediately after USB enumeration. */
@@ -568,6 +574,61 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         motor->m_state = MC_STATE_OFF;
         run_foc_mode = 0;
         TIM1_EnsureMoeEnabled();
+    }
+    else if (strncmp(cmd, "GEAR", 4) == 0 || strncmp(cmd, "BARE", 4) == 0) {
+        // CẤU HÌNH TỶ SỐ TRUYỀN: GEAR 1.0 (Motor trần) hoặc GEAR 17.0 (Hộp số Cycloid)
+        if (strncmp(cmd, "GEAR ", 5) == 0) {
+            float g = atof(&cmd[5]);
+            if (g >= 0.5f && g <= 100.0f) {
+                foc->conf.gear_ratio = g;
+                if (motor->m_conf != NULL) motor->m_conf->gear_ratio = g;
+                if (g <= 1.05f) {
+                    open_loop_voltage = 2.5f; // Điện áp thấp an toàn cho motor trần
+                } else {
+                    open_loop_voltage = 9.0f; // Điện áp thắng ma sát hộp số cycloid
+                }
+            }
+        } else if (strcmp(cmd, "BARE") == 0) {
+            foc->conf.gear_ratio = 1.0f;
+            if (motor->m_conf != NULL) motor->m_conf->gear_ratio = 1.0f;
+            open_loop_voltage = 2.5f;
+        }
+        float cur_g = (motor->m_conf != NULL) ? motor->m_conf->gear_ratio : 17.0f;
+        char msg[96];
+        snprintf(msg, sizeof(msg), "GEAR: Ratio=%.2f, OpenLoopVolt=%.1fV (%s)\r\n",
+                 cur_g, open_loop_voltage, (cur_g <= 1.05f) ? "BARE MOTOR" : "GEARED");
+        CDC_Transmit_FS((uint8_t*)msg, strlen(msg));
+    }
+    else if (strncmp(cmd, "ANTICOG", 7) == 0) {
+        // BÙ MÔ-MEN GỢN (6TH/12TH BEMF HARMONIC CURRENT INJECTION)
+        // Cú pháp: ANTICOG ON [amp_A] [phase_deg] hoặc ANTICOG OFF
+        if (strncmp(cmd, "ANTICOG ON", 10) == 0 || strncmp(cmd, "ANTICOG 1", 9) == 0) {
+            foc->anticog_enabled = true;
+            float a6 = 0.10f;
+            float p6 = 0.0f;
+            int n = sscanf(&cmd[9], "%*s %f %f", &a6, &p6);
+            if (n >= 1) foc->anticog_amp_6th = a6;
+            else if (foc->anticog_amp_6th <= 0.001f) foc->anticog_amp_6th = 0.10f;
+            if (n >= 2) foc->anticog_phase_6th = DEG2RAD_f(p6);
+        } else if (strncmp(cmd, "ANTICOG OFF", 11) == 0 || strncmp(cmd, "ANTICOG 0", 9) == 0) {
+            foc->anticog_enabled = false;
+        }
+        char msg[96];
+        snprintf(msg, sizeof(msg), "ANTICOG: %s, Amp6=%.3fA, Phase6=%.1f deg\r\n",
+                 foc->anticog_enabled ? "ENABLED" : "DISABLED",
+                 foc->anticog_amp_6th, RAD2DEG_f(foc->anticog_phase_6th));
+        CDC_Transmit_FS((uint8_t*)msg, strlen(msg));
+    }
+    else if (strncmp(cmd, "ENC2", 4) == 0 || strncmp(cmd, "DUALENC", 7) == 0) {
+        // ĐỌC CẢM BIẾN ĐẦU RA AS5600 QUA I2C3 VÀ FUSION VỚI AS5048A
+        AS5600_ReadAngle(&g_as5600);
+        float gear = (motor->m_conf != NULL) ? motor->m_conf->gear_ratio : 17.0f;
+        float fused = DualEncoder_Fuse(g_as5600.angle_rad, foc->encoder.angle_singleturn, gear);
+        char msg[128];
+        snprintf(msg, sizeof(msg), "ENC2 (AS5600 I2C3): Conn=%d, Raw=%u, Link=%.2f deg, Rotor=%.2f deg, Fused=%.2f deg\r\n",
+                 g_as5600.connected, g_as5600.raw_12bit, g_as5600.angle_deg,
+                 RAD2DEG_f(foc->encoder.angle_singleturn), RAD2DEG_f(fused));
+        CDC_Transmit_FS((uint8_t*)msg, strlen(msg));
     }
     else if (strncmp(cmd, "DIR ", 4) == 0) {
         int dir = atoi(&cmd[4]);
