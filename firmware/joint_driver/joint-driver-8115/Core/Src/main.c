@@ -189,28 +189,6 @@ volatile int run_calibration = 0; /* Set = 1 để chạy 1-turn Ben Katz 128-po
 volatile int align_result = 0;    /* 0: Idle, 1: Đang chạy, 2: OK, -1: Lỗi */
 volatile int8_t g_encoder_calibration_result = 0;
 
-typedef struct {
-  float zero_electric_angle;  /* Góc điện offset (rad) */
-  float coarse_electric_angle;/* Offset from the quasi-static sweep */
-  float phase_correction;     /* Closed-loop torque-axis correction (rad) */
-  float encoder_rad;          /* Góc encoder tại thời điểm lock (rad) */
-  float vbus;                 /* VBUS khi alignment */
-  float concentration;        /* Circular concentration of static zero samples */
-  int32_t forward_counts;     /* Encoder travel during forward sweep */
-  int32_t backward_counts;    /* Encoder travel during backward sweep */
-  float torque_score_neg90;   /* Signed encoder response at correction -pi/2 */
-  float torque_score_zero;    /* Signed encoder response at correction 0 */
-  float torque_score_pos90;   /* Signed encoder response at correction +pi/2 */
-  float torque_score_final;   /* Signed response after applying correction */
-  float current_a;            /* Dòng pha A khi lock (A) */
-  float current_b;            /* Dòng pha B khi lock (A) */
-  float current_c;            /* Dòng pha C khi lock (A) */
-  float vd_applied;           /* Điện áp Vd đã áp dụng (V) */
-  uint16_t raw_angle;         /* Raw encoder angle */
-  uint8_t aligned;            /* 1 = alignment thành công */
-  int8_t enc_dir;             /* encoder_direction đang dùng */
-} Align_Debug_t;
-
 volatile Align_Debug_t g_dbg_align = {0};
 
 /* ===== CURRENT SENSING DEBUG (Phase 2) ===== */
