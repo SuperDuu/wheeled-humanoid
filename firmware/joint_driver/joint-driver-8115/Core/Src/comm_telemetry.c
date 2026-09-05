@@ -594,9 +594,13 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
             open_loop_voltage = 2.5f;
         }
         float cur_g = (motor->m_conf != NULL) ? motor->m_conf->gear_ratio : 17.0f;
+        int g_int = (int)cur_g;
+        int g_dec = (int)(fabsf(cur_g - (float)g_int) * 100.0f + 0.5f);
+        int v_int = (int)open_loop_voltage;
+        int v_dec = (int)(fabsf(open_loop_voltage - (float)v_int) * 10.0f + 0.5f);
         char msg[96];
-        snprintf(msg, sizeof(msg), "GEAR: Ratio=%.2f, OpenLoopVolt=%.1fV (%s)\r\n",
-                 cur_g, open_loop_voltage, (cur_g <= 1.05f) ? "BARE MOTOR" : "GEARED");
+        snprintf(msg, sizeof(msg), "GEAR: Ratio=%d.%02d, OpenLoopVolt=%d.%01dV (%s)\r\n",
+                 g_int, g_dec, v_int, v_dec, (cur_g <= 1.05f) ? "BARE MOTOR" : "GEARED");
         CDC_Transmit_FS((uint8_t*)msg, strlen(msg));
     }
     else if (strncmp(cmd, "ANTICOG", 7) == 0) {
@@ -613,10 +617,16 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         } else if (strncmp(cmd, "ANTICOG OFF", 11) == 0 || strncmp(cmd, "ANTICOG 0", 9) == 0) {
             foc->anticog_enabled = false;
         }
+        float a6 = foc->anticog_amp_6th;
+        int a_int = (int)a6;
+        int a_dec = (int)(fabsf(a6 - (float)a_int) * 1000.0f + 0.5f);
+        float p6_deg = RAD2DEG_f(foc->anticog_phase_6th);
+        int p_int = (int)p6_deg;
+        int p_dec = (int)(fabsf(p6_deg - (float)p_int) * 10.0f + 0.5f);
         char msg[96];
-        snprintf(msg, sizeof(msg), "ANTICOG: %s, Amp6=%.3fA, Phase6=%.1f deg\r\n",
+        snprintf(msg, sizeof(msg), "ANTICOG: %s, Amp6=%d.%03dA, Phase6=%d.%01d deg\r\n",
                  foc->anticog_enabled ? "ENABLED" : "DISABLED",
-                 foc->anticog_amp_6th, RAD2DEG_f(foc->anticog_phase_6th));
+                 a_int, a_dec, p_int, p_dec);
         CDC_Transmit_FS((uint8_t*)msg, strlen(msg));
     }
     else if (strncmp(cmd, "ENC2", 4) == 0 || strncmp(cmd, "DUALENC", 7) == 0) {
@@ -624,11 +634,18 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         AS5600_ReadAngle(&g_as5600);
         float gear = (motor->m_conf != NULL) ? motor->m_conf->gear_ratio : 17.0f;
         float fused = DualEncoder_Fuse(g_as5600.angle_rad, foc->encoder.angle_singleturn, gear);
-        char msg[128];
-        snprintf(msg, sizeof(msg), "ENC2 (AS5600 I2C3): Conn=%d, Raw=%u, Link=%.2f deg, Rotor=%.2f deg, Fused=%.2f deg\r\n",
-                 g_as5600.connected, g_as5600.raw_12bit, g_as5600.angle_deg,
-                 RAD2DEG_f(foc->encoder.angle_singleturn), RAD2DEG_f(fused));
-        CDC_Transmit_FS((uint8_t*)msg, strlen(msg));
+        int l_int = (int)g_as5600.angle_deg;
+        int l_dec = (int)(fabsf(g_as5600.angle_deg - (float)l_int) * 100.0f + 0.5f);
+        float r_deg = RAD2DEG_f(foc->encoder.angle_singleturn);
+        int r_int = (int)r_deg;
+        int r_dec = (int)(fabsf(r_deg - (float)r_int) * 100.0f + 0.5f);
+        float f_deg = RAD2DEG_f(fused);
+        int f_int = (int)f_deg;
+        int f_dec = (int)(fabsf(f_deg - (float)f_int) * 100.0f + 0.5f);
+        static char resp_msg[128];
+        snprintf(resp_msg, sizeof(resp_msg), "ENC2 (AS5600 I2C3): Conn=%d, Raw=%u, Link=%d.%02d deg, Rotor=%d.%02d deg, Fused=%d.%02d deg\r\n",
+                 g_as5600.connected ? 1 : 0, (unsigned int)g_as5600.raw_12bit, l_int, l_dec, r_int, r_dec, f_int, f_dec);
+        CDC_Transmit_FS((uint8_t*)resp_msg, strlen(resp_msg));
     }
     else if (strncmp(cmd, "DIR ", 4) == 0) {
         int dir = atoi(&cmd[4]);
