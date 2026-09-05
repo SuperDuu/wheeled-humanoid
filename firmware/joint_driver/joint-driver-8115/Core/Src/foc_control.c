@@ -47,6 +47,13 @@ void FOC_Control_Init(FOC_Controller_t *foc, SPI_HandleTypeDef *hspi1_drv, SPI_H
     foc->duty_a = foc->duty_b = foc->duty_c = 0.5f;
     foc->phase_swap_bc = false; // Pure 1:1 forward phase sequence (A->B->C)
 
+    // Anti-Cogging Harmonic Current Compensation (6th/12th BEMF harmonics)
+    foc->anticog_enabled = false;
+    foc->anticog_amp_6th = 0.0f;
+    foc->anticog_phase_6th = 0.0f;
+    foc->anticog_amp_12th = 0.0f;
+    foc->anticog_phase_12th = 0.0f;
+
     // Precalculate Inductances & Frequencies
     foc_precalc_values(&foc->motor);
 }
@@ -326,6 +333,11 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
         // Speed-loop stall boost runs in the filtered 1 kHz speed controller.
         // Do not re-trigger it here from raw per-ISR velocity samples.
         state_m->iq_target = motor->m_iq_set;
+        if (foc->anticog_enabled) {
+            float iq_harm = foc->anticog_amp_6th * sinf(6.0f * elec_angle + foc->anticog_phase_6th)
+                          + foc->anticog_amp_12th * sinf(12.0f * elec_angle + foc->anticog_phase_12th);
+            state_m->iq_target += iq_harm;
+        }
         float id_target = -motor->m_i_fw_set;
         state_m->id_target = id_target;
         utils_truncate_number_abs((float*)&state_m->iq_target, conf_now->l_current_max);
