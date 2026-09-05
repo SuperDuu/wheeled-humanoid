@@ -61,7 +61,10 @@ extern volatile ADC_Readings_t g_adc_readings;
 
 /* Exported constants --------------------------------------------------------*/
 /* USER CODE BEGIN EC */
-
+/* Secondary Output Link Encoder (AS5600 on I2C3) Hardware Flag:
+ * 0 = Disabled (Only primary AS5048A on SPI3 is present)
+ * 1 = Enabled (Secondary AS5600 on I2C3 connected to PC8/PC9) */
+#define USE_AS5600_OUTPUT_ENCODER  0
 /* USER CODE END EC */
 
 /* Exported macro ------------------------------------------------------------*/
