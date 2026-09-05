@@ -15,6 +15,7 @@
 #if USE_AS5600_OUTPUT_ENCODER
 #include "as5600.h"
 #endif
+#include "encoder_cal_store.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -678,6 +679,22 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         float off = atof(&cmd[7]);
         foc->zero_electric_angle = off;
         foc->aligned = true;
+        EncoderCalStore_SaveAlignment(off, foc->conf.encoder_direction);
+        char resp_msg[64];
+        snprintf(resp_msg, sizeof(resp_msg), "OFFSET: %.4f rad (%.2f deg) SAVED TO FLASH\r\n", off, off * 180.0f / (float)M_PI);
+        CDC_Transmit_FS((uint8_t*)resp_msg, strlen(resp_msg));
+    }
+    else if (strncmp(cmd, "ALIGN_INFO", 10) == 0 || strncmp(cmd, "ALIGNDBG", 8) == 0) {
+        extern volatile Align_Debug_t g_dbg_align;
+        char resp_msg[200];
+        snprintf(resp_msg, sizeof(resp_msg),
+                 "ALIGN_DBG: aligned=%d zero=%.4f coarse=%.4f corr=%.4f conc=%.3f\r\nSCORES: neg90=%.1f zero=%.1f pos90=%.1f final=%.1f\r\n",
+                 g_dbg_align.aligned, g_dbg_align.zero_electric_angle,
+                 g_dbg_align.coarse_electric_angle, g_dbg_align.phase_correction,
+                 g_dbg_align.concentration,
+                 g_dbg_align.torque_score_neg90, g_dbg_align.torque_score_zero,
+                 g_dbg_align.torque_score_pos90, g_dbg_align.torque_score_final);
+        CDC_Transmit_FS((uint8_t*)resp_msg, strlen(resp_msg));
     }
     else if (strncmp(cmd, "SET_SPEED_PID ", 14) == 0 || strncmp(cmd, "SPID ", 5) == 0) {
         float kp = 0.0015f, ki = 0.0010f, ramp = 3000.0f;
