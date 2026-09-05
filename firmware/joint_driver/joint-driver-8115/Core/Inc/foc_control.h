@@ -48,6 +48,13 @@ typedef struct {
 	bool    use_encoder_lut;
 	int16_t encoder_lut[ENCODER_LUT_SIZE]; // in units of 0.0001 rad (0.1 mrad)
 
+	// Anti-Cogging Harmonic Current Compensation (6th and 12th Electrical Harmonics)
+	bool  anticog_enabled;
+	float anticog_amp_6th;    // Amplitude in Amperes (e.g. 0.05f to 0.25f)
+	float anticog_phase_6th;  // Phase offset in Radians
+	float anticog_amp_12th;   // Amplitude in Amperes
+	float anticog_phase_12th; // Phase offset in Radians
+
 	// Output Duty Cycles (0.0 to 1.0)
 	float duty_a, duty_b, duty_c;
 } FOC_Controller_t;
