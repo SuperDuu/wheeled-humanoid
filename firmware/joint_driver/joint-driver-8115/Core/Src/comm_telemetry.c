@@ -12,7 +12,9 @@
 #include "foc_math.h"
 #include "usb_device.h"
 #include "usbd_cdc_if.h"
+#if USE_AS5600_OUTPUT_ENCODER
 #include "as5600.h"
+#endif
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -74,9 +76,11 @@ void Comm_Telemetry_Init(void)
 {
     s_last_telemetry_tx_ms = HAL_GetTick();
 
+#if USE_AS5600_OUTPUT_ENCODER
     /* Initialize secondary AS5600 output link encoder on I2C3 */
     extern I2C_HandleTypeDef hi2c3;
     AS5600_Init(&g_as5600, &hi2c3);
+#endif
 
     /* USB is initialized before the 1.2 s ADC-offset wait. The RX state is
      * already zeroed by BSS startup; resetting it here would discard a valid
@@ -630,6 +634,7 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         CDC_Transmit_FS((uint8_t*)msg, strlen(msg));
     }
     else if (strncmp(cmd, "ENC2", 4) == 0 || strncmp(cmd, "DUALENC", 7) == 0) {
+#if USE_AS5600_OUTPUT_ENCODER
         // ĐỌC CẢM BIẾN ĐẦU RA AS5600 QUA I2C3 VÀ FUSION VỚI AS5048A
         AS5600_ReadAngle(&g_as5600);
         float gear = (motor->m_conf != NULL) ? motor->m_conf->gear_ratio : 17.0f;
@@ -646,6 +651,14 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         snprintf(resp_msg, sizeof(resp_msg), "ENC2 (AS5600 I2C3): Conn=%d, Raw=%u, Link=%d.%02d deg, Rotor=%d.%02d deg, Fused=%d.%02d deg\r\n",
                  g_as5600.connected ? 1 : 0, (unsigned int)g_as5600.raw_12bit, l_int, l_dec, r_int, r_dec, f_int, f_dec);
         CDC_Transmit_FS((uint8_t*)resp_msg, strlen(resp_msg));
+#else
+        static char resp_msg[96];
+        float r_deg = RAD2DEG_f(foc->encoder.angle_singleturn);
+        int r_int = (int)r_deg;
+        int r_dec = (int)(fabsf(r_deg - (float)r_int) * 100.0f + 0.5f);
+        snprintf(resp_msg, sizeof(resp_msg), "ENC2: DISABLED (USE_AS5600_OUTPUT_ENCODER=0 in main.h | Rotor=%d.%02d deg)\r\n", r_int, r_dec);
+        CDC_Transmit_FS((uint8_t*)resp_msg, strlen(resp_msg));
+#endif
     }
     else if (strncmp(cmd, "DIR ", 4) == 0) {
         int dir = atoi(&cmd[4]);
