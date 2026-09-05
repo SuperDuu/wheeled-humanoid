@@ -267,11 +267,14 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         motor->m_speed_command_rpm = 0.0f;
         motor->m_speed_pid_set_rpm = 0.0f;
         motor->m_speed_i_term = 0.0f;
+        motor->m_pos_i_term = 0.0f;
         motor->m_openloop_spinup_active = false;
         motor->m_openloop_spinup_time = 0.0f;
         motor->m_motor_state.duty_now = 0.0f;
         motor->m_motor_state.vd = 0.0f;
         motor->m_motor_state.vq = 0.0f;
+        motor->m_motor_state.vd_int = 0.0f;
+        motor->m_motor_state.vq_int = 0.0f;
         foc->fault = MC_FAULT_NONE;
         speed_target_dbg = 0.0f;
         iq_target_dbg = 0.0f;
