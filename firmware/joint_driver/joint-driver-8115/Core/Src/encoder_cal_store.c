@@ -5,13 +5,17 @@
 
 #define ENCODER_CAL_FLASH_ADDRESS 0x0807F800UL
 #define ENCODER_CAL_MAGIC         0x314C4143UL /* "CAL1" */
-#define ENCODER_CAL_VERSION       1U
+#define ENCODER_CAL_VERSION       2U
 
 typedef struct __attribute__((packed, aligned(8))) {
     uint32_t magic;
     uint16_t version;
     uint16_t lut_size;
-    int16_t lut[AS5048A_LUT_SIZE];
+    int16_t  lut[AS5048A_LUT_SIZE];
+    float    zero_electric_angle;  /* Persisted electrical zero offset (radians) */
+    int8_t   encoder_direction;    /* +1 or -1 */
+    uint8_t  aligned;              /* 1 = valid alignment stored */
+    uint16_t reserved16;
     uint32_t checksum;
     uint32_t reserved;
 } encoder_cal_record_t;
@@ -48,34 +52,8 @@ static bool EncoderCalStore_IsValid(const encoder_cal_record_t *record)
     return true;
 }
 
-bool EncoderCalStore_Load(AS5048A_t *encoder)
+static bool EncoderCalStore_WriteFlash(const encoder_cal_record_t *record)
 {
-    if (encoder == NULL) return false;
-
-    encoder_cal_record_t record;
-    memcpy(&record, (const void *)ENCODER_CAL_FLASH_ADDRESS, sizeof(record));
-    if (!EncoderCalStore_IsValid(&record)) {
-        encoder->use_lut = 0U;
-        return false;
-    }
-
-    memcpy(encoder->offset_lut, record.lut, sizeof(record.lut));
-    encoder->use_lut = 1U;
-    return true;
-}
-
-bool EncoderCalStore_Save(const int16_t lut[AS5048A_LUT_SIZE])
-{
-    if (lut == NULL) return false;
-
-    encoder_cal_record_t record;
-    memset(&record, 0xFF, sizeof(record));
-    record.magic = ENCODER_CAL_MAGIC;
-    record.version = ENCODER_CAL_VERSION;
-    record.lut_size = AS5048A_LUT_SIZE;
-    memcpy(record.lut, lut, sizeof(record.lut));
-    record.checksum = EncoderCalStore_Checksum(&record);
-
     uint32_t bank = FLASH_BANK_1;
     uint32_t page = 0U;
 #if defined(FLASH_OPTR_DBANK)
@@ -107,8 +85,8 @@ bool EncoderCalStore_Save(const int16_t lut[AS5048A_LUT_SIZE])
         status = HAL_FLASHEx_Erase(&erase, &page_error);
     }
 
-    const uint8_t *bytes = (const uint8_t *)&record;
-    for (size_t offset = 0; status == HAL_OK && offset < sizeof(record); offset += 8U) {
+    const uint8_t *bytes = (const uint8_t *)record;
+    for (size_t offset = 0; status == HAL_OK && offset < sizeof(encoder_cal_record_t); offset += 8U) {
         uint64_t value = 0U;
         memcpy(&value, &bytes[offset], sizeof(value));
         status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD,
@@ -122,4 +100,67 @@ bool EncoderCalStore_Save(const int16_t lut[AS5048A_LUT_SIZE])
     encoder_cal_record_t verify;
     memcpy(&verify, (const void *)ENCODER_CAL_FLASH_ADDRESS, sizeof(verify));
     return EncoderCalStore_IsValid(&verify);
+}
+
+bool EncoderCalStore_Load(AS5048A_t *encoder, float *zero_electric_angle, int8_t *encoder_dir, bool *is_aligned)
+{
+    if (encoder == NULL) return false;
+
+    encoder_cal_record_t record;
+    memcpy(&record, (const void *)ENCODER_CAL_FLASH_ADDRESS, sizeof(record));
+    if (!EncoderCalStore_IsValid(&record)) {
+        encoder->use_lut = 0U;
+        if (is_aligned != NULL) *is_aligned = false;
+        return false;
+    }
+
+    memcpy(encoder->offset_lut, record.lut, sizeof(record.lut));
+    encoder->use_lut = 1U;
+
+    if (zero_electric_angle != NULL) {
+        *zero_electric_angle = record.zero_electric_angle;
+    }
+    if (encoder_dir != NULL && (record.encoder_direction == 1 || record.encoder_direction == -1)) {
+        *encoder_dir = record.encoder_direction;
+    }
+    if (is_aligned != NULL) {
+        *is_aligned = (record.aligned != 0U);
+    }
+    return true;
+}
+
+bool EncoderCalStore_Save(const int16_t lut[AS5048A_LUT_SIZE], float zero_electric_angle, int8_t encoder_dir)
+{
+    encoder_cal_record_t record;
+    memset(&record, 0, sizeof(record));
+    record.magic = ENCODER_CAL_MAGIC;
+    record.version = ENCODER_CAL_VERSION;
+    record.lut_size = AS5048A_LUT_SIZE;
+    if (lut != NULL) {
+        memcpy(record.lut, lut, sizeof(record.lut));
+    }
+    record.zero_electric_angle = zero_electric_angle;
+    record.encoder_direction = (encoder_dir == -1) ? -1 : 1;
+    record.aligned = 1U;
+    record.checksum = EncoderCalStore_Checksum(&record);
+
+    return EncoderCalStore_WriteFlash(&record);
+}
+
+bool EncoderCalStore_SaveAlignment(float zero_electric_angle, int8_t encoder_dir)
+{
+    encoder_cal_record_t record;
+    memcpy(&record, (const void *)ENCODER_CAL_FLASH_ADDRESS, sizeof(record));
+    if (record.magic != ENCODER_CAL_MAGIC || record.version != ENCODER_CAL_VERSION) {
+        memset(&record, 0, sizeof(record));
+        record.magic = ENCODER_CAL_MAGIC;
+        record.version = ENCODER_CAL_VERSION;
+        record.lut_size = AS5048A_LUT_SIZE;
+    }
+    record.zero_electric_angle = zero_electric_angle;
+    record.encoder_direction = (encoder_dir == -1) ? -1 : 1;
+    record.aligned = 1U;
+    record.checksum = EncoderCalStore_Checksum(&record);
+
+    return EncoderCalStore_WriteFlash(&record);
 }
