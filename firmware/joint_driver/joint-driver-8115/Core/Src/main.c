@@ -436,7 +436,7 @@ void Run_EncoderAlignment(void)
    * the measured q-axis was almost the physical d-axis. Move the field in
    * small increments, let it settle at every point, and circular-average the
    * static relation zero = pole_pairs * encoder - field_angle instead. */
-  const float vd_align = 8.0f;
+  const float vd_align = (g_foc_controller.conf.gear_ratio <= 1.05f) ? 2.5f : 8.0f;
   const float sample_dt = 0.005f;
   float encoder_scale = (float)(g_foc_controller.conf.encoder_direction *
                                 g_foc_controller.conf.foc_motor_pole_pairs);
@@ -557,7 +557,7 @@ void Run_EncoderAlignment(void)
    * atan2((score(+pi/2) - score(-pi/2))/2, score(0)).
    */
   run_alignment = 2; /* Allow the normal 10 kHz current loop during validation. */
-  const float test_current_a = 0.50f;
+  const float test_current_a = (g_foc_controller.conf.gear_ratio <= 1.05f) ? 0.20f : 0.50f;
   float score_neg90 = Measure_AlignmentTorqueScore(
       coarse_offset - 0.5f * (float)M_PI, test_current_a);
   float score_zero = Measure_AlignmentTorqueScore(coarse_offset,
@@ -588,6 +588,7 @@ void Run_EncoderAlignment(void)
 
   g_foc_controller.zero_electric_angle = elec_offset;
   g_foc_controller.aligned = true;
+  EncoderCalStore_SaveAlignment(elec_offset, g_foc_controller.conf.encoder_direction);
 
   g_dbg_align.vbus = vbus;
   g_dbg_align.enc_dir = g_foc_controller.conf.encoder_direction;
@@ -658,7 +659,8 @@ static float Measure_AlignmentTorqueScore(float electric_offset,
       return 0.0f;
 
     g_foc_controller.zero_electric_angle = electric_offset;
-    int32_t start_count = g_foc_controller.encoder.count_buff[0];
+    int32_t travel_accum = 0;
+    int32_t prev_cnt = g_foc_controller.encoder.count_buff[0];
 
     motor->m_control_mode = CONTROL_MODE_CURRENT;
     motor->m_i_fw_set = 0.0f;
@@ -669,10 +671,15 @@ static float Measure_AlignmentTorqueScore(float electric_offset,
     for (int d = 0; d < 20; d++) {
       Comm_Telemetry_Process(&g_foc_controller);
       HAL_Delay(10);
+      int32_t cur_cnt = g_foc_controller.encoder.count_buff[0];
+      int32_t d_cnt = cur_cnt - prev_cnt;
+      if (d_cnt > (AS5048A_CPR / 2)) d_cnt -= AS5048A_CPR;
+      if (d_cnt < -(AS5048A_CPR / 2)) d_cnt += AS5048A_CPR;
+      travel_accum += d_cnt;
+      prev_cnt = cur_cnt;
     }
 
-    int32_t end_count = g_foc_controller.encoder.count_buff[0];
-    signed_travel += (float)direction * (float)(end_count - start_count);
+    signed_travel += (float)direction * (float)travel_accum;
   }
 
   motor->m_state = MC_STATE_OFF;
@@ -856,7 +863,7 @@ void Run_EncoderCalibration(void)
     g_foc_controller.encoder.use_lut = 1U;
   } else {
     /* A failed retry must not destroy a previously validated calibration. */
-    EncoderCalStore_Load(&g_foc_controller.encoder);
+    EncoderCalStore_Load(&g_foc_controller.encoder, NULL, NULL, NULL);
   }
 
   // STEP 5: Return near electrical zero before removing calibration voltage.
@@ -880,7 +887,7 @@ void Run_EncoderCalibration(void)
   HAL_Delay(50);
   if (calibration_valid) {
     g_encoder_calibration_result =
-        EncoderCalStore_Save(candidate_lut) ? 2 : -2;
+        EncoderCalStore_Save(candidate_lut, g_foc_controller.zero_electric_angle, g_foc_controller.conf.encoder_direction) ? 2 : -2;
   } else {
     g_encoder_calibration_result = -1;
   }
@@ -895,7 +902,7 @@ void Run_EncoderCalibration(void)
   return;
 
 calibration_abort:
-  EncoderCalStore_Load(&g_foc_controller.encoder);
+  EncoderCalStore_Load(&g_foc_controller.encoder, NULL, NULL, NULL);
   g_encoder_calibration_result = -1;
   __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, period / 2);
   __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, period / 2);
@@ -1068,7 +1075,10 @@ int main(void)
   /* 1. Initialize FOC Engine, DRV8353RS Gate Driver & AS5048A Encoder */
   motor_init(&hspi1, &hspi3);
   g_encoder_calibration_result =
-      EncoderCalStore_Load(&g_foc_controller.encoder) ? 3 : 0;
+      EncoderCalStore_Load(&g_foc_controller.encoder,
+                           &g_foc_controller.zero_electric_angle,
+                           &g_foc_controller.conf.encoder_direction,
+                           &g_foc_controller.aligned) ? 3 : 0;
 
   /* 2. Calibrate ADC hardware (internal offset calibration) */
   HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
