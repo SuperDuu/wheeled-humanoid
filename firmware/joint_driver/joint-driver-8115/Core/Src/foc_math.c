@@ -8,6 +8,7 @@
 
 #include "foc_math.h"
 #include "vesc_utils.h"
+#include "main.h"
 #include <math.h>
 #include <stddef.h>
 
@@ -223,6 +224,7 @@ void foc_svm(float alpha, float beta, float max_mod, uint32_t PWMFullDutyCycle,
   */
 void foc_set_home_position(motor_all_state_t *motor) {
 	if (motor == NULL) return;
+	__disable_irq();
 	motor->m_mech_home_offset = motor->m_mech_angle_single;
 	motor->m_home_calibrated = true;
 	motor->m_turn_count = 0;
@@ -230,7 +232,9 @@ void foc_set_home_position(motor_all_state_t *motor) {
 	motor->m_total_mech_angle = 0.0f;
 	motor->m_joint_angle = 0.0f;
 	motor->m_pos_pid_set = 0.0f;
+	motor->m_pos_i_term = 0.0f;
 	motor->m_traj_active = false;
+	__enable_irq();
 }
 
 /**
@@ -250,9 +254,14 @@ void foc_start_trajectory(motor_all_state_t *motor, float target_angle_rad, floa
 
 	float delta_angle = fabsf(target_angle_rad - motor->m_joint_angle);
 	if (duration_s <= 0.05f) {
-		// Natural smooth duration: ~0.8s for 45 deg, ~1.1s for 90 deg, ~1.6s for 180 deg
-		duration_s = 0.5f + delta_angle * 0.35f;
+		float duration_scale = (motor->m_conf->gear_ratio <= 1.05f) ? 0.25f : 0.35f;
+		float base_time = (motor->m_conf->gear_ratio <= 1.05f) ? 0.35f : 0.50f;
+		duration_s = base_time + delta_angle * duration_scale;
 		if (duration_s > 3.0f) duration_s = 3.0f;
+	} else if (motor->m_conf->gear_ratio <= 1.05f && delta_angle > 2.5f && duration_s < 1.4f) {
+		// For large bare motor direct-drive moves (>= 150 deg), ensure at least 1.4s
+		// to allow clean minimum-jerk deceleration without inertia slip
+		duration_s = 1.4f;
 	}
 	if (max_current_a < 0.5f) max_current_a = 0.5f;
 	if (max_current_a > 5.0f) max_current_a = 5.0f;
@@ -264,6 +273,7 @@ void foc_start_trajectory(motor_all_state_t *motor, float target_angle_rad, floa
 	motor->m_pos_holding_current_limit = max_current_a;
 	motor->m_traj_active = true;
 	motor->m_pos_pid_set = motor->m_joint_angle;
+	motor->m_pos_i_term = 0.0f;
 
 	motor->m_control_mode = CONTROL_MODE_POS;
 	motor->m_state = MC_STATE_RUNNING;
@@ -328,27 +338,50 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 
 	// 2. Velocity Tracking & Damping (MIT Mini Cheetah Impedance Model)
 	float actual_joint_vel = (motor->m_speed_est_fast / pole_pairs) / gear_ratio; // Output rad/s
+	if (gear_ratio <= 1.05f && fabsf(target_vel_rad_s) < 0.001f && fabsf(actual_joint_vel) < 0.15f) {
+		actual_joint_vel = 0.0f;
+	}
 	float vel_error = target_vel_rad_s - actual_joint_vel;
 
 	// 3. Friction Feedforward (Zero for direct drive bare motor, 0.35A for cycloid gearbox)
 	float iq_friction_ff = (gear_ratio <= 1.05f) ? 0.0f : (0.35f * tanhf(target_vel_rad_s / 0.05f));
 
 	// 4. MIT Impedance PD Controller with bounded stiction integral
-	// Direct drive bare motor requires lower Kp (2.5 A/rad) to prevent high-current saturation
-	float p_gain = (gear_ratio <= 1.05f) ? 2.5f : conf_now->p_pid_kp;
-	float d_gain = (gear_ratio <= 1.05f) ? 0.12f : conf_now->p_pid_kd;
+	// Direct drive bare motor: Kp = 30.0 A/rad, Kd = 0.18 A/(rad/s), Ki = 25.0 A/(rad*s)
+	float p_gain, d_gain, ki_gain;
+	if (gear_ratio <= 1.05f) {
+		p_gain = 30.0f;
+		d_gain = 0.18f;
+		ki_gain = 25.0f;
+	} else {
+		p_gain = conf_now->p_pid_kp;
+		d_gain = conf_now->p_pid_kd;
+		ki_gain = conf_now->p_pid_ki;
+	}
 	float p_term = error * p_gain;
 	float d_term = vel_error * d_gain;
-
-	float ki_gain = conf_now->p_pid_ki;
 	if (ki_gain > 0.0f) {
-		// Only accumulate when near target (< 5 deg / 0.087 rad) to prevent windup during moves
-		if (fabsf(error) < 0.087f) {
-			motor->m_pos_i_term += ki_gain * error * dt;
-			// Bounded to 0.50A (~2.7 Nm output) to overcome stiction without limit cycle
-			utils_truncate_number_abs(&motor->m_pos_i_term, 0.50f);
+		float max_pos_i = (gear_ratio <= 1.05f) ? 0.020f : 0.40f;
+		if (gear_ratio <= 1.05f) {
+			// Standard Industrial Integral Deadband (0.00100 rad = 0.057 deg)
+			// Suspends integration within tolerance deadband to eliminate limit cycles and cogging hunting.
+			// Max holding current = Kp*deadband (30 * 0.00100 = 0.030A) + max_pos_i (0.020A) = 0.050A << 0.080A.
+			float deadband = 0.00100f;
+			if (fabsf(error) > deadband && fabsf(error) < 0.17f) {
+				float eff_error = (error > 0.0f) ? (error - deadband) : (error + deadband);
+				motor->m_pos_i_term += ki_gain * eff_error * dt;
+				utils_truncate_number_abs(&motor->m_pos_i_term, max_pos_i);
+			} else if (fabsf(error) >= 0.17f) {
+				motor->m_pos_i_term = 0.0f;
+			}
+			// Within deadband: d(m_pos_i_term)/dt = 0 (stable hold, no bleed-slip cycle).
 		} else {
-			motor->m_pos_i_term = 0.0f;
+			if (fabsf(error) < 0.087f) {
+				motor->m_pos_i_term += ki_gain * error * dt;
+				utils_truncate_number_abs(&motor->m_pos_i_term, max_pos_i);
+			} else {
+				motor->m_pos_i_term = 0.0f;
+			}
 		}
 	} else {
 		motor->m_pos_i_term = 0.0f;
@@ -356,8 +389,10 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 
 	float iq_cmd = p_term + d_term + motor->m_pos_i_term + iq_friction_ff;
 
-	// 5. Holding Current Limit (Max 6.6A stall limit)
-	float hold_limit_a = (conf_now->l_current_max > 0.1f) ? conf_now->l_current_max : 6.60f;
+	// 5. Holding Current Limit (Use trajectory max_current_a if specified)
+	float hold_limit_a = (motor->m_pos_holding_current_limit > 0.1f)
+		? motor->m_pos_holding_current_limit
+		: ((conf_now->l_current_max > 0.1f) ? conf_now->l_current_max : 6.60f);
 	utils_truncate_number_abs(&iq_cmd, hold_limit_a);
 
 	motor->m_iq_set = iq_cmd; // Commanded torque current in Amperes -> 20kHz Current Loop
@@ -367,9 +402,10 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
   * @brief  Speed Controller Loop (Cascaded Current-Mode FOC: Output = Iq in A)
   */
 void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *motor) {
+	if (motor == NULL || motor->m_conf == NULL) {
+		return;
+	}
 	mc_configuration *conf_now = motor->m_conf;
-	if (conf_now == NULL) return;
-
 	float pole_pairs = (float)conf_now->foc_motor_pole_pairs;
 	if (pole_pairs < 1.0f) {
 		pole_pairs = 21.0f;
@@ -391,11 +427,11 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		return;
 	}
 
-	float speed_filter = conf_now->s_pid_kd_filter;
+	float gear_ratio_speed = (conf_now->gear_ratio > 0.1f) ? conf_now->gear_ratio : 17.0f;
+	float default_alpha = (gear_ratio_speed <= 1.05f) ? 0.045f : 0.20f;
+	float speed_filter = (conf_now->s_pid_kd_filter > 0.005f) ? conf_now->s_pid_kd_filter : default_alpha;
 	utils_truncate_number(&speed_filter, 0.02f, 0.50f);
-	/* Smooth low-pass filter for silky speed feedback (~12 Hz cutoff) */
 	UTILS_LP_FAST(motor->m_speed_d_filter, erpm_raw, speed_filter);
-
 	float erpm = motor->m_speed_d_filter;
 
 	if (SIGN(motor->m_speed_command_rpm) != SIGN(motor->m_speed_pid_set_rpm)) {
@@ -403,7 +439,8 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	}
 
 	/* Smooth continuous acceleration ramp from 0 to target speed */
-	float ramp_rate = (conf_now->s_pid_ramp_erpms_s > 100.0f) ? conf_now->s_pid_ramp_erpms_s : 1500.0f;
+	float default_ramp = (gear_ratio_speed <= 1.05f) ? 4200.0f : 1500.0f;
+	float ramp_rate = (conf_now->s_pid_ramp_erpms_s > 100.0f && gear_ratio_speed > 1.05f) ? conf_now->s_pid_ramp_erpms_s : default_ramp;
 	utils_step_towards((float*)&motor->m_speed_pid_set_rpm, motor->m_speed_command_rpm, ramp_rate * dt);
 
 	float target_erpm = motor->m_speed_pid_set_rpm;
@@ -420,40 +457,42 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 		return;
 	}
 
-	/* Proportional + Damping controller (ZERO I-term) */
-	float speed_kp = conf_now->s_pid_kp;
+	/* Proportional + Damping controller with integral action */
+	float default_kp = (gear_ratio_speed <= 1.05f) ? 0.00028f : 0.0015f;
+	float speed_kp = (conf_now->s_pid_kp > 0.00001f) ? conf_now->s_pid_kp : default_kp;
 	float p_term = speed_kp * error_erpm;
 
 	float erpm_diff = erpm - motor->m_speed_d_filter_proc;
 	motor->m_speed_d_filter_proc += 0.20f * erpm_diff;
-	float d_term = -conf_now->s_pid_kd * erpm_diff / dt;
+	float kd_gain = (gear_ratio_speed <= 1.05f) ? 0.0f : conf_now->s_pid_kd;
+	float d_term = -kd_gain * erpm_diff / dt;
 	utils_truncate_number_abs(&d_term, SPEED_IQ_D_MAX_A);
 
-	/* Smooth continuous friction feedforward (zero for direct drive bare motor) */
-	float gear_ratio_speed = (conf_now->gear_ratio > 0.1f) ? conf_now->gear_ratio : 17.0f;
-	float iq_friction = (gear_ratio_speed <= 1.05f) ? 0.0f : (0.12f * tanhf(target_mech_rpm / 15.0f));
+	/* Smooth continuous friction feedforward (~0.035A dynamic friction for bare motor) */
+	float iq_friction = (gear_ratio_speed <= 1.05f)
+		? (0.035f * tanhf(target_mech_rpm / 10.0f))
+		: (0.12f * tanhf(target_mech_rpm / 15.0f));
 
 	/* Bidirectional speed current limits */
 	float iq_limit = conf_now->l_current_max;
-	if (iq_limit < 0.1f || iq_limit > SPEED_IQ_CONT_MAX_A) {
-		iq_limit = SPEED_IQ_CONT_MAX_A;
-	}
+	if (iq_limit < 0.2f) iq_limit = 0.2f;
 	float iq_min = -iq_limit;
 	float iq_max = iq_limit;
 
 	/* Speed Integral action with anti-windup */
-	float speed_ki = conf_now->s_pid_ki;
+	float default_ki = (gear_ratio_speed <= 1.05f) ? 0.00060f : 0.0010f;
+	float speed_ki = (conf_now->s_pid_ki > 0.00001f) ? conf_now->s_pid_ki : default_ki;
+	float i_max = (gear_ratio_speed <= 1.05f) ? 0.32f : SPEED_IQ_I_MAX_A;
 	if (speed_ki > 0.0f) {
 		motor->m_speed_i_term += speed_ki * error_erpm * dt;
-		utils_truncate_number_abs(&motor->m_speed_i_term, SPEED_IQ_I_MAX_A);
+		utils_truncate_number_abs(&motor->m_speed_i_term, i_max);
 	} else {
 		motor->m_speed_i_term = 0.0f;
 	}
 
 	float iq_cmd = iq_friction + p_term + motor->m_speed_i_term + d_term;
 	utils_truncate_number(&iq_cmd, iq_min, iq_max);
-	/* Dynamic Iq rate-limit (500 A/s) to ensure fast loop phase response without latency oscillation */
-	utils_step_towards((float*)&motor->m_iq_set, iq_cmd, 500.0f * dt);
+	motor->m_iq_set = iq_cmd;
 }
 
 /**
@@ -463,7 +502,10 @@ void foc_run_fw(motor_all_state_t *motor, float dt) {
 	mc_configuration *conf = motor->m_conf;
 	motor_state_t *state_m = &motor->m_motor_state;
 
-	if (conf->foc_fw_current_max < 0.001f) return;
+	if (conf->gear_ratio <= 1.05f || conf->foc_fw_current_max < 0.001f) {
+		motor->m_i_fw_set = 0.0f;
+		return;
+	}
 
 	if (motor->m_state != MC_STATE_RUNNING) {
 		motor->m_i_fw_set = 0.0f;
@@ -473,7 +515,11 @@ void foc_run_fw(motor_all_state_t *motor, float dt) {
 	float current_max = conf->l_current_max;
 	float i_mag = NORM2_f(state_m->id, state_m->iq);
 
-	float duty = state_m->duty_now;
+	/* Normalize duty to maximum linear SVPWM modulation depth (1/sqrt(3) * l_max_duty)
+	 * state_m->duty_now is V_mag / V_bus in range [0, 1/sqrt(3) ~= 0.577].
+	 * Normalization scales full modulation to 1.0 so duty_target = 0.85 triggers properly. */
+	float max_mod = ONE_BY_SQRT3 * conf->l_max_duty;
+	float duty = (max_mod > 0.1f) ? (state_m->duty_now / max_mod) : state_m->duty_now;
 	float duty_target = conf->foc_fw_duty_start;
 
 	if (duty > duty_target) {
