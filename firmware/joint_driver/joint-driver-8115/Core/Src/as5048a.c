@@ -199,11 +199,16 @@ HAL_StatusTypeDef AS5048A_Sample(AS5048A_t *enc, float dt)
     }
 
     int first_sample = !enc->first_sample;
+    int32_t current_multiturn_count = count_wrapped + (AS5048A_CPR * enc->turns);
     if (first_sample) {
         enc->turns = 0;
         enc->first_sample = 1;
         enc->velocity_rad_s = 0.0f;
         enc->velocity_rpm = 0.0f;
+        current_multiturn_count = count_wrapped;
+        for (int i = 0; i < AS5048A_N_POS_SAMPLES; i++) {
+            enc->count_buff[i] = current_multiturn_count;
+        }
     } else {
         // Multi-turn tracking
         if (enc->angle_singleturn < enc->old_angle - (float)M_PI) {
@@ -211,17 +216,21 @@ HAL_StatusTypeDef AS5048A_Sample(AS5048A_t *enc, float dt)
         } else if (enc->angle_singleturn > enc->old_angle + (float)M_PI) {
             enc->turns--;
         }
+        current_multiturn_count = count_wrapped + (AS5048A_CPR * enc->turns);
 
-        // 6. Robust Instantaneous Velocity with Glitch Rejection
+        // 6. Ben Katz Multi-Sample Integer-Count Differentiator (20-sample sliding window = 1.9ms at 10kHz)
         if (dt > 0.000001f) {
-            float raw_vel = d_angle / dt;
+            enc->count_buff[0] = current_multiturn_count;
+            const int vel_window = 20;
+            int32_t delta_c = enc->count_buff[0] - enc->count_buff[vel_window - 1];
+            float raw_vel = (2.0f * (float)M_PI * (float)delta_c) / ((float)AS5048A_CPR * ((float)(vel_window - 1) * dt));
             /* Reject glitch spikes (> 120 rad/s = > 1150 RPM) */
             if (raw_vel > 120.0f || raw_vel < -120.0f) {
                 raw_vel = enc->velocity_rad_s;
             }
-            /* Smooth 1st-order filter (~30 Hz cutoff at 10kHz sample rate) */
-            enc->velocity_rad_s += 0.025f * (raw_vel - enc->velocity_rad_s);
-            if (fabsf(enc->velocity_rad_s) < 0.08f && fabsf(d_angle) < 0.0001f) {
+            /* Light low-pass filter (fc ~ 160 Hz at 10kHz) for sub-count smoothness */
+            enc->velocity_rad_s += 0.10f * (raw_vel - enc->velocity_rad_s);
+            if (fabsf(enc->velocity_rad_s) < 0.05f && delta_c == 0) {
                 enc->velocity_rad_s = 0.0f;
             }
             enc->velocity_rpm = enc->velocity_rad_s * (60.0f / (2.0f * (float)M_PI));
@@ -229,7 +238,7 @@ HAL_StatusTypeDef AS5048A_Sample(AS5048A_t *enc, float dt)
     }
 
     // 7. Multi-turn position
-    enc->count_buff[0] = count_wrapped + (AS5048A_CPR * enc->turns);
+    enc->count_buff[0] = current_multiturn_count;
     enc->angle_multiturn = (2.0f * (float)M_PI) * ((float)enc->count_buff[0]) / (float)AS5048A_CPR;
 
     return status;
