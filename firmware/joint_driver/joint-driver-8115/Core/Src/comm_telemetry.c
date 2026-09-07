@@ -140,7 +140,9 @@ bool Comm_Telemetry_Send(FOC_Controller_t *foc)
 
     // 5. Speeds (Mechanical RPM)
     float pole_pairs = (conf != NULL && conf->foc_motor_pole_pairs > 0) ? (float)conf->foc_motor_pole_pairs : 21.0f;
-    float mech_rpm = foc->encoder.velocity_rpm;
+    float mech_rpm = (motor->m_state == MC_STATE_RUNNING && motor->m_control_mode == CONTROL_MODE_SPEED)
+                     ? (motor->m_speed_d_filter / pole_pairs)
+                     : foc->encoder.velocity_rpm;
     if (motor->m_state != MC_STATE_RUNNING) {
         mech_rpm = 0.0f;
     }
@@ -214,31 +216,34 @@ static void StartClosedLoopSpeed(FOC_Controller_t *foc, float mech_rpm)
                         motor->m_conf->foc_motor_pole_pairs > 0U)
                            ? (float)motor->m_conf->foc_motor_pole_pairs
                            : 21.0f;
-    float erpm_now = RADPS2RPM_f(motor->m_speed_est_fast);
 
     run_open_loop = 0;
     open_loop_target_rpm = 0.0f;
     open_loop_current_rpm = 0.0f;
     speed_target_dbg = mech_rpm;
     motor->m_speed_command_rpm = mech_rpm * pole_pairs;
-    motor->m_speed_pid_set_rpm = erpm_now;
-    motor->m_speed_d_filter = erpm_now;
-    motor->m_speed_d_filter_proc = erpm_now;
-    motor->m_speed_i_term = 0.0f;
-    motor->m_speed_prev_error = 0.0f;
-    motor->m_iq_set = 0.0f;
-    motor->m_motor_state.vd_int = 0.0f;
-    motor->m_motor_state.vq_int = 0.0f;
-    motor->m_motor_state.vd = 0.0f;
-    motor->m_motor_state.vq = 0.0f;
-    motor->m_openloop_spinup_active = false;
-    motor->m_openloop_spinup_time = 0.0f;
-    motor->m_i_fw_set = 0.0f;
-    motor->m_control_mode = CONTROL_MODE_SPEED;
-    motor->m_state = MC_STATE_RUNNING;
-    run_foc_mode = 3;
-    foc->fault = MC_FAULT_NONE;
-    TIM1_EnsureMoeEnabled();
+
+    if (motor->m_control_mode != CONTROL_MODE_SPEED || motor->m_state != MC_STATE_RUNNING) {
+        float erpm_now = RADPS2RPM_f(motor->m_speed_est_fast);
+        motor->m_speed_pid_set_rpm = erpm_now;
+        motor->m_speed_d_filter = erpm_now;
+        motor->m_speed_d_filter_proc = erpm_now;
+        motor->m_speed_i_term = 0.0f;
+        motor->m_speed_prev_error = 0.0f;
+        motor->m_iq_set = 0.0f;
+        motor->m_motor_state.vd_int = 0.0f;
+        motor->m_motor_state.vq_int = 0.0f;
+        motor->m_motor_state.vd = 0.0f;
+        motor->m_motor_state.vq = 0.0f;
+        motor->m_openloop_spinup_active = false;
+        motor->m_openloop_spinup_time = 0.0f;
+        motor->m_i_fw_set = 0.0f;
+        motor->m_control_mode = CONTROL_MODE_SPEED;
+        motor->m_state = MC_STATE_RUNNING;
+        run_foc_mode = 3;
+        foc->fault = MC_FAULT_NONE;
+        TIM1_EnsureMoeEnabled();
+    }
 }
 
 static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
@@ -286,7 +291,35 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         run_alignment = 0;
         run_calibration = 0;
     }
-    else if (strncmp(cmd, "ALIGN", 5) == 0) {
+    else if (strncmp(cmd, "ALIGN_INFO", 10) == 0 || strncmp(cmd, "ALIGNDBG", 8) == 0) {
+        extern volatile Align_Debug_t g_dbg_align;
+        static char resp_msg[256];
+        float z = g_dbg_align.zero_electric_angle;
+        int z_i = (int)fabsf(z);
+        int z_f = (int)((fabsf(z) - (float)z_i) * 10000.0f + 0.5f);
+        float c = g_dbg_align.coarse_electric_angle;
+        int c_i = (int)fabsf(c);
+        int c_f = (int)((fabsf(c) - (float)c_i) * 10000.0f + 0.5f);
+        float p = g_dbg_align.phase_correction;
+        int p_i = (int)fabsf(p);
+        int p_f = (int)((fabsf(p) - (float)p_i) * 10000.0f + 0.5f);
+        float conc = g_dbg_align.concentration;
+        int conc_i = (int)fabsf(conc);
+        int conc_f = (int)((fabsf(conc) - (float)conc_i) * 1000.0f + 0.5f);
+        snprintf(resp_msg, sizeof(resp_msg),
+                 "ALIGN_DBG: aligned=%d zero=%s%d.%04d coarse=%s%d.%04d corr=%s%d.%04d conc=%s%d.%03d\r\nSCORES: neg90=%d zero=%d pos90=%d final=%d\r\n",
+                 g_dbg_align.aligned,
+                 (z < 0.0f) ? "-" : "", z_i, z_f,
+                 (c < 0.0f) ? "-" : "", c_i, c_f,
+                 (p < 0.0f) ? "-" : "", p_i, p_f,
+                 (conc < 0.0f) ? "-" : "", conc_i, conc_f,
+                 (int)g_dbg_align.torque_score_neg90,
+                 (int)g_dbg_align.torque_score_zero,
+                 (int)g_dbg_align.torque_score_pos90,
+                 (int)g_dbg_align.torque_score_final);
+        CDC_Transmit_FS((uint8_t*)resp_msg, strlen(resp_msg));
+    }
+    else if (strcmp(cmd, "ALIGN") == 0 || strncmp(cmd, "ALIGN ", 6) == 0) {
         extern volatile int run_alignment;
         motor->m_state = MC_STATE_OFF;
         motor->m_iq_set = 0.0f;
@@ -427,14 +460,14 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         int parsed = sscanf((strncmp(cmd, "IMP ", 4) == 0) ? &cmd[4] : &cmd[4], "%f %f %f", &p_des_deg, &kp, &kd);
         if (parsed >= 1) {
             motor->m_pos_pid_set = DEG2RAD_f(p_des_deg);
-            pos_target_dbg = p_des_deg;
+            pos_target_dbg = motor->m_pos_pid_set;
             motor->m_traj_active = false;
         }
         if (parsed >= 2 && motor->m_conf != NULL) motor->m_conf->p_pid_kp = kp;
         if (parsed >= 3 && motor->m_conf != NULL) motor->m_conf->p_pid_kd = kd;
         motor->m_control_mode = CONTROL_MODE_POS;
         motor->m_state = MC_STATE_RUNNING;
-        run_foc_mode = 3;
+        run_foc_mode = 2;
         foc->fault = MC_FAULT_NONE;
         TIM1_EnsureMoeEnabled();
     }
@@ -592,13 +625,39 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
                 if (motor->m_conf != NULL) motor->m_conf->gear_ratio = g;
                 if (g <= 1.05f) {
                     open_loop_voltage = 2.5f; // Điện áp thấp an toàn cho motor trần
+                    foc->conf.foc_motor_flux_linkage = 0.0280f;
+                    if (motor->m_conf != NULL) motor->m_conf->foc_motor_flux_linkage = 0.0280f;
+                    foc->conf.foc_current_kp = 0.25f;
+                    foc->conf.foc_current_ki = 4500.0f;
+                    if (motor->m_conf != NULL) {
+                        motor->m_conf->foc_current_kp = 0.25f;
+                        motor->m_conf->foc_current_ki = 4500.0f;
+                    }
                 } else {
                     open_loop_voltage = 9.0f; // Điện áp thắng ma sát hộp số cycloid
+                    foc->conf.foc_motor_flux_linkage = 0.0300f;
+                    if (motor->m_conf != NULL) motor->m_conf->foc_motor_flux_linkage = 0.0300f;
+                    foc->conf.foc_current_kp = 0.80f;
+                    foc->conf.foc_current_ki = 18100.0f;
+                    if (motor->m_conf != NULL) {
+                        motor->m_conf->foc_current_kp = 0.80f;
+                        motor->m_conf->foc_current_ki = 18100.0f;
+                    }
                 }
             }
         } else if (strcmp(cmd, "BARE") == 0) {
             foc->conf.gear_ratio = 1.0f;
             if (motor->m_conf != NULL) motor->m_conf->gear_ratio = 1.0f;
+            foc->conf.encoder_direction = 1;
+            if (motor->m_conf != NULL) motor->m_conf->encoder_direction = 1;
+            foc->conf.foc_motor_flux_linkage = 0.0280f;
+            if (motor->m_conf != NULL) motor->m_conf->foc_motor_flux_linkage = 0.0280f;
+            foc->conf.foc_current_kp = 0.25f;
+            foc->conf.foc_current_ki = 4500.0f;
+            if (motor->m_conf != NULL) {
+                motor->m_conf->foc_current_kp = 0.25f;
+                motor->m_conf->foc_current_ki = 4500.0f;
+            }
             open_loop_voltage = 2.5f;
         }
         float cur_g = (motor->m_conf != NULL) ? motor->m_conf->gear_ratio : 17.0f;
@@ -606,7 +665,7 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         int g_dec = (int)(fabsf(cur_g - (float)g_int) * 100.0f + 0.5f);
         int v_int = (int)open_loop_voltage;
         int v_dec = (int)(fabsf(open_loop_voltage - (float)v_int) * 10.0f + 0.5f);
-        char msg[96];
+        static char msg[96];
         snprintf(msg, sizeof(msg), "GEAR: Ratio=%d.%02d, OpenLoopVolt=%d.%01dV (%s)\r\n",
                  g_int, g_dec, v_int, v_dec, (cur_g <= 1.05f) ? "BARE MOTOR" : "GEARED");
         CDC_Transmit_FS((uint8_t*)msg, strlen(msg));
@@ -631,7 +690,7 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         float p6_deg = RAD2DEG_f(foc->anticog_phase_6th);
         int p_int = (int)p6_deg;
         int p_dec = (int)(fabsf(p6_deg - (float)p_int) * 10.0f + 0.5f);
-        char msg[96];
+        static char msg[96];
         snprintf(msg, sizeof(msg), "ANTICOG: %s, Amp6=%d.%03dA, Phase6=%d.%01d deg\r\n",
                  foc->anticog_enabled ? "ENABLED" : "DISABLED",
                  a_int, a_dec, p_int, p_dec);
@@ -679,22 +738,40 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         float off = atof(&cmd[7]);
         foc->zero_electric_angle = off;
         foc->aligned = true;
+        extern volatile Align_Debug_t g_dbg_align;
+        g_dbg_align.aligned = 1;
+        g_dbg_align.zero_electric_angle = off;
         EncoderCalStore_SaveAlignment(off, foc->conf.encoder_direction);
-        char resp_msg[64];
-        snprintf(resp_msg, sizeof(resp_msg), "OFFSET: %.4f rad (%.2f deg) SAVED TO FLASH\r\n", off, off * 180.0f / (float)M_PI);
+        int off_neg = (off < 0.0f);
+        float off_abs = fabsf(off);
+        int off_i = (int)off_abs;
+        int off_f = (int)((off_abs - (float)off_i) * 10000.0f + 0.5f);
+        float deg = off * 180.0f / (float)M_PI;
+        int deg_neg = (deg < 0.0f);
+        float deg_abs = fabsf(deg);
+        int deg_i = (int)deg_abs;
+        int deg_f = (int)((deg_abs - (float)deg_i) * 100.0f + 0.5f);
+        static char resp_msg[64];
+        snprintf(resp_msg, sizeof(resp_msg), "OFFSET: %s%d.%04d rad (%s%d.%02d deg) SAVED TO FLASH\r\n",
+                 off_neg ? "-" : "", off_i, off_f,
+                 deg_neg ? "-" : "", deg_i, deg_f);
         CDC_Transmit_FS((uint8_t*)resp_msg, strlen(resp_msg));
     }
-    else if (strncmp(cmd, "ALIGN_INFO", 10) == 0 || strncmp(cmd, "ALIGNDBG", 8) == 0) {
-        extern volatile Align_Debug_t g_dbg_align;
-        char resp_msg[200];
-        snprintf(resp_msg, sizeof(resp_msg),
-                 "ALIGN_DBG: aligned=%d zero=%.4f coarse=%.4f corr=%.4f conc=%.3f\r\nSCORES: neg90=%.1f zero=%.1f pos90=%.1f final=%.1f\r\n",
-                 g_dbg_align.aligned, g_dbg_align.zero_electric_angle,
-                 g_dbg_align.coarse_electric_angle, g_dbg_align.phase_correction,
-                 g_dbg_align.concentration,
-                 g_dbg_align.torque_score_neg90, g_dbg_align.torque_score_zero,
-                 g_dbg_align.torque_score_pos90, g_dbg_align.torque_score_final);
-        CDC_Transmit_FS((uint8_t*)resp_msg, strlen(resp_msg));
+    else if (strncmp(cmd, "SET_CURRENT_PID ", 16) == 0 || strncmp(cmd, "CPID ", 5) == 0) {
+        float kp = 0.25f, ki = 4500.0f;
+        const char *arg = (strncmp(cmd, "SET_CURRENT_PID ", 16) == 0) ? &cmd[16] : &cmd[5];
+        float values[2] = {kp, ki};
+        int count = ParseFloatArgs(arg, values, 2);
+        if (count >= 2) {
+            kp = values[0];
+            ki = values[1];
+            foc->conf.foc_current_kp = kp;
+            foc->conf.foc_current_ki = ki;
+            if (motor->m_conf != NULL) {
+                motor->m_conf->foc_current_kp = kp;
+                motor->m_conf->foc_current_ki = ki;
+            }
+        }
     }
     else if (strncmp(cmd, "SET_SPEED_PID ", 14) == 0 || strncmp(cmd, "SPID ", 5) == 0) {
         float kp = 0.0015f, ki = 0.0010f, ramp = 3000.0f;
