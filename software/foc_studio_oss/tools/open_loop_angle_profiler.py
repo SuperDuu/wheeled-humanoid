@@ -9,7 +9,7 @@ This reveals the EXACT true relationship between encoder angle and stator angle!
 """
 import sys, os, time, math
 sys.path.insert(0, os.path.join('software/foc_studio_oss/src'))
-from telemetry_parser import TelemetryParser, PACKET_SIZE_94, MAGIC1, MAGIC2
+from telemetry_parser import TelemetryParser, PACKET_SIZE_96, MAGIC1, MAGIC2
 import serial
 import numpy as np
 
@@ -24,12 +24,12 @@ def read_packets(ser, duration_sec):
         raw = ser.read(ser.in_waiting or 1)
         if raw:
             buf.extend(raw)
-        while len(buf) >= PACKET_SIZE_94:
+        while len(buf) >= PACKET_SIZE_96:
             if buf[0] == MAGIC1 and buf[1] == MAGIC2:
-                p = TelemetryParser.parse_packet(bytes(buf[:PACKET_SIZE_94]))
+                p = TelemetryParser.parse_packet(bytes(buf[:PACKET_SIZE_96]))
                 if p:
                     samples.append(p)
-                    del buf[:PACKET_SIZE_94]
+                    del buf[:PACKET_SIZE_96]
                     continue
             del buf[0]
         time.sleep(0.002)
