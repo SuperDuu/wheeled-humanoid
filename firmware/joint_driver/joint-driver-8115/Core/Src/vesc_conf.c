@@ -76,7 +76,7 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_fw_backoff = 0.5f;
 
     // Overmodulation & Voltage Vector Limits
-    conf->foc_overmod_factor = 1.0f;       // Standard space vector modulation
+    conf->foc_overmod_factor = 1.08f;      // 8% overmodulation for SVPWM voltage headroom at 200 RPM
     conf->foc_mag_vd_max = 0.1f;           // Max 10% voltage in Vd (prevent d-axis stealing sampling margin)
 
     // Protection & Safety Limits (Nominal 2.1A, Dynamic Acceleration Peak 4.00A)
