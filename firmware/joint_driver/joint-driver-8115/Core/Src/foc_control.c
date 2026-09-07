@@ -345,13 +345,14 @@ void FOC_Control_Current_ISR(FOC_Controller_t *foc, float current_a, float curre
         float Ierr_d = id_target - state_m->id;
         float Ierr_q = state_m->iq_target - state_m->iq;
 
-        float kp = conf_now->foc_current_kp;
-        float ki = conf_now->foc_current_ki;
+        float kp = (conf_now->gear_ratio <= 1.05f && conf_now->foc_current_kp > 0.70f) ? 0.25f : conf_now->foc_current_kp;
+        float ki = (conf_now->gear_ratio <= 1.05f && conf_now->foc_current_ki > 15000.0f) ? 4500.0f : conf_now->foc_current_ki;
 
         // Decoupling Feedforward terms (-w_e*L*Iq on d-axis, +w_e*L*Id + w_e*lambda on q-axis)
         // Use filtered d-q currents for cross-coupling feedforward to prevent
         // noise amplification from offset-induced oscillations in raw Id/Iq.
-        float vq_ff = motor->m_speed_est_fast * conf_now->foc_motor_flux_linkage + motor->m_speed_est_fast * conf_now->foc_motor_l * state_m->id_filter;
+        float lambda = (conf_now->gear_ratio <= 1.05f) ? 0.0280f : conf_now->foc_motor_flux_linkage;
+        float vq_ff = motor->m_speed_est_fast * lambda + motor->m_speed_est_fast * conf_now->foc_motor_l * state_m->id_filter;
         float vd_ff = -motor->m_speed_est_fast * conf_now->foc_motor_l * state_m->iq_filter;
 
         state_m->vd = kp * Ierr_d + state_m->vd_int + vd_ff;
