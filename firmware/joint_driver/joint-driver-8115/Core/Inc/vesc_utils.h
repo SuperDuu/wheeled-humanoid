@@ -137,8 +137,8 @@ static inline void utils_norm_angle(float *angle) {
 }
 
 static inline void utils_norm_angle_rad(float *angle) {
-	while (*angle < -(float)M_PI) { *angle += (float)(2.0 * M_PI); }
-	while (*angle >=  (float)M_PI) { *angle -= (float)(2.0 * M_PI); }
+	float a = *angle + (float)M_PI;
+	*angle = a - floorf(a * (float)(1.0 / (2.0 * M_PI))) * (float)(2.0 * M_PI) - (float)M_PI;
 }
 
 static inline void utils_truncate_number(float *number, float min, float max) {
