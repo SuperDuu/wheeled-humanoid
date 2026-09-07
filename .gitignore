@@ -55,3 +55,7 @@ docs/*.md
 .agents/
 AGENTS.md
 GEMINI.md
+
+# Scratch & temporary test logs
+scratch/
+tests/*.json
