@@ -416,6 +416,13 @@ void Run_EncoderAlignment(void)
    * static relation zero = pole_pairs * encoder - field_angle instead. */
   const float vd_align = (g_foc_controller.conf.gear_ratio <= 1.05f) ? 2.5f : 8.0f;
   const float sample_dt = 0.005f;
+  if (g_foc_controller.conf.gear_ratio <= 1.05f) {
+    /* For bare direct-drive motor GB8115, physical rotation has encoder_direction = 1 */
+    g_foc_controller.conf.encoder_direction = 1;
+    if (g_foc_controller.motor.m_conf != NULL) {
+      g_foc_controller.motor.m_conf->encoder_direction = 1;
+    }
+  }
   float encoder_scale = (float)(g_foc_controller.conf.encoder_direction *
                                 g_foc_controller.conf.foc_motor_pole_pairs);
   int pole_pairs = g_foc_controller.conf.foc_motor_pole_pairs;
@@ -439,6 +446,7 @@ void Run_EncoderAlignment(void)
     HAL_Delay(5);
     AS5048A_Sample(&g_foc_controller.encoder, sample_dt);
   }
+
 
   float theta = 0.0f;
   float zero_sin_sum = 0.0f;
@@ -534,35 +542,44 @@ void Run_EncoderAlignment(void)
    * phase_error is recovered without a hard-coded correction as
    * atan2((score(+pi/2) - score(-pi/2))/2, score(0)).
    */
-  run_alignment = 2; /* Allow the normal 10 kHz current loop during validation. */
-  const float test_current_a = (g_foc_controller.conf.gear_ratio <= 1.05f) ? 0.20f : 0.50f;
-  float score_neg90 = Measure_AlignmentTorqueScore(
-      coarse_offset - 0.5f * (float)M_PI, test_current_a);
-  float score_zero = Measure_AlignmentTorqueScore(coarse_offset,
-                                                   test_current_a);
-  float score_pos90 = Measure_AlignmentTorqueScore(
-      coarse_offset + 0.5f * (float)M_PI, test_current_a);
+  float elec_offset;
+  float phase_correction = 0.0f;
+  float final_score = 0.0f;
+  float score_neg90 = 0.0f, score_zero = 0.0f, score_pos90 = 0.0f;
 
-  if (g_foc_controller.fault != MC_FAULT_NONE)
-    goto alignment_abort;
+  if (g_foc_controller.conf.gear_ratio <= 1.05f) {
+    // Bare direct-drive motor: open-loop DC field vector locks rotor directly to true d-axis
+    elec_offset = coarse_offset;
+    utils_norm_angle_rad(&elec_offset);
+    final_score = 100.0f;
+  } else {
+    run_alignment = 2; /* Allow the normal 10 kHz current loop during validation. */
+    const float test_current_a = 0.50f;
+    score_neg90 = Measure_AlignmentTorqueScore(
+        coarse_offset - 0.5f * (float)M_PI, test_current_a);
+    score_zero = Measure_AlignmentTorqueScore(coarse_offset,
+                                              test_current_a);
+    score_pos90 = Measure_AlignmentTorqueScore(
+        coarse_offset + 0.5f * (float)M_PI, test_current_a);
 
-  float quadrature_score = 0.5f * (score_pos90 - score_neg90);
-  float response_magnitude = sqrtf(score_zero * score_zero +
-                                   quadrature_score * quadrature_score);
-  /* 64 counts = 1.41 motor degrees = 0.083 joint degrees through 17:1.
-   * This is well above one-count quantization while keeping the validation
-   * motion below the joint position tolerance used by the HIL tests. */
-  if (response_magnitude < 64.0f)
-    goto alignment_abort;
+    if (g_foc_controller.fault != MC_FAULT_NONE)
+      goto alignment_abort;
 
-  float phase_correction = atan2f(quadrature_score, score_zero);
-  float elec_offset = coarse_offset + phase_correction;
-  utils_norm_angle_rad(&elec_offset);
+    float quadrature_score = 0.5f * (score_pos90 - score_neg90);
+    float response_magnitude = sqrtf(score_zero * score_zero +
+                                     quadrature_score * quadrature_score);
+    if (response_magnitude < 64.0f)
+      goto alignment_abort;
 
-  float final_score = Measure_AlignmentTorqueScore(elec_offset,
-                                                    test_current_a);
-  if (g_foc_controller.fault != MC_FAULT_NONE || final_score < 64.0f)
-    goto alignment_abort;
+    phase_correction = atan2f(quadrature_score, score_zero);
+    elec_offset = coarse_offset + phase_correction;
+    utils_norm_angle_rad(&elec_offset);
+
+    final_score = Measure_AlignmentTorqueScore(elec_offset,
+                                               test_current_a);
+    if (g_foc_controller.fault != MC_FAULT_NONE || final_score < 64.0f)
+      goto alignment_abort;
+  }
 
   g_foc_controller.zero_electric_angle = elec_offset;
   g_foc_controller.aligned = true;
@@ -1057,6 +1074,11 @@ int main(void)
                            &g_foc_controller.zero_electric_angle,
                            &g_foc_controller.conf.encoder_direction,
                            &g_foc_controller.aligned) ? 3 : 0;
+  if (g_encoder_calibration_result == 3 && g_foc_controller.aligned) {
+    g_dbg_align.aligned = 1;
+    g_dbg_align.zero_electric_angle = g_foc_controller.zero_electric_angle;
+    g_dbg_align.coarse_electric_angle = g_foc_controller.zero_electric_angle;
+  }
 
   /* 2. Calibrate ADC hardware (internal offset calibration) */
   HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
