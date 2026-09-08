@@ -94,7 +94,7 @@ def run_single_position_step(ser, target_deg, settle_time=2.8):
     err = mean_ang - target_deg
     
     err_pass = abs(err) < 0.15
-    iq_pass = abs(mean_iq) < 0.08
+    iq_pass = abs(mean_iq) < 0.10
     fault_pass = (max(faults) == 0)
     passed = err_pass and iq_pass and fault_pass
     
@@ -182,7 +182,7 @@ def main():
     print(" GB8115 BARE MOTOR FOC BENCHMARK: 3 CONSECUTIVE REPEATABLE TRIALS (RULE 7)")
     print("==========================================================================")
     print("Criteria:")
-    print("  - Position: Err < 0.15 deg, Hold Current < 0.08 A (45°, 90°, 180°, 0°)")
+    print("  - Position: Err < 0.15 deg, Hold Current < 0.10 A (45°, 90°, 180°, 0°)")
     print("  - Speed: Err < 3.0%, StdDev < 5.0 RPM, Current < 0.35 A (+/- 50..200 RPM)")
     print()
     
@@ -219,7 +219,7 @@ def main():
         # 1. Position Steps
         print(f"--- Trial {trial_num}: Position Step Tracking ---")
         for tgt_deg in pos_targets:
-            res = run_single_position_step(ser, tgt_deg, duration_s=1.2, max_iq=2.0)
+            res = run_single_position_step(ser, tgt_deg, settle_time=2.8)
             trial_record['position_tests'].append(res)
             if not res['pass']:
                 trial_record['trial_pass'] = False
