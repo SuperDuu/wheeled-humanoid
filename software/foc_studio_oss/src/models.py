@@ -22,8 +22,8 @@ class ConnectRequest(BaseModel):
 
 class MotorCommand(BaseModel):
     """Command payload for controlling motor modes, targets, and limits."""
-    control_mode: int = Field(..., ge=0, le=4, description="Control mode: 0=IDLE, 1=CURRENT, 2=BRAKE, 3=SPEED, 4=POSITION")
-    target_value: float = Field(0.0, description="Target value (Amperes for mode 1, RPM for mode 3, Radians for mode 4)")
+    control_mode: int = Field(..., ge=0, le=6, description="Control mode: 0=IDLE, 1=CURRENT, 2=BRAKE, 3=SPEED, 4=POSITION, 5=MIT/TORQUE")
+    target_value: float = Field(0.0, description="Target value (Amperes for mode 1, RPM for mode 3, Degrees/Radians for mode 4, Nm for mode 5)")
     brake_current: Optional[float] = Field(None, description="Optional brake current for BRAKE mode.")
 
 
