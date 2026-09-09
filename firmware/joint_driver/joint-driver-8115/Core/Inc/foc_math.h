@@ -84,6 +84,13 @@ typedef struct {
 
 	// Sensor Flag
 	bool m_using_encoder;
+
+	// MIT Mini Cheetah Real-Time Impedance Parameters
+	float m_mit_p_des;        // Desired Joint Position in rad
+	float m_mit_v_des;        // Desired Joint Velocity in rad/s
+	float m_mit_kp;           // Virtual Stiffness in Nm/rad
+	float m_mit_kd;           // Virtual Damping in Nm/(rad/s)
+	float m_mit_t_ff;         // Torque Feedforward in Nm
 } motor_all_state_t;
 
 /* Core VESC FOC Functions */
@@ -95,6 +102,7 @@ void foc_svm(float alpha, float beta, float max_mod, uint32_t PWMFullDutyCycle,
 		uint32_t* tAout, uint32_t* tBout, uint32_t* tCout, uint32_t *svm_sector);
 void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *motor);
 void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *motor);
+void foc_run_mit_control(motor_all_state_t *motor);
 void foc_start_trajectory(motor_all_state_t *motor, float target_angle_rad, float duration_s, float max_current_a);
 void foc_set_home_position(motor_all_state_t *motor);
 float foc_correct_encoder(float obs_angle, float enc_angle, float speed, float sl_erpm, motor_all_state_t *motor);
