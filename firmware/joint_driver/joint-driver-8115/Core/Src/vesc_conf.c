@@ -44,8 +44,8 @@ void vesc_conf_set_defaults(mc_configuration *conf)
     conf->foc_cc_decoupling = FOC_CC_DECOUPLING_BEMF; // Bù khử ghép chéo d-q
 
     // Speed Controller (Feedforward + Damping + bounded Integral for zero steady-state error)
-    conf->s_pid_kp = 0.0006f;             // Damping stiffness (well damped, eliminates 23Hz limit cycle)
-    conf->s_pid_ki = 0.0015f;             // Bounded I-term (zero steady-state speed error)
+    conf->s_pid_kp = 0.00080f;            // Load stiffness (strong load-carrying torque against disturbances)
+    conf->s_pid_ki = 0.00120f;            // Bounded I-term (smooth integral load rejection)
     conf->s_pid_kd = 0.0f;                // Zero D-term
     conf->s_pid_kd_filter = 0.20f;        // ~32 Hz filter (eliminates phase lag)
     conf->s_pid_min_erpm = 10.0f;          // 10 ERPM deadband (~0.48 RPM motor)
