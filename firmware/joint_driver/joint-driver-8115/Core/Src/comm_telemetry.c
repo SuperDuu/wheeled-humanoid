@@ -274,6 +274,11 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         motor->m_speed_pid_set_rpm = 0.0f;
         motor->m_speed_i_term = 0.0f;
         motor->m_pos_i_term = 0.0f;
+        motor->m_mit_p_des = 0.0f;
+        motor->m_mit_v_des = 0.0f;
+        motor->m_mit_kp = 0.0f;
+        motor->m_mit_kd = 0.0f;
+        motor->m_mit_t_ff = 0.0f;
         motor->m_openloop_spinup_active = false;
         motor->m_openloop_spinup_time = 0.0f;
         motor->m_motor_state.duty_now = 0.0f;
@@ -425,25 +430,11 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         float mech_rpm = atof(&cmd[6]);
         StartClosedLoopSpeed(foc, mech_rpm);
     }
-    else if (strncmp(cmd, "IQ ", 3) == 0 || strncmp(cmd, "CURRENT ", 8) == 0 || strncmp(cmd, "TORQUE ", 7) == 0 || strncmp(cmd, "FORCE ", 6) == 0) {
-        float iq = 0.0f;
-        if (strncmp(cmd, "IQ ", 3) == 0) iq = atof(&cmd[3]);
-        else if (strncmp(cmd, "CURRENT ", 8) == 0) iq = atof(&cmd[8]);
-        else if (strncmp(cmd, "FORCE ", 6) == 0) iq = atof(&cmd[6]);
-        else if (strncmp(cmd, "TORQUE ", 7) == 0) {
-            float tau = atof(&cmd[7]); // Joint Torque in Nm
-            float gear_ratio = (motor->m_conf != NULL && motor->m_conf->gear_ratio > 0.1f) ? motor->m_conf->gear_ratio : 17.0f;
-            float pole_pairs = (motor->m_conf != NULL && motor->m_conf->foc_motor_pole_pairs > 0) ? (float)motor->m_conf->foc_motor_pole_pairs : 21.0f;
-            float lambda = (motor->m_conf != NULL && motor->m_conf->foc_motor_flux_linkage > 0.001f) ? motor->m_conf->foc_motor_flux_linkage : 0.030f;
-            float kt_joint = 1.5f * pole_pairs * lambda * gear_ratio; // ~16.06 Nm/A (ideal), ~12.85 Nm/A (with cycloid friction)
-            iq = (kt_joint > 0.1f) ? (tau / kt_joint) : tau;
-        }
+    else if (strncmp(cmd, "IQ ", 3) == 0 || strncmp(cmd, "CURRENT ", 8) == 0) {
+        float iq = (strncmp(cmd, "IQ ", 3) == 0) ? atof(&cmd[3]) : atof(&cmd[8]);
+        if (motor->m_conf != NULL) utils_truncate_number_abs(&iq, motor->m_conf->l_current_max);
         iq_target_dbg = iq;
         motor->m_iq_set = iq;
-        // BUMPLESS TRANSFER: Initialize PI integrators to current voltage output
-        // so that the output doesn't jump on mode switch (prevents motor jerk).
-        // In DUTY mode, vd=0 and vq=duty*vbus. Starting the integrator at the
-        // current vq ensures continuity: first-cycle output ≈ vq_prev + small_correction.
         motor->m_motor_state.vq_int = motor->m_motor_state.vq;
         motor->m_motor_state.vd_int = motor->m_motor_state.vd;
         motor->m_control_mode = CONTROL_MODE_CURRENT;
@@ -452,24 +443,36 @@ static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
         foc->fault = MC_FAULT_NONE;
         TIM1_EnsureMoeEnabled();
     }
-    else if (strncmp(cmd, "IMP ", 4) == 0 || strncmp(cmd, "MIT ", 4) == 0) {
-        // IMP <pos_deg> [kp_A_rad] [kd_A_rad_s] - Real-time Impedance Tuning via USB
-        float p_des_deg = 0.0f;
-        float kp = 12.0f;
-        float kd = 0.40f;
-        int parsed = sscanf((strncmp(cmd, "IMP ", 4) == 0) ? &cmd[4] : &cmd[4], "%f %f %f", &p_des_deg, &kp, &kd);
-        if (parsed >= 1) {
-            motor->m_pos_pid_set = DEG2RAD_f(p_des_deg);
-            pos_target_dbg = motor->m_pos_pid_set;
-            motor->m_traj_active = false;
-        }
-        if (parsed >= 2 && motor->m_conf != NULL) motor->m_conf->p_pid_kp = kp;
-        if (parsed >= 3 && motor->m_conf != NULL) motor->m_conf->p_pid_kd = kd;
-        motor->m_control_mode = CONTROL_MODE_POS;
+    else if (strncmp(cmd, "TORQUE ", 7) == 0 || strncmp(cmd, "FORCE ", 6) == 0) {
+        float tau = atof((strncmp(cmd, "TORQUE ", 7) == 0) ? &cmd[7] : &cmd[6]);
+        motor->m_mit_p_des = motor->m_joint_angle;
+        motor->m_mit_v_des = 0.0f;
+        motor->m_mit_kp = 0.0f;
+        motor->m_mit_kd = 0.0f;
+        motor->m_mit_t_ff = tau;
+        motor->m_control_mode = CONTROL_MODE_MIT;
         motor->m_state = MC_STATE_RUNNING;
-        run_foc_mode = 2;
+        run_foc_mode = 5;
         foc->fault = MC_FAULT_NONE;
         TIM1_EnsureMoeEnabled();
+        foc_run_mit_control(motor);
+    }
+    else if (strncmp(cmd, "IMP ", 4) == 0 || strncmp(cmd, "MIT ", 4) == 0) {
+        // MIT <p_des_deg> [v_des_rpm] [kp_Nm_rad] [kd_Nm_rad_s] [t_ff_Nm]
+        float p_des_deg = 0.0f, v_des_rpm = 0.0f, kp = 5.0f, kd = 0.10f, t_ff = 0.0f;
+        int parsed = sscanf((strncmp(cmd, "MIT ", 4) == 0) ? &cmd[4] : &cmd[4], "%f %f %f %f %f",
+                            &p_des_deg, &v_des_rpm, &kp, &kd, &t_ff);
+        if (parsed >= 1) motor->m_mit_p_des = DEG2RAD_f(p_des_deg);
+        if (parsed >= 2) motor->m_mit_v_des = RPM2RADPS_f(v_des_rpm);
+        if (parsed >= 3) motor->m_mit_kp = kp;
+        if (parsed >= 4) motor->m_mit_kd = kd;
+        if (parsed >= 5) motor->m_mit_t_ff = t_ff;
+        motor->m_control_mode = CONTROL_MODE_MIT;
+        motor->m_state = MC_STATE_RUNNING;
+        run_foc_mode = 5;
+        foc->fault = MC_FAULT_NONE;
+        TIM1_EnsureMoeEnabled();
+        foc_run_mit_control(motor);
     }
     else if (strncmp(cmd, "VQ ", 3) == 0 || strncmp(cmd, "VOLT ", 5) == 0) {
         float vq = atof((strncmp(cmd, "VQ ", 3) == 0) ? &cmd[3] : &cmd[5]);
