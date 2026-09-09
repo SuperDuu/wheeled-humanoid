@@ -1,3 +1,6 @@
 [submodule "legacy"]
 	path = legacy
 	url = https://github.com/SuperDuu/agv_project.git
+[submodule "hardware/electronics"]
+	path = hardware/electronics
+	url = https://github.com/SuperDuu/wheeled-humanoid-electronics.git
