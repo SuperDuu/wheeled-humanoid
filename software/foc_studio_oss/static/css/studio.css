@@ -1189,13 +1189,15 @@ canvas.scope-canvas {
   padding: 2px 6px;
   border-radius: 4px;
 }
-.btn-pos-preset {
+.btn-pos-preset,
+.btn-move-preset {
   background: var(--bg-surface);
   border: 1px solid var(--accent) !important;
   color: var(--accent-strong) !important;
   font-weight: 800;
 }
-.btn-pos-preset:hover {
+.btn-pos-preset:hover,
+.btn-move-preset:hover {
   background: var(--accent-soft) !important;
 }
 .btn-rel-preset {
@@ -1208,6 +1210,14 @@ canvas.scope-canvas {
 }
 .btn-torque-preset:hover {
   background: rgba(124, 58, 237, 0.15) !important;
+}
+.btn-mit-preset {
+  border: 1px solid #10b981 !important;
+  color: #34d399 !important;
+  font-weight: 700;
+}
+.btn-mit-preset:hover {
+  background: rgba(16, 185, 129, 0.18) !important;
 }
 .btn-disabled-todo {
   opacity: 0.55;
