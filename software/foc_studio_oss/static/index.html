@@ -322,8 +322,18 @@
             <div><span>Chế độ</span><b id="val-mode">POS</b></div>
           </div>
 
+          <!-- Motor Control Modes -->
+          <div class="command-grid six compact-grid" style="margin-top: 10px;">
+            <button class="btn-mode active" data-mode="0" type="button" title="Mode 0: IDLE (OFF)">IDLE</button>
+            <button class="btn-mode" data-mode="1" type="button" title="Mode 1: IQ Current">IQ</button>
+            <button class="btn-mode" data-mode="2" type="button" title="Mode 2: HOLD (Angle Lock)">HOLD</button>
+            <button class="btn-mode" data-mode="3" type="button" title="Mode 3: Closed-Loop Speed">SPEED</button>
+            <button class="btn-mode" data-mode="4" type="button" title="Mode 4: Position">POS</button>
+            <button class="btn-mode" data-mode="5" type="button" title="Mode 5: MIT Impedance & Torque">MIT/TRQ</button>
+          </div>
+
           <!-- Core Robot Joint Actions -->
-          <div class="command-grid four" style="margin-top: 10px;">
+          <div class="command-grid four" style="margin-top: 8px;">
             <button class="quiet-button success-outline" data-cmd="HOLD" type="button" title="Ghim góc hiện tại với lò xo đàn hồi ảo">
               🔒 HOLD (Ghim)
             </button>
@@ -344,16 +354,16 @@
             <span class="badge-deprecated" style="background: rgba(47,128,237,0.15); color: var(--accent-strong); border-color: var(--accent);">Mượt • 0% vọt lố</span>
           </label>
           <div class="command-grid five compact-grid" style="margin-top: 4px;">
-            <button class="btn-pos-preset" data-cmd="MOVE 0 1.2" type="button">0° Home</button>
-            <button class="btn-pos-preset" data-cmd="MOVE 30 1.2" type="button">30°</button>
-            <button class="btn-pos-preset" data-cmd="MOVE 45 1.2" type="button">45°</button>
-            <button class="btn-pos-preset" data-cmd="MOVE 60 1.2" type="button">60°</button>
-            <button class="btn-pos-preset" data-cmd="MOVE 90 1.5" type="button">90°</button>
-            <button class="btn-pos-preset" data-cmd="MOVE 120 1.5" type="button">120°</button>
-            <button class="btn-pos-preset" data-cmd="MOVE 180 1.5" type="button">180°</button>
-            <button class="btn-pos-preset" data-cmd="MOVE -45 1.2" type="button">-45°</button>
-            <button class="btn-pos-preset" data-cmd="MOVE -90 1.5" type="button">-90°</button>
-            <button class="btn-pos-preset" data-cmd="MOVE -180 1.5" type="button">-180°</button>
+            <button class="btn-move-preset" data-cmd="MOVE 0 1.2" type="button">0° Home</button>
+            <button class="btn-move-preset" data-cmd="MOVE 30 1.2" type="button">30°</button>
+            <button class="btn-move-preset" data-cmd="MOVE 45 1.2" type="button">45°</button>
+            <button class="btn-move-preset" data-cmd="MOVE 60 1.2" type="button">60°</button>
+            <button class="btn-move-preset" data-cmd="MOVE 90 1.5" type="button">90°</button>
+            <button class="btn-move-preset" data-cmd="MOVE 120 1.5" type="button">120°</button>
+            <button class="btn-move-preset" data-cmd="MOVE 180 1.5" type="button">180°</button>
+            <button class="btn-move-preset" data-cmd="MOVE -45 1.2" type="button">-45°</button>
+            <button class="btn-move-preset" data-cmd="MOVE -90 1.5" type="button">-90°</button>
+            <button class="btn-move-preset" data-cmd="MOVE -180 1.5" type="button">-180°</button>
           </div>
 
           <!-- Relative Jog Steps -->
@@ -391,15 +401,26 @@
         <section class="panel-card torque-panel">
           <div class="panel-header">
             <div>
-              <h2>⚡ Kiểm Soát Lực & Mô-men</h2>
-              <p>Mô-men đầu ra khớp (Kt = 5.4 Nm/A) & Dòng Iq 10kHz</p>
+              <h2>⚡ Kiểm Soát Trở Kháng MIT & Mô-men</h2>
+              <p>Tau = Kp*(p_des - p) + Kd*(v_des - v) + T_ff</p>
             </div>
-            <span class="data-badge" style="border-color: var(--color-iq); color: #a78bfa;">TORQUE</span>
+            <span class="data-badge" style="border-color: #10b981; color: #34d399;">MIT / TRQ</span>
+          </div>
+
+          <!-- MIT Impedance Quick Presets -->
+          <label class="target-control">
+            <span>Trở kháng MIT mẫu (Impedance Presets)</span>
+          </label>
+          <div class="command-grid four compact-grid" style="margin-top: 4px;">
+            <button class="btn-mit-preset" data-cmd="MIT 0 0 0 0 0" type="button" title="Trở kháng bằng 0: xoay tay hoàn toàn tự do">🕊️ Backdrive</button>
+            <button class="btn-mit-preset" data-cmd="MIT 0 0 3.0 0.10 0" type="button" title="Lò xo đàn hồi mềm ảo Kp=3, Kd=0.1">🌱 Soft (Kp=3)</button>
+            <button class="btn-mit-preset" data-cmd="MIT 0 0 10.0 0.25 0" type="button" title="Lò xo đàn hồi vừa Kp=10, Kd=0.25">🌿 Med (Kp=10)</button>
+            <button class="btn-mit-preset" data-cmd="MIT 0 0 25.0 0.40 0" type="button" title="Lò xo cứng Kp=25, Kd=0.4">🧱 Firm (Kp=25)</button>
           </div>
 
           <!-- Joint Torque Presets -->
-          <label class="target-control">
-            <span>Mô-men đặt nhanh (Joint Torque Nm)</span>
+          <label class="target-control" style="margin-top: 10px;">
+            <span>Mô-men thuần đặt nhanh (Feedforward Torque Nm)</span>
           </label>
           <div class="command-grid six compact-grid" style="margin-top: 4px;">
             <button class="btn-torque-preset" data-cmd="TORQUE 0.5" type="button">+0.5 Nm</button>
@@ -422,6 +443,21 @@
             <button class="quiet-button" data-cmd="IQ -0.5" type="button">-0.5 A</button>
             <button class="quiet-button" data-cmd="IQ 0.0" type="button">0.0 A</button>
           </div>
+
+          <!-- Custom MIT Impedance Input Block -->
+          <label class="target-control" style="margin-top: 10px;">
+            <span>Tùy chỉnh thông số MIT (P, V, Kp, Kd, T_ff)</span>
+          </label>
+          <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; margin-top: 4px;">
+            <div><small style="color:var(--text-muted);font-size:0.7rem;">P (độ)</small><input id="input-mit-p" class="control-input" type="number" value="0" step="5" style="padding:4px 6px;font-size:0.8rem;"></div>
+            <div><small style="color:var(--text-muted);font-size:0.7rem;">V (rpm)</small><input id="input-mit-v" class="control-input" type="number" value="0" step="10" style="padding:4px 6px;font-size:0.8rem;"></div>
+            <div><small style="color:var(--text-muted);font-size:0.7rem;">Kp (Nm/rad)</small><input id="input-mit-kp" class="control-input" type="number" value="5.0" step="1.0" style="padding:4px 6px;font-size:0.8rem;"></div>
+            <div><small style="color:var(--text-muted);font-size:0.7rem;">Kd</small><input id="input-mit-kd" class="control-input" type="number" value="0.10" step="0.05" style="padding:4px 6px;font-size:0.8rem;"></div>
+            <div><small style="color:var(--text-muted);font-size:0.7rem;">T_ff (Nm)</small><input id="input-mit-tff" class="control-input" type="number" value="0.0" step="0.2" style="padding:4px 6px;font-size:0.8rem;"></div>
+          </div>
+          <button id="btn-send-mit" class="quiet-button success-outline" type="button" style="width: 100%; margin-top: 6px;">
+            ⚡ Cập nhật trở kháng MIT
+          </button>
 
           <!-- Custom Torque Input -->
           <div class="input-action-row" style="margin-top: 10px;">
