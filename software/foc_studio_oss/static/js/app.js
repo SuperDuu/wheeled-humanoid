@@ -695,27 +695,27 @@ const App = {
 
   setupEventListeners() {
     // Theme Toggle
-    document.getElementById('btn-theme-toggle').addEventListener('click', () => this.toggleTheme());
+    document.getElementById('btn-theme-toggle')?.addEventListener('click', () => this.toggleTheme());
 
     // Refresh ports
-    document.getElementById('btn-refresh-ports').addEventListener('click', () => this.fetchPorts());
+    document.getElementById('btn-refresh-ports')?.addEventListener('click', () => this.fetchPorts());
 
     // Connect button
-    document.getElementById('btn-connect').addEventListener('click', () => this.toggleConnect());
+    document.getElementById('btn-connect')?.addEventListener('click', () => this.toggleConnect());
 
     // Mode Buttons
     document.querySelectorAll('.btn-mode').forEach(btn => {
       btn.addEventListener('click', (e) => {
-        const mode = parseInt(e.target.dataset.mode);
+        const mode = parseInt(e.currentTarget.dataset.mode);
         this.setMotorMode(mode);
       });
     });
 
     // Speed Slider (Optional / Legacy)
-    const slider = document.getElementById('speed-slider');
+    const slider = document.getElementById('slider-speed') || document.getElementById('speed-slider');
     slider?.addEventListener('input', (e) => {
-      const txt = document.getElementById('slider-val-text');
-      if (txt) txt.innerText = e.target.value;
+      const txt = document.getElementById('speed-display') || document.getElementById('slider-val-text');
+      if (txt) txt.innerText = `${e.target.value} RPM`;
     });
     slider?.addEventListener('change', (e) => {
       this.sendSpeedCommand(parseFloat(e.target.value));
@@ -748,7 +748,49 @@ const App = {
     document.querySelectorAll('[data-cmd]').forEach(btn => {
       btn.addEventListener('click', () => {
         const cmd = btn.getAttribute('data-cmd');
-        if (cmd) this.sendCustomCommand(cmd);
+        if (!cmd) return;
+
+        if (cmd.startsWith('MOVE ')) {
+          const parts = cmd.split(/\s+/);
+          const deg = parseFloat(parts[1]) || 0;
+          this.currentTargetAngle = deg;
+          const targetTxt = document.getElementById('val-joint-target');
+          if (targetTxt) targetTxt.innerText = `Mục tiêu: ${deg.toFixed(1)}°`;
+          const slider = document.getElementById('joint-angle-slider');
+          if (slider) slider.value = deg;
+          const sliderTxt = document.getElementById('joint-slider-text');
+          if (sliderTxt) sliderTxt.innerText = `${deg.toFixed(1)}°`;
+        } else if (cmd.startsWith('POS ')) {
+          const parts = cmd.split(/\s+/);
+          const deg = parseFloat(parts[1]) || 0;
+          this.currentTargetAngle = deg;
+          const targetTxt = document.getElementById('val-joint-target');
+          if (targetTxt) targetTxt.innerText = `Mục tiêu: ${deg.toFixed(1)}°`;
+          const slider = document.getElementById('joint-angle-slider');
+          if (slider) slider.value = deg;
+          const sliderTxt = document.getElementById('joint-slider-text');
+          if (sliderTxt) sliderTxt.innerText = `${deg.toFixed(1)}°`;
+        } else if (cmd.startsWith('REL ')) {
+          const parts = cmd.split(/\s+/);
+          const deg = parseFloat(parts[1]) || 0;
+          this.currentTargetAngle = (this.currentTargetAngle || 0) + deg;
+          const targetTxt = document.getElementById('val-joint-target');
+          if (targetTxt) targetTxt.innerText = `Mục tiêu: ${this.currentTargetAngle.toFixed(1)}°`;
+          const slider = document.getElementById('joint-angle-slider');
+          if (slider) slider.value = this.currentTargetAngle;
+          const sliderTxt = document.getElementById('joint-slider-text');
+          if (sliderTxt) sliderTxt.innerText = `${this.currentTargetAngle.toFixed(1)}°`;
+        } else if (cmd === 'ZERO' || cmd === 'SETHOME') {
+          this.currentTargetAngle = 0.0;
+          const targetTxt = document.getElementById('val-joint-target');
+          if (targetTxt) targetTxt.innerText = `Mục tiêu: 0.0°`;
+          const slider = document.getElementById('joint-angle-slider');
+          if (slider) slider.value = 0;
+          const sliderTxt = document.getElementById('joint-slider-text');
+          if (sliderTxt) sliderTxt.innerText = `0.0°`;
+        }
+
+        this.sendCustomCommand(cmd);
       });
     });
 
@@ -770,21 +812,31 @@ const App = {
 
     const setSpeed = (val) => {
       const rpm = parseFloat(val) || 0;
-      document.getElementById('input-speed').value = rpm;
-      document.getElementById('slider-speed').value = rpm;
-      document.getElementById('speed-display').innerText = `${rpm} RPM`;
-      document.getElementById('speed-slider').value = rpm;
-      document.getElementById('slider-val-text').innerText = rpm;
+      const inputSpeed = document.getElementById('input-speed');
+      if (inputSpeed) inputSpeed.value = rpm;
+      const sliderSpeed = document.getElementById('slider-speed');
+      if (sliderSpeed) sliderSpeed.value = rpm;
+      const speedDisp = document.getElementById('speed-display');
+      if (speedDisp) speedDisp.innerText = `${rpm} RPM`;
+      const legacySlider = document.getElementById('speed-slider');
+      if (legacySlider) legacySlider.value = rpm;
+      const legacyText = document.getElementById('slider-val-text');
+      if (legacyText) legacyText.innerText = rpm;
       this.sendCustomCommand(`SPEED ${rpm}`);
       this.markModeActive(3);
     };
-    document.getElementById('btn-set-speed')?.addEventListener('click', () => setSpeed(document.getElementById('input-speed').value));
+    document.getElementById('btn-set-speed')?.addEventListener('click', () => {
+      const inputSpeed = document.getElementById('input-speed');
+      if (inputSpeed) setSpeed(inputSpeed.value);
+    });
     document.getElementById('input-speed')?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') setSpeed(e.target.value);
     });
     document.getElementById('slider-speed')?.addEventListener('input', (e) => {
-      document.getElementById('speed-display').innerText = `${e.target.value} RPM`;
-      document.getElementById('input-speed').value = e.target.value;
+      const speedDisp = document.getElementById('speed-display');
+      if (speedDisp) speedDisp.innerText = `${e.target.value} RPM`;
+      const inputSpeed = document.getElementById('input-speed');
+      if (inputSpeed) inputSpeed.value = e.target.value;
     });
     document.getElementById('slider-speed')?.addEventListener('change', (e) => setSpeed(e.target.value));
     document.querySelectorAll('.btn-preset').forEach(btn => {
@@ -794,22 +846,31 @@ const App = {
     const runOpenLoop = (rpm, volt) => {
       const targetRpm = parseFloat(rpm) || 0;
       const targetVolt = parseFloat(volt) || 0;
-      document.getElementById('input-openloop-rpm').value = targetRpm;
-      document.getElementById('input-openloop-volt').value = targetVolt;
-      document.getElementById('slider-openloop').value = targetRpm;
-      document.getElementById('openloop-display').innerText = `${targetRpm} RPM @ ${targetVolt}V`;
+      const inputRpm = document.getElementById('input-openloop-rpm');
+      if (inputRpm) inputRpm.value = targetRpm;
+      const inputVolt = document.getElementById('input-openloop-volt');
+      if (inputVolt) inputVolt.value = targetVolt;
+      const sliderOl = document.getElementById('slider-openloop');
+      if (sliderOl) sliderOl.value = targetRpm;
+      const dispOl = document.getElementById('openloop-display');
+      if (dispOl) dispOl.innerText = `${targetRpm} RPM @ ${targetVolt}V`;
       this.sendCustomCommand(Math.abs(targetRpm) < 0.1 ? 'STOP' : `OPENLOOP ${targetRpm} ${targetVolt}`);
     };
     document.getElementById('btn-run-openloop')?.addEventListener('click', () => {
-      runOpenLoop(document.getElementById('input-openloop-rpm').value, document.getElementById('input-openloop-volt').value);
+      const rpm = document.getElementById('input-openloop-rpm')?.value || '0';
+      const volt = document.getElementById('input-openloop-volt')?.value || '9.0';
+      runOpenLoop(rpm, volt);
     });
     document.getElementById('slider-openloop')?.addEventListener('input', (e) => {
-      const volt = document.getElementById('input-openloop-volt').value;
-      document.getElementById('input-openloop-rpm').value = e.target.value;
-      document.getElementById('openloop-display').innerText = `${e.target.value} RPM @ ${volt}V`;
+      const volt = document.getElementById('input-openloop-volt')?.value || '9.0';
+      const inputRpm = document.getElementById('input-openloop-rpm');
+      if (inputRpm) inputRpm.value = e.target.value;
+      const dispOl = document.getElementById('openloop-display');
+      if (dispOl) dispOl.innerText = `${e.target.value} RPM @ ${volt}V`;
     });
     document.getElementById('slider-openloop')?.addEventListener('change', (e) => {
-      runOpenLoop(e.target.value, document.getElementById('input-openloop-volt').value);
+      const volt = document.getElementById('input-openloop-volt')?.value || '9.0';
+      runOpenLoop(e.target.value, volt);
     });
     document.querySelectorAll('.btn-open-preset').forEach(btn => {
       btn.addEventListener('click', () => runOpenLoop(btn.dataset.rpm, btn.dataset.volt || '9.0'));
@@ -817,20 +878,28 @@ const App = {
 
     const setIq = (val) => {
       const iq = parseFloat(val) || 0;
-      document.getElementById('input-iq').value = iq.toFixed(2);
-      document.getElementById('slider-iq').value = iq;
-      document.getElementById('iq-display').innerText = `${iq.toFixed(2)} A`;
+      const inputIq = document.getElementById('input-iq');
+      if (inputIq) inputIq.value = iq.toFixed(2);
+      const sliderIq = document.getElementById('slider-iq');
+      if (sliderIq) sliderIq.value = iq;
+      const dispIq = document.getElementById('iq-display');
+      if (dispIq) dispIq.innerText = `${iq.toFixed(2)} A`;
       this.sendCustomCommand(`IQ ${iq.toFixed(2)}`);
       this.markModeActive(1);
     };
-    document.getElementById('btn-set-iq')?.addEventListener('click', () => setIq(document.getElementById('input-iq').value));
+    document.getElementById('btn-set-iq')?.addEventListener('click', () => {
+      const inputIq = document.getElementById('input-iq');
+      if (inputIq) setIq(inputIq.value);
+    });
     document.getElementById('input-iq')?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') setIq(e.target.value);
     });
     document.getElementById('slider-iq')?.addEventListener('input', (e) => {
       const iq = parseFloat(e.target.value) || 0;
-      document.getElementById('input-iq').value = iq.toFixed(2);
-      document.getElementById('iq-display').innerText = `${iq.toFixed(2)} A`;
+      const inputIq = document.getElementById('input-iq');
+      if (inputIq) inputIq.value = iq.toFixed(2);
+      const dispIq = document.getElementById('iq-display');
+      if (dispIq) dispIq.innerText = `${iq.toFixed(2)} A`;
     });
     document.getElementById('slider-iq')?.addEventListener('change', (e) => setIq(e.target.value));
     document.querySelectorAll('.btn-iq-preset').forEach(btn => {
@@ -840,16 +909,28 @@ const App = {
     const setPosition = (val) => {
       const deg = parseFloat(val) || 0;
       const rad = deg * Math.PI / 180;
-      document.getElementById('input-pos').value = deg;
-      document.getElementById('pos-display').innerText = `${deg.toFixed(1)} deg (${rad.toFixed(2)} rad)`;
+      const inputPos = document.getElementById('input-pos');
+      if (inputPos) inputPos.value = deg;
+      const dispPos = document.getElementById('pos-display');
+      if (dispPos) dispPos.innerText = `${deg.toFixed(1)} deg (${rad.toFixed(2)} rad)`;
+      this.currentTargetAngle = deg;
+      const targetTxt = document.getElementById('val-joint-target');
+      if (targetTxt) targetTxt.innerText = `Mục tiêu: ${deg.toFixed(1)}°`;
+      const slider = document.getElementById('joint-angle-slider');
+      if (slider) slider.value = deg;
+      const sliderTxt = document.getElementById('joint-slider-text');
+      if (sliderTxt) sliderTxt.innerText = `${deg.toFixed(1)}°`;
       this.sendCustomCommand(`POS ${deg}`);
       this.markModeActive(4);
     };
-    document.getElementById('btn-set-pos')?.addEventListener('click', () => setPosition(document.getElementById('input-pos').value));
+    document.getElementById('btn-set-pos')?.addEventListener('click', () => {
+      const inputPos = document.getElementById('input-pos');
+      if (inputPos) setPosition(inputPos.value);
+    });
     document.getElementById('input-pos')?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') setPosition(e.target.value);
     });
-    document.querySelectorAll('.btn-pos-preset').forEach(btn => {
+    document.querySelectorAll('.btn-pos-preset[data-deg]').forEach(btn => {
       btn.addEventListener('click', () => setPosition(btn.dataset.deg));
     });
 
@@ -865,6 +946,7 @@ const App = {
       const sliderTxt = document.getElementById('joint-slider-text');
       if (sliderTxt) sliderTxt.innerText = `${deg.toFixed(1)}°`;
       this.sendCustomCommand(`MOVE ${deg} ${time}`);
+      this.markModeActive(4);
     };
 
     document.getElementById('btn-run-joint-move')?.addEventListener('click', () => {
@@ -900,6 +982,18 @@ const App = {
     document.getElementById('btn-send-torque')?.addEventListener('click', () => {
       const tau = parseFloat(document.getElementById('input-custom-torque')?.value) || 0;
       this.sendCustomCommand(`TORQUE ${tau}`);
+      this.markModeActive(5);
+    });
+
+    // MIT Impedance Command Handler
+    document.getElementById('btn-send-mit')?.addEventListener('click', () => {
+      const p = parseFloat(document.getElementById('input-mit-p')?.value || '0');
+      const v = parseFloat(document.getElementById('input-mit-v')?.value || '0');
+      const kp = parseFloat(document.getElementById('input-mit-kp')?.value || '5.0');
+      const kd = parseFloat(document.getElementById('input-mit-kd')?.value || '0.10');
+      const tff = parseFloat(document.getElementById('input-mit-tff')?.value || '0');
+      this.sendCustomCommand(`MIT ${p} ${v} ${kp} ${kd} ${tff}`);
+      this.markModeActive(5);
     });
 
     document.getElementById('btn-quick-sethome')?.addEventListener('click', () => this.sendCustomCommand('SETHOME'));
@@ -966,6 +1060,11 @@ const App = {
       const preferred = ports.find(p => p.device !== 'SIMULATION');
       if (preferred) {
         select.value = preferred.device;
+        if (!this.connected) {
+          setTimeout(() => {
+            if (!this.connected) this.toggleConnect();
+          }, 350);
+        }
       }
     } catch (e) {
       select.innerHTML = '<option value="">Error scanning ports</option>';
@@ -1037,7 +1136,7 @@ const App = {
     document.querySelectorAll('.btn-mode').forEach(b => {
       b.classList.toggle('active', parseInt(b.dataset.mode) === mode);
     });
-    const modeNames = ['IDLE (0)', 'CURRENT (1)', 'BRAKE (2)', 'SPEED (3)', 'POSITION (4)', 'VOLTAGE (5)'];
+    const modeNames = ['IDLE (0)', 'CURRENT (1)', 'HOLD (2)', 'SPEED (3)', 'POSITION (4)', 'MIT/TRQ (5)'];
     const badge = document.getElementById('active-mode-badge');
     if (badge) badge.innerText = modeNames[mode] || `MODE ${mode}`;
     const modeText = document.getElementById('val-mode');
@@ -1045,17 +1144,21 @@ const App = {
   },
 
   async setMotorMode(mode) {
-    const modeNames = ['IDLE (0)', 'CURRENT (1)', 'BRAKE (2)', 'SPEED (3)', 'POSITION (4)'];
+    const modeNames = ['IDLE (0)', 'CURRENT (1)', 'HOLD (2)', 'SPEED (3)', 'POSITION (4)', 'MIT/TRQ (5)'];
     this.markModeActive(mode);
 
-    const targetVal = parseFloat(document.getElementById('speed-slider').value);
+    let targetVal = 0;
+    const speedSlider = document.getElementById('slider-speed') || document.getElementById('speed-slider');
+    if (speedSlider) {
+      targetVal = parseFloat(speedSlider.value) || 0;
+    }
     try {
       await fetch('/api/control', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ control_mode: mode, target_value: targetVal })
       });
-      this.log(`Motor Mode changed to ${modeNames[mode]}`, 'system');
+      this.log(`Motor Mode changed to ${modeNames[mode] || mode}`, 'system');
     } catch (e) {
       this.log(`Error setting mode: ${e.message}`, 'error');
     }
@@ -1073,11 +1176,11 @@ const App = {
     try {
       await this.sendCustomCommand('STOP');
       this.markModeActive(0);
-      const speedSlider = document.getElementById('speed-slider');
-      const speedText = document.getElementById('slider-val-text');
+      const speedSlider = document.getElementById('slider-speed') || document.getElementById('speed-slider');
+      const speedText = document.getElementById('speed-display') || document.getElementById('slider-val-text');
       if (speedSlider) speedSlider.value = 0;
-      if (speedText) speedText.innerText = '0';
-      this.log('EMERGENCY STOP ACTIVATED! Motor set to IDLE.', 'error');
+      if (speedText) speedText.innerText = '0 RPM';
+      this.log('EMERGENCY STOP ACTIVATED! Motor set to IDLE (STOP).', 'error');
     } catch (e) {
       this.log(`E-Stop failed: ${e.message}`, 'error');
     }
@@ -1312,8 +1415,24 @@ const App = {
       const err = jointDeg - this.currentTargetAngle;
       setTxt('val-joint-error', `Sai số: ${err >= 0 ? '+' : ''}${err.toFixed(1)}°`);
     }
-    const modeNames = ['IDLE', 'CURRENT', 'BRAKE', 'SPEED', 'POSITION', 'VOLTAGE', 'HANDBRAKE', 'OPENLOOP'];
-    setTxt('val-mode', modeNames[data.control_mode] || `MODE ${data.control_mode}`);
+    let modeLabel = 'IDLE';
+    if ((data.motor_state || 0) === 0) {
+      modeLabel = 'IDLE (OFF)';
+    } else {
+      const modeMap = {
+        0: 'DUTY',
+        1: 'POWER',
+        2: 'CURRENT',
+        3: 'BRAKE',
+        4: 'SPEED',
+        5: 'POS',
+        6: 'HANDBRAKE',
+        7: 'OPENLOOP',
+        8: 'MIT/TRQ'
+      };
+      modeLabel = modeMap[data.control_mode] || `MODE ${data.control_mode}`;
+    }
+    setTxt('val-mode', modeLabel);
 
     const faultEl = document.getElementById('val-fault');
     if (faultEl) {
@@ -1449,8 +1568,10 @@ const App = {
 };
 
 window.setQuickRpm = (rpm) => {
-  document.getElementById('speed-slider').value = rpm;
-  document.getElementById('slider-val-text').innerText = rpm;
+  const speedSlider = document.getElementById('slider-speed') || document.getElementById('speed-slider');
+  if (speedSlider) speedSlider.value = rpm;
+  const speedText = document.getElementById('speed-display') || document.getElementById('slider-val-text');
+  if (speedText) speedText.innerText = `${rpm} RPM`;
   App.sendSpeedCommand(rpm);
 };
 
