@@ -358,7 +358,11 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 		d_gain = conf_now->p_pid_kd;
 		ki_gain = conf_now->p_pid_ki;
 	}
-	float p_term = error * p_gain;
+	float eff_pos_error = error;
+	if (gear_ratio <= 1.05f && fabsf(target_vel_rad_s) < 0.001f && fabsf(error) < 0.00060f) {
+		eff_pos_error = 0.0f;
+	}
+	float p_term = eff_pos_error * p_gain;
 	float d_term = vel_error * d_gain;
 	if (ki_gain > 0.0f) {
 		float max_pos_i = (gear_ratio <= 1.05f) ? 0.020f : 0.40f;
@@ -458,7 +462,7 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	}
 
 	/* Proportional + Damping controller with integral action */
-	float default_kp = (gear_ratio_speed <= 1.05f) ? 0.00028f : 0.0015f;
+	float default_kp = (gear_ratio_speed <= 1.05f) ? 0.00080f : 0.0015f;
 	float speed_kp = (conf_now->s_pid_kp > 0.00001f) ? conf_now->s_pid_kp : default_kp;
 	float p_term = speed_kp * error_erpm;
 
@@ -479,10 +483,12 @@ void foc_run_pid_control_speed(bool index_found, float dt, motor_all_state_t *mo
 	float iq_min = -iq_limit;
 	float iq_max = iq_limit;
 
-	/* Speed Integral action with anti-windup */
-	float default_ki = (gear_ratio_speed <= 1.05f) ? 0.00060f : 0.0010f;
+	/* Speed Integral action with anti-windup: allow up to 75% of l_current_max for load-carrying stiffness */
+	float default_ki = (gear_ratio_speed <= 1.05f) ? 0.00120f : 0.0015f;
 	float speed_ki = (conf_now->s_pid_ki > 0.00001f) ? conf_now->s_pid_ki : default_ki;
-	float i_max = (gear_ratio_speed <= 1.05f) ? 0.32f : SPEED_IQ_I_MAX_A;
+	float i_max = conf_now->l_current_max * 0.75f;
+	if (i_max > 3.00f) i_max = 3.00f;
+	if (i_max < 0.50f) i_max = 0.50f;
 	if (speed_ki > 0.0f) {
 		motor->m_speed_i_term += speed_ki * error_erpm * dt;
 		utils_truncate_number_abs(&motor->m_speed_i_term, i_max);
@@ -587,3 +593,44 @@ void foc_update_cycloidal_joint_angle(motor_all_state_t *motor, float raw_mech_a
 	// Góc đầu ra của khớp sau tỉ số truyền (mặc định 1:1 cho Direct Drive hoặc 1:17 cho hộp số)
 	motor->m_joint_angle = (motor->m_total_mech_angle / motor->m_conf->gear_ratio) * (float)motor->m_conf->encoder_direction;
 }
+
+/**
+  * @brief  MIT Mini Cheetah Real-Time Impedance Control
+  *         tau = kp * (p_des - p) + kd * (v_des - v) + t_ff
+  *         Output: direct quadrature current Iq command (A)
+  */
+void foc_run_mit_control(motor_all_state_t *motor) {
+	if (motor == NULL || motor->m_conf == NULL) {
+		return;
+	}
+	mc_configuration *conf = motor->m_conf;
+	float gear_ratio = (conf->gear_ratio > 0.1f) ? conf->gear_ratio : 1.0f;
+	float pole_pairs = (float)conf->foc_motor_pole_pairs;
+	if (pole_pairs < 1.0f) {
+		pole_pairs = 21.0f;
+	}
+
+	float p_actual = motor->m_joint_angle; // Output joint angle (rad)
+	float v_actual = (motor->m_speed_est_fast / pole_pairs) / gear_ratio; // Output joint velocity (rad/s)
+
+	/* Real-time Impedance Control Law */
+	float torque_cmd = motor->m_mit_kp * (motor->m_mit_p_des - p_actual)
+	                 + motor->m_mit_kd * (motor->m_mit_v_des - v_actual)
+	                 + motor->m_mit_t_ff;
+
+	/* Joint torque to motor current conversion: Kt = 1.5 * pp * lambda * gear_ratio */
+	float lambda = (conf->gear_ratio <= 1.05f) ? 0.0210f : conf->foc_motor_flux_linkage;
+	if (lambda < 0.001f) {
+		lambda = 0.0210f;
+	}
+	float kt_joint = 1.5f * pole_pairs * lambda * gear_ratio;
+	if (kt_joint < 0.05f) {
+		kt_joint = 0.6615f;
+	}
+
+	float iq_cmd = torque_cmd / kt_joint;
+	utils_truncate_number_abs(&iq_cmd, conf->l_current_max);
+
+	motor->m_iq_set = iq_cmd;
+}
+
