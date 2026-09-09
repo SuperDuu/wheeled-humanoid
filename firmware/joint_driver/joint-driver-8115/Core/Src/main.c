@@ -1174,7 +1174,7 @@ int main(void)
       // Nếu có lỗi an toàn (Overcurrent/Overvoltage), tự động reset mode về 0 để không bị vòng lặp ON/OFF
       run_foc_mode = 0;
       g_foc_controller.motor.m_state = MC_STATE_OFF;
-    } else if (run_foc_mode == 1 || run_foc_mode == 2 || run_foc_mode == 3 || run_foc_mode == 4) {
+    } else if (run_foc_mode >= 1 && run_foc_mode <= 5) {
       // Tự động Căn chỉnh Góc Encoder (Align) Lần đầu nếu chưa được căn chỉnh
       if (!g_foc_controller.aligned && run_alignment != 1) {
         run_alignment = 1;
@@ -1202,6 +1202,9 @@ int main(void)
       } else if (run_foc_mode == 4) { // Direct Voltage Vq Mode
         g_foc_controller.motor.m_state = MC_STATE_RUNNING;
         g_foc_controller.motor.m_control_mode = CONTROL_MODE_DUTY;
+      } else if (run_foc_mode == 5) {
+        g_foc_controller.motor.m_state = MC_STATE_RUNNING;
+        g_foc_controller.motor.m_control_mode = CONTROL_MODE_MIT;
       }
     } else if (run_direction_test != 1 && run_alignment != 1 &&
                run_calibration != 1 && run_open_loop != 1) {
