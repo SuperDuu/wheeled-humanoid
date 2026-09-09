@@ -220,6 +220,21 @@ class SerialManager:
                 self.sim_target_rpm = float(parts[1])
                 if len(parts) >= 3:
                     self.sim_vbus = max(0.0, min(60.0, float(parts[2]) * 2.4))
+            elif cmd in ("HOLD", "LOCK"):
+                self.sim_mode = 2
+                self.sim_target_rpm = 0.0
+                self.sim_iq_target = 0.0
+            elif cmd in ("FREE", "RELEASE"):
+                self.sim_mode = 0
+                self.sim_target_rpm = 0.0
+                self.sim_iq_target = 0.0
+            elif cmd == "TORQUE" and len(parts) >= 2:
+                self.sim_mode = 5
+                self.sim_iq_target = float(parts[1]) / 5.4
+            elif cmd == "MOVE" and len(parts) >= 2:
+                self.sim_mode = 4
+            elif cmd == "MIT":
+                self.sim_mode = 5
             elif cmd == "POS" and len(parts) >= 2:
                 self.sim_mode = 4
             self.log_diagnostic(f"Simulation command: {text}")
@@ -245,10 +260,14 @@ class SerialManager:
             return self.send_ascii_command("STOP")
         if mode == 1:
             return self.send_ascii_command(f"IQ {float(target_val):.3f}")
+        if mode == 2:
+            return self.send_ascii_command("HOLD")
         if mode == 3:
             return self.send_ascii_command(f"SPEED {float(target_val):.1f}")
         if mode == 4:
             return self.send_ascii_command(f"POS {float(target_val):.3f}")
+        if mode == 5:
+            return self.send_ascii_command(f"TORQUE {float(target_val):.3f}")
         return self.send_ascii_command(f"MODE {int(mode)}")
 
     def _hardware_read_worker(self) -> None:
