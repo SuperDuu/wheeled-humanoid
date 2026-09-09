@@ -9,6 +9,7 @@
 
 static FDCAN_HandleTypeDef *g_hfdcan = NULL;
 static uint8_t g_node_id = DEFAULT_CAN_NODE_ID;
+extern volatile int run_foc_mode;
 
 /* Big-Endian Buffer Helpers (VESC Protocol) */
 static int32_t buffer_get_int32(const uint8_t *buffer, int32_t *index) {
@@ -128,22 +129,28 @@ void comm_can_process_rx_frame(FDCAN_RxHeaderTypeDef *rx_header, uint8_t *rx_dat
         float t_ff  = uint_to_float(t_int,  MIT_T_MIN,  MIT_T_MAX,  12);
 
         /* Real-Time Impedance Control: Tau = Kp*(p_des - p) + Kd*(v_des - v) + t_ff */
-        float p_actual = g_foc_controller.motor.m_joint_angle; // Output rad
-        float gear_ratio = (g_foc_controller.conf.gear_ratio > 0.1f) ? g_foc_controller.conf.gear_ratio : 17.0f;
-        float pole_pairs = (float)g_foc_controller.conf.foc_motor_pole_pairs;
-        float v_actual = (g_foc_controller.motor.m_speed_est_fast / pole_pairs) / gear_ratio; // Output rad/s
-
-        float torque_cmd = kp * (p_des - p_actual) + kd * (v_des - v_actual) + t_ff;
-        float kt_joint = g_foc_controller.conf.foc_motor_flux_linkage * 1.5f * pole_pairs * gear_ratio;
-        float iq_cmd = torque_cmd / (kt_joint > 0.1f ? kt_joint : 6.2f);
-
-        utils_truncate_number_abs(&iq_cmd, g_foc_controller.conf.l_current_max);
-        g_foc_controller.motor.m_iq_set = iq_cmd;
-        g_foc_controller.motor.m_control_mode = CONTROL_MODE_CURRENT;
+        g_foc_controller.motor.m_mit_p_des = p_des;
+        g_foc_controller.motor.m_mit_v_des = v_des;
+        g_foc_controller.motor.m_mit_kp    = kp;
+        g_foc_controller.motor.m_mit_kd    = kd;
+        g_foc_controller.motor.m_mit_t_ff  = t_ff;
+        g_foc_controller.motor.m_control_mode = CONTROL_MODE_MIT;
         g_foc_controller.motor.m_state = MC_STATE_RUNNING;
+        run_foc_mode = 5;
         TIM1_EnsureMoeEnabled();
 
+        foc_run_mit_control(&g_foc_controller.motor);
+
         /* Immediate Packed Reply (p_actual, v_actual, torque_actual from measured Iq) */
+        float gear_ratio = (g_foc_controller.conf.gear_ratio > 0.1f) ? g_foc_controller.conf.gear_ratio : 1.0f;
+        float pole_pairs = (float)g_foc_controller.conf.foc_motor_pole_pairs;
+        if (pole_pairs < 1.0f) pole_pairs = 21.0f;
+        float lambda = (g_foc_controller.conf.gear_ratio <= 1.05f) ? 0.0210f : g_foc_controller.conf.foc_motor_flux_linkage;
+        if (lambda < 0.001f) lambda = 0.0210f;
+        float kt_joint = 1.5f * pole_pairs * lambda * gear_ratio;
+
+        float p_actual = g_foc_controller.motor.m_joint_angle;
+        float v_actual = (g_foc_controller.motor.m_speed_est_fast / pole_pairs) / gear_ratio;
         float t_actual = g_foc_controller.motor.m_motor_state.iq_filter * kt_joint;
         comm_can_send_mit_reply(p_actual, v_actual, t_actual);
         return;
