@@ -1837,3 +1837,32 @@ Server FOC Studio OSS đang chạy liên tục ở cổng `1111`:
    - Bấm `🌱 Soft (Kp=3)` hoặc `🌿 Med (Kp=10)`: Dùng tay vặn lệch trục đi một góc xem có cảm nhận được lực đàn hồi lò xo ảo kéo về mốc 0 độ hay không.
 4. **Kiểm tra Dừng Khẩn Cấp:** Bấm nút đỏ `🛑 DỪNG KHẨN CẤP (STOP)` bất cứ lúc nào để ngắt toàn bộ xung PWM đưa driver về chế độ nghỉ an toàn.
 
+---
+
+## 23. BẢO MẬT PHẦN CỨNG: TÁCH RIÊNG THƯ MỤC ELECTRONICS THÀNH PRIVATE SUBMODULE (2026-09-09)
+
+### 23.1. Lý do & Mục tiêu
+- **Mục tiêu:** Ngăn chặn tuyệt đối việc người ngoài sao chép, tải về thiết kế mạch KiCad, Gerber, BOM và schematic từ repository công khai `SuperDuu/wheeled-humanoid`.
+- **Yêu cầu bắt buộc:** Giữ nguyên 100% cấu trúc thư mục trên máy tính cục bộ (`/home/du/Desktop/wheeled-humanoid/hardware/electronics/`), không làm gián đoạn việc thiết kế mạch hay liên kết trong dự án.
+
+### 23.2. Quá trình thực hiện
+1. **Sao lưu an toàn:** Tạo bản sao lưu đầy đủ toàn bộ workspace sang `/home/du/Desktop/wheeled-humanoid_BACKUP_20260909_SAFE` (3.7 GB).
+2. **Khởi tạo Private Repository trên GitHub:**
+   - Tạo repo mới: `SuperDuu/wheeled-humanoid-electronics` (trạng thái: **Private**).
+   - Xác thực ẩn danh trả về `HTTP 404 Not Found` đối với người ngoài.
+3. **Di chuyển toàn bộ lịch sử mạch điện sang Private Repo:**
+   - Dùng `git subtree split` trích xuất đầy đủ 100% lịch sử commit và các file nguồn (KiCad, Gerber, BOM, 3D STEP).
+   - Đẩy lên `SuperDuu/wheeled-humanoid-electronics.git` nhánh `main`.
+4. **Làm sạch lịch sử Git của Repo chính (Public):**
+   - Dùng công cụ `git-filter-repo` dọn dẹp triệt để đường dẫn `hardware/electronics` khỏi toàn bộ lịch sử commit của cả 2 nhánh `main` và `tuan`.
+   - Kết quả: `git log --oneline -- hardware/electronics` trên repo công khai chỉ còn duy nhất 1 commit submodule mới, không còn bất kỳ dấu vết nào của các file Gerber/KiCad cũ.
+5. **Gắn Git Submodule:**
+   - Thêm `hardware/electronics` làm submodule trỏ vào `https://github.com/SuperDuu/wheeled-humanoid-electronics.git`.
+   - Khôi phục đầy đủ metadata `.gitignore`, `.history`, `.bak` cục bộ.
+6. **Đồng bộ remote:**
+   - Đã push force cập nhật lịch sử an toàn lên `origin/main` và `origin/tuan`.
+
+### 23.3. Kết quả xác minh
+- **Tại máy tính cục bộ:** Thư mục `/home/du/Desktop/wheeled-humanoid/hardware/electronics/` chứa đầy đủ 100% file gốc, khớp tuyệt đối với bản backup (diff 0 byte khác biệt).
+- **Trên GitHub:** Repo `SuperDuu/wheeled-humanoid-electronics` ở chế độ Private hoàn toàn. Người ngoài truy cập vào repo chính chỉ thấy con trỏ submodule, click vào sẽ báo 404 Not Found.
+
