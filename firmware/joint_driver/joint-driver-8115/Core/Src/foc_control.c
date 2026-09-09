@@ -38,7 +38,7 @@ void FOC_Control_Init(FOC_Controller_t *foc, SPI_HandleTypeDef *hspi1_drv, SPI_H
     foc->offset_ia = 0.0f;
     foc->offset_ib = 0.0f;
     foc->calibrated_offsets = false;
-    foc->zero_electric_angle = 0.0f;
+    foc->zero_electric_angle = -0.1554f;
     foc->aligned = false;
     foc->observer_angle_active = false;
     foc->observer_phase_interp = 0.0f;
@@ -484,11 +484,13 @@ void FOC_Control_SlowLoop(FOC_Controller_t *foc, float dt)
         foc->observer_phase_interp = motor->m_phase_now_observer;
     }
 
-    // 2. Run Position PID or Speed PID based on Control Mode (generates target Iq)
+    // 2. Run Position PID, Speed PID, or MIT Impedance Control based on Control Mode (generates target Iq)
     if (motor->m_control_mode == CONTROL_MODE_POS) {
         foc_run_pid_control_pos(true, dt, motor);
     } else if (motor->m_control_mode == CONTROL_MODE_SPEED) {
         foc_run_pid_control_speed(true, dt, motor);
+    } else if (motor->m_control_mode == CONTROL_MODE_MIT) {
+        foc_run_mit_control(motor);
     }
 
     // 3. Run Field Weakening
