@@ -45,6 +45,12 @@ def get_clean_telemetry_sample(ser):
             if len(buf) < PKT_SIZE:
                 break
             pkt = bytes(buf[:PKT_SIZE])
+            calc_csum = sum(pkt[4:-2]) & 0xFFFF
+            pkt_csum = struct.unpack('<H', pkt[-2:])[0]
+            if calc_csum != pkt_csum:
+                # False-positive magic in payload, advance and find real frame
+                del buf[:2]
+                continue
             del buf[:PKT_SIZE]
             u = struct.unpack(PKT_FMT, pkt)
             return {
@@ -204,6 +210,8 @@ def main():
         time.sleep(0.1)
         ser.write(b"DIR 1\r\n")
         time.sleep(0.1)
+        ser.write(b"OFFSET -0.1554\r\n")
+        time.sleep(0.2)
         ser.write(b"SETHOME\r\n")
         time.sleep(0.3)
         ser.reset_input_buffer()
