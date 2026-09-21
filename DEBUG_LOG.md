@@ -1920,3 +1920,44 @@ Kết quả đo đạc thực nghiệm từ engine mô phỏng trên các kịch
   - Giám sát đứt kết nối Joint 4 & Watchdog trip: `j4_disconnected_view_1789957203021.png`
   - Phục hồi kết nối Joint 4 mượt mà: `j4_reconnected_view_1789957212881.png`
 
+---
+
+## 24. Nâng Cấp Giao Diện Chuẩn SCADA Công Nghiệp & Đổi Cổng Port 8090 (Tránh Trùng Lặp Port 8088)
+
+- **Thời gian thực hiện:** 21/09/2026
+- **Mục tiêu:**
+  1. Loại bỏ triệt để toàn bộ biểu tượng cảm xúc (emoji/icon) trên giao diện theo yêu cầu nghiêm ngặt của người vận hành.
+  2. Áp dụng chuẩn SCADA Dark Mode True Black (`#000000` OLED, không ánh tím, viền tinh gọn `#1c1c1c`, typography kỹ thuật JetBrains Mono & Plus Jakarta Sans) tương tự thiết kế tại `/home/du/Desktop/iot-road-light-monitor/web-dashboard/v2`.
+  3. Bố trí bảng dữ liệu kỹ thuật song song 2 cánh tay (Panel A: Tay Phải `can0` - Nodes 1..8; Panel B: Tay Trái `can1` - Nodes 9..16).
+  4. Chuyển cổng dịch vụ Web từ `8088` sang `8090` do cổng `8088` đang được sử dụng cho ứng dụng HumanoidMJX.
+  5. Đánh giá chuyên sâu về mặt điện tử vật lý đối với việc sử dụng transceiver `TJA1051` không cách ly trên mạch `driver-bldc-foc-v2`.
+
+### 24.1. Chi tiết Thay Đổi Mã Nguồn
+1. **`software/can_fd_sim/run_sim.py`**:
+   - Chuyển cổng mặc định của web server từ `8088` sang `8090`.
+2. **`software/can_fd_sim/can_simulator.py`**:
+   - Xóa bỏ toàn bộ ký tự emoji trong các thông báo nhật ký (`🚨`, `✅`, `❌`, `🟢`, `⚠️`, `🛑`) và thay bằng nhãn kỹ thuật chuẩn SCADA (`[ESTOP]`, `[RESET]`, `[DISCONNECT]`, `[LINK]`, `[BUS_OFF]`, `[WATCHDOG]`).
+3. **`software/can_fd_sim/static/index.html`**:
+   - Thiết kế lại toàn bộ header SCADA: thanh công cụ 48px với brand badge `CAN-BUS SCADA DUAL-ARM`, các status chips kỹ thuật (`PHY: CAN-FD 1M/5M`, `BUS: DUAL can0+can1`, `HOST: JETSON ORIN`, `RX/TX`, `PASSIVITY PRESERVED`).
+   - Thanh kịch bản công nghiệp không emoji (`SCEN_01: DUAL_ARM_500HZ`, `SCEN_02: SINGLE_ARM_500HZ`, `SCEN_03: BUS_OVERLOAD_STORM`, `SCEN_04: HARDWARE_ESTOP_PREEMPT`, `SCEN_05: WIRE_DISCONNECT_J4`, `SCEN_06: EMI_NOISE_BURST`).
+   - 5 thẻ KPI SCADA đo tải bus từng nhánh, độ trễ WCRT, tỷ lệ gói tin và trạng thái Watchdog.
+   - 2 bảng telemetry kỹ thuật độc lập hiển thị chi tiết 16 khớp: ID hex, tên khớp, góc thực tế (°), góc mục tiêu (°), vận tốc (rad/s), mô-men (Nm), nhiệt độ (°C), độ trễ RTT (µs), trạng thái (`ONLINE`, `ESTOP_LOCK`, `WATCHDOG_TRIP`) và nút điều khiển `CUT`/`LINK`.
+   - Biểu đồ hiện sóng Waterfall thời gian thực và khung nhật ký SCADA Audit Trail thời gian thực.
+4. **`software/can_fd_sim/static/css/style.css`**:
+   - Áp dụng hệ màu SCADA OLED True Black (`--bg-app: #000000`, `--bg-surface: #080808`, `--border-light: #1c1c1c`, `--primary-main: #00e5ff`, `--ok-main: #10b981`, `--danger-main: #ef4444`).
+5. **`software/can_fd_sim/static/js/app.js`**:
+   - Khắc phục các trường dữ liệu khớp với cấu trúc `get_snapshot()` của engine mô phỏng.
+   - Cập nhật thời gian thực cả 2 bảng cánh tay và biểu đồ Waterfall.
+
+### 24.2. Kết Quả Kiểm Chứng Tự Động (Browser Subagent)
+- **URL thử nghiệm:** `http://localhost:8090/`
+- **Video phiên kiểm thử:** `scada_port_8090_verified_1789958611839.webp`
+- **Ảnh chụp bằng chứng:**
+  - Giao diện ban đầu trên port 8090: `scada_dashboard_initial_1789958643044.png`
+  - Kích hoạt E-Stop khẩn cấp: `estop_active_state_1789958688463.png`
+  - Toàn cảnh giao diện SCADA hoàn chỉnh: `scada_dashboard_final_1789958732294.png`
+- **Kết quả:**
+  - 0 emoji tồn tại trên giao diện.
+  - Tải bus can0 và can1 phân bổ chính xác (43.7% mỗi bên ở 500 Hz).
+  - Thao tác E-Stop phản hồi tức thì trong $101.7\ \mu\text{s}$, đưa toàn bộ 16 khớp về trạng thái an toàn.
+
