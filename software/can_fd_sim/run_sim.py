@@ -161,7 +161,7 @@ def main():
     parser.add_argument("--endurance-test", action="store_true", help="Run 2-hour continuous endurance test")
     parser.add_argument("--hours", type=float, default=2.0, help="Duration of endurance test in hours")
     parser.add_argument("--host", type=str, default="0.0.0.0", help="Web server host")
-    parser.add_argument("--port", type=int, default=8088, help="Web server port")
+    parser.add_argument("--port", type=int, default=8090, help="Web server port")
     args = parser.parse_args()
 
     if args.benchmark:
