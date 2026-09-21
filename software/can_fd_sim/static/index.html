@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CAN / CAN-FD Humanoid Robotics Bus Simulator</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="dashboard-container">
+    
+    <!-- HEADER -->
+    <header class="glass-panel">
+      <div class="brand-section">
+        <div class="brand-icon">⚡</div>
+        <div class="brand-title">
+          <h1>CAN & CAN-FD Humanoid Arm Bus Simulator</h1>
+          <p>Hardware-Accurate Bitwise Arbitration • E-Stop Preemption • Heartbeat Watchdog • Multi-Node Profiler</p>
+        </div>
+      </div>
+      
+      <div class="header-actions">
+        <!-- Protocol Mode Switcher -->
+        <div class="protocol-toggle-group">
+          <button id="btnProtoCAN20" class="protocol-btn" onclick="setProtocol('CAN20')">CAN 2.0B (1 Mbps)</button>
+          <button id="btnProtoCANFD" class="protocol-btn active" onclick="setProtocol('CANFD')">CAN-FD (1M / 5M BRS)</button>
+        </div>
+        
+        <!-- Emergency Stop Buttons -->
+        <button id="btnEStop" class="estop-button" onclick="triggerEStop()">
+          🚨 EMERGENCY STOP
+        </button>
+        <button id="btnResetEStop" class="btn-secondary" onclick="resetEStop()">
+          🔄 Reset E-Stop
+        </button>
+        
+        <!-- Benchmark Trigger -->
+        <button id="btnBenchmark" class="btn-secondary" onclick="openBenchmarkModal()">
+          📊 Run Benchmark
+        </button>
+      </div>
+    </header>
+
+    <!-- KPI ROW -->
+    <div class="kpi-grid">
+      <!-- Bus Load -->
+      <div class="kpi-card glass-panel" id="cardBusLoad">
+        <div class="kpi-header">
+          <span>Bus Utilization</span>
+          <span id="txtBaudInfo">1M / 5M BRS</span>
+        </div>
+        <div class="kpi-value" id="valBusLoad">0.0 %</div>
+        <div class="load-progress-bar">
+          <div class="load-progress-fill" id="fillBusLoad" style="width: 0%;"></div>
+        </div>
+        <div class="kpi-subtext" id="txtBusLoadPeak">Peak: 0.0% | Status: SAFE</div>
+      </div>
+
+      <!-- Average Latency -->
+      <div class="kpi-card glass-panel">
+        <div class="kpi-header">
+          <span>Avg Latency (Downlink+TX)</span>
+          <span>Target &lt; 500µs</span>
+        </div>
+        <div class="kpi-value" id="valLatencyAvg">0.0 µs</div>
+        <div class="kpi-subtext" id="txtJitter">Jitter (σ): 0.0 µs</div>
+      </div>
+
+      <!-- P99 Latency -->
+      <div class="kpi-card glass-panel">
+        <div class="kpi-header">
+          <span>P99 Worst-Case Latency</span>
+          <span>99th Percentile</span>
+        </div>
+        <div class="kpi-value" id="valLatencyP99">0.0 µs</div>
+        <div class="kpi-subtext" id="txtLatencyMax">Max Seen: 0.0 µs</div>
+      </div>
+
+      <!-- E-Stop Latency -->
+      <div class="kpi-card glass-panel success" id="cardEStopLat">
+        <div class="kpi-header">
+          <span>E-Stop Preemption Latency</span>
+          <span>Priority ID 0x001</span>
+        </div>
+        <div class="kpi-value" id="valEStopLat">-- µs</div>
+        <div class="kpi-subtext">Preempts all traffic in &lt; 250 µs</div>
+      </div>
+
+      <!-- Frame Rates & Loss -->
+      <div class="kpi-card glass-panel">
+        <div class="kpi-header">
+          <span>Delivered / Loss Rate</span>
+          <span id="valThroughput">0 kbps</span>
+        </div>
+        <div class="kpi-value" id="valDeliveredCount">0</div>
+        <div class="kpi-subtext" id="txtLossInfo">Errors: 0 | Loss: 0.00%</div>
+      </div>
+    </div>
+
+    <!-- MAIN SPLIT: OSCILLOGRAM WATERFALL + HUMANOID ARM TOPOLOGY -->
+    <div class="content-split">
+      <!-- Live CAN Bus Physical Waterfall -->
+      <div class="glass-panel">
+        <div class="section-header">
+          <div class="section-title">
+            <span>📡 CAN Physical Wire Waterfall & Arbitration Scope</span>
+          </div>
+          <span id="txtSimTime" style="font-family: var(--font-mono); font-size: 0.8rem; color: var(--neon-cyan);">Sim Time: 0.000s</span>
+        </div>
+        
+        <div class="waterfall-canvas-container">
+          <canvas id="waterfallCanvas" width="800" height="240"></canvas>
+          
+          <div class="legend-row">
+            <div class="legend-item"><span class="legend-dot dot-estop"></span> E-Stop (0x001)</div>
+            <div class="legend-item"><span class="legend-dot dot-hb"></span> Heartbeat (0x01x)</div>
+            <div class="legend-item"><span class="legend-dot dot-cmd"></span> Joint Command (0x10x)</div>
+            <div class="legend-item"><span class="legend-dot dot-fb"></span> Joint Telemetry (0x20x)</div>
+            <div class="legend-item"><span class="legend-dot dot-err"></span> Error Frame / Retry</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Humanoid Arm 8-Node Topology -->
+      <div class="glass-panel">
+        <div class="section-header">
+          <div class="section-title">
+            <span>🦾 7-DOF Humanoid Arm + Gripper Nodes</span>
+          </div>
+          <div style="font-size: 0.8rem; color: var(--text-muted);">
+            Watchdog Timeout: <b style="color: var(--neon-cyan);">100 ms</b>
+          </div>
+        </div>
+        
+        <div class="nodes-grid" id="nodesGrid">
+          <!-- Dynamically populated via app.js -->
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTTOM SPLIT: REAL-TIME CHARTS & DISTURBANCE CONTROLS -->
+    <div class="bottom-split">
+      <!-- Real-Time Latency & Bus Load Charts -->
+      <div class="glass-panel">
+        <div class="section-header">
+          <div class="section-title">
+            <span>📈 Real-Time Bus Utilization & Latency Tracking</span>
+          </div>
+        </div>
+        <div class="chart-container">
+          <canvas id="busChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Disturbance & Stress-Testing Studio -->
+      <div class="glass-panel controls-panel">
+        <div class="section-title">
+          <span>⚙️ Disturbance & Hardware Stress Studio</span>
+        </div>
+
+        <!-- Node Count Slider -->
+        <div class="control-group">
+          <div class="control-label-row">
+            <span>Active Joint Actuators</span>
+            <b id="lblNumNodes">8 Nodes</b>
+          </div>
+          <input type="range" id="sliderNodes" class="slider-styled" min="1" max="16" value="8" oninput="updateControls()">
+        </div>
+
+        <!-- Control Frequency Slider -->
+        <div class="control-group">
+          <div class="control-label-row">
+            <span>Control Loop Frequency</span>
+            <b id="lblControlHz">1000 Hz</b>
+          </div>
+          <input type="range" id="sliderRate" class="slider-styled" min="100" max="1500" step="50" value="1000" oninput="updateControls()">
+        </div>
+
+        <!-- Packet Loss Rate Slider -->
+        <div class="control-group">
+          <div class="control-label-row">
+            <span>Injected Packet Drop Rate</span>
+            <b id="lblLossRate">0.0 %</b>
+          </div>
+          <input type="range" id="sliderLoss" class="slider-styled" min="0" max="0.30" step="0.01" value="0.0" oninput="updateControls()">
+        </div>
+
+        <!-- EMI Noise BER Slider -->
+        <div class="control-group">
+          <div class="control-label-row">
+            <span>EMI Noise Bit Error Rate (BER)</span>
+            <b id="lblBER">0</b>
+          </div>
+          <input type="range" id="sliderBER" class="slider-styled" min="0" max="0.005" step="0.0005" value="0" oninput="updateControls()">
+        </div>
+
+        <!-- Action Buttons -->
+        <div style="display: flex; gap: 8px; margin-top: 8px;">
+          <button class="btn-secondary" style="flex: 1;" onclick="injectBurstNoise()">⚡ Inject 5% Noise Burst</button>
+          <button class="btn-secondary" style="flex: 1;" onclick="disconnectRandomNode()">💥 Cut Wire on Joint</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- EVENT CONSOLE -->
+    <div class="glass-panel">
+      <div class="section-header">
+        <div class="section-title">
+          <span>📜 Real-Time Bus & Failsafe Event Log</span>
+        </div>
+        <span style="font-size: 0.75rem; color: var(--text-dim);">Live arbitration, watchdog trips & safety state transitions</span>
+      </div>
+      <div class="terminal-card" id="eventLogContainer">
+        <!-- Appended live -->
+      </div>
+    </div>
+
+  </div>
+
+  <!-- BENCHMARK MODAL -->
+  <div id="benchmarkModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 999; align-items: center; justify-content: center; padding: 20px;">
+    <div class="glass-panel" style="max-width: 900px; width: 100%; padding: 24px; max-height: 90vh; overflow-y: auto;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 style="font-size: 1.3rem;">📊 Multi-Node CAN vs CAN-FD Quantitative Benchmark</h2>
+        <button class="btn-secondary" onclick="closeBenchmarkModal()">✕ Close</button>
+      </div>
+      
+      <div id="benchmarkLoading" style="text-align: center; padding: 40px; font-family: var(--font-mono); color: var(--neon-cyan);">
+        ⏳ Simulating physical timing across 2, 4, 7, 8, and 14 nodes at 250Hz, 500Hz, and 1000Hz...
+      </div>
+
+      <div id="benchmarkContent" style="display: none;">
+        <table class="benchmark-table">
+          <thead>
+            <tr>
+              <th>Protocol</th>
+              <th>Nodes</th>
+              <th>Rate</th>
+              <th>Bus Load</th>
+              <th>Throughput</th>
+              <th>Avg Latency</th>
+              <th>P99 Latency</th>
+              <th>Verdict</th>
+            </tr>
+          </thead>
+          <tbody id="benchmarkTableBody"></tbody>
+        </table>
+
+        <div style="margin-top: 24px; padding: 16px; background: rgba(0, 240, 255, 0.05); border: 1px solid var(--neon-cyan); border-radius: 8px;">
+          <h3 style="font-size: 1rem; color: var(--neon-cyan); margin-bottom: 8px;">🎯 Hardware Deployment Recommendation</h3>
+          <ul style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.8; list-style-position: inside;" id="recommendationList"></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Javascript Logic -->
+  <script src="js/app.js"></script>
+</body>
+</html>
