@@ -1,240 +1,297 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mô Phỏng Trực Quan Truyền Nhận CAN / CAN-FD - Robot Humanoid</title>
+  <title>CAN / CAN-FD SCADA - Humanoid Dual-Arm Diagnostics</title>
   
-  <!-- Fonts -->
+  <!-- Fonts: Plus Jakarta Sans & JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   
-  <!-- Chart.js CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  
-  <!-- Stylesheet -->
+  <!-- SCADA Stylesheet -->
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <div class="dashboard-container">
-    
-    <!-- HEADER -->
-    <header class="glass-panel">
-      <div class="brand-section">
-        <div class="brand-icon">🤖</div>
-        <div class="brand-title">
-          <h1>MÔ PHỎNG TRỰC QUAN MẠNG CAN / CAN-FD ROBOT HÌNH NGƯỜI</h1>
-          <p>Trực quan hóa đường truyền • Độ trễ microsecond • Ưu tiên dừng khẩn cấp E-Stop • Kiểm tra mất gói & an toàn 2 cánh tay</p>
-        </div>
-      </div>
-      
-      <div class="header-actions">
-        <!-- Chế độ Bus đơn hay Bus kép -->
-        <div class="protocol-toggle-group">
-          <button id="btnBusModeSingle" class="protocol-btn active" onclick="setBusTopology('single')">1 Dây Bus Chung (can0)</button>
-          <button id="btnBusModeDual" class="protocol-btn" onclick="setBusTopology('dual')">2 Dây Tách Riêng (can0 + can1)</button>
-        </div>
 
-        <!-- Nút E-Stop to đùng đỏ chót -->
-        <button id="btnEStop" class="estop-button" onclick="triggerEStop()">
-          🚨 DỪNG KHẨN CẤP (E-STOP)
-        </button>
-        <button id="btnResetEStop" class="btn-secondary" onclick="resetEStop()">
-          🔄 Hồi Phục E-Stop
-        </button>
-      </div>
-    </header>
-
-    <!-- THANH KỊCH BẢN THỬ NGHIỆM 1-CLICK (BẤM LÀ HIỂU NGAY) -->
-    <div class="scenario-bar glass-panel">
-      <div class="scenario-title">🎯 KỊCH BẢN THỰC NGHIỆM TRỰC QUAN (BẤM ĐỂ XEM HIỆU ỨNG TỨC THÌ):</div>
-      <div class="scenario-buttons">
-        <button class="btn-scenario active" onclick="applyScenario('normal_1arm')">
-          <span class="scen-icon">🕊️</span>
-          <div class="scen-text">
-            <b>1. Chạy Chuẩn 1 Tay (8 Khớp @ 500Hz)</b>
-            <span>CAN-FD mượt mà, tải bus 56%, trễ &lt; 0.4ms</span>
-          </div>
-        </button>
-
-        <button class="btn-scenario" onclick="applyScenario('test_estop')">
-          <span class="scen-icon">🚑</span>
-          <div class="scen-text">
-            <b>2. Thử Bấm E-STOP (Ưu Tiên Tuyệt Đối)</b>
-            <span>ID 0x001 dẹp tan mọi gói tin, ngắt trong 0.12ms</span>
-          </div>
-        </button>
-
-        <button class="btn-scenario" onclick="applyScenario('cut_wire')">
-          <span class="scen-icon">💥</span>
-          <div class="scen-text">
-            <b>3. Thử Cắt Dây / Mất Khớp Khuỷu (J4)</b>
-            <span>Watchdog trip sau 100ms, tự hãm an toàn, không giật</span>
-          </div>
-        </button>
-
-        <button class="btn-scenario" onclick="applyScenario('overload_2arms')">
-          <span class="scen-icon">🚨</span>
-          <div class="scen-text">
-            <b>4. Nhồi 2 Tay (16 Khớp) Vào 1 Dây Chung</b>
-            <span>TẮC ĐƯỜNG NẶNG (&gt;100%), rơi rụng gói, giật lắc</span>
-          </div>
-        </button>
-
-        <button class="btn-scenario" onclick="applyScenario('dual_bus_optimal')">
-          <span class="scen-icon">🌟</span>
-          <div class="scen-text">
-            <b>5. Tách 2 Dây Riêng (can0 + can1)</b>
-            <span>Chuẩn công nghiệp, tải bus giảm một nửa, cách ly lỗi 100%</span>
-          </div>
-        </button>
+  <!-- 1. SCADA Header Topbar -->
+  <header id="topbar">
+    <div class="brand-group">
+      <div class="brand-logo">FD</div>
+      <div class="brand-title">
+        CAN-BUS SCADA <span class="badge-v2">DUAL-ARM</span>
       </div>
     </div>
 
-    <!-- KHUNG HÌNH CHÍNH: HÌNH ẢNH ROBOT TRỰC QUAN + GIẢI THÍCH TRẠNG THÁI -->
-    <div class="content-split">
-      
-      <!-- CỘT TRÁI: SƠ ĐỒ CƠ THỂ ROBOT TRỰC QUAN (VISUAL ROBOT ANATOMY) -->
-      <div class="glass-panel robot-anatomy-container">
-        <div class="section-header">
-          <div class="section-title">
-            <span>🦾 Sơ Đồ Cấu Trúc Khớp & Dây Cáp CAN Của Robot</span>
-          </div>
-          <span id="txtTopologyNotice" class="topology-badge">Đang chạy: 1 Cánh Tay (8 Khớp)</span>
-        </div>
-
-        <div class="robot-visual-stage" id="robotVisualStage">
-          <!-- BỘ ĐIỀU KHIỂN TRUNG TÂM JETSON (ĐẦU/THÂN) -->
-          <div class="jetson-master-pod" id="jetsonPod">
-            <div class="master-icon">🧠</div>
-            <div class="master-info">
-              <b>JETSON ORIN MASTER</b>
-              <span>Node ID: 0x00 | Chu kỳ phát: <span id="lblJetsonRate">500 Hz</span></span>
-            </div>
-            <div class="master-bus-lines">
-              <span class="bus-line-indicator line-can0">can0 (Tay Phải)</span>
-              <span class="bus-line-indicator line-can1" id="indCan1Line" style="opacity: 0.3;">can1 (Tay Trái)</span>
-            </div>
-          </div>
-
-          <!-- SƠ ĐỒ 2 CÁNH TAY HAI BÊN -->
-          <div class="arms-duo-wrapper">
-            <!-- CÁNH TAY TRÁI (LEFT ARM: J9 .. J16) -->
-            <div class="arm-branch left-arm" id="leftArmBranch" style="opacity: 0.35;">
-              <div class="arm-title-header">
-                <span>👈 TAY TRÁI (LEFT ARM)</span>
-                <span class="bus-tag" id="tagLeftBus">Chung can0</span>
-              </div>
-              <div class="joints-vertical-list" id="leftJointsList">
-                <!-- Sẽ được điền tự động từ Javascript -->
-              </div>
-            </div>
-
-            <!-- CÁNH TAY PHẢI (RIGHT ARM: J1 .. J8) -->
-            <div class="arm-branch right-arm" id="rightArmBranch">
-              <div class="arm-title-header">
-                <span>👉 TAY PHẢI (RIGHT ARM)</span>
-                <span class="bus-tag">Tuyến can0</span>
-              </div>
-              <div class="joints-vertical-list" id="rightJointsList">
-                <!-- Sẽ được điền tự động từ Javascript -->
-              </div>
-            </div>
-          </div>
-        </div>
+    <!-- Center Chips Hub -->
+    <div class="header-center-hub">
+      <div class="status-chip" id="chipProtocol" title="Physical Protocol Standard">
+        <span class="pulse-dot online" id="dotProtocol"></span>
+        <span class="chip-label">PHY:</span>
+        <span class="chip-val mono" id="valProtocol">CAN-FD 1M/5M BRS</span>
       </div>
 
-      <!-- CỘT PHẢI: BẢNG GIẢI THÍCH TRẠNG THÁI & ĐO ĐẠC GIAO THÔNG DỄ HIỂU -->
-      <div class="glass-panel" style="display: flex; flex-direction: column; gap: 16px; padding: 20px;">
-        
-        <!-- ĐỒNG HỒ ĐỘ THÔNG THOÁNG ĐƯỜNG TRUYỀN (TRAFFIC LOAD METAPHOR) -->
-        <div class="traffic-meter-card" id="trafficMeterCard">
-          <div class="traffic-header">
-            <span>TÌNH TRẠNG LƯU THÔNG ĐƯỜNG BUS CAN</span>
-            <span id="trafficBadgeText" class="traffic-badge-green">🟢 THÔNG THOÁNG</span>
-          </div>
-          <div class="traffic-speedo-row">
-            <div class="traffic-percentage" id="txtTrafficPct">56.2 %</div>
-            <div class="traffic-desc-col">
-              <b id="txtTrafficTitle">Đường truyền cực kỳ ổn định</b>
-              <span id="txtTrafficDetail">Băng thông dư thừa &gt; 40%. Các gói tin không phải xếp hàng chờ đợi, động cơ chạy êm không giật.</span>
-            </div>
-          </div>
-          <div class="traffic-progress-track">
-            <div class="traffic-progress-fill" id="trafficBarFill" style="width: 56.2%;"></div>
-          </div>
-        </div>
+      <div class="status-chip" id="chipTopology" title="Hardware Bus Topology">
+        <span class="pulse-dot online" id="dotTopology"></span>
+        <span class="chip-label">BUS:</span>
+        <span class="chip-val mono" id="valTopology">DUAL can0 + can1</span>
+      </div>
 
-        <!-- THẺ ĐO ĐỘ TRỄ PHẢN HỒI (LATENCY CARD) -->
-        <div class="human-kpi-row">
-          <div class="human-kpi-box">
-            <span class="kpi-label">Độ Trễ Trung Bình</span>
-            <span class="kpi-num" id="humanLatAvg">0.39 ms</span>
-            <span class="kpi-hint">Bằng 1/1000 cái chớp mắt</span>
-          </div>
+      <div class="status-chip" id="chipMaster" title="Master Controller">
+        <span class="chip-label">HOST:</span>
+        <span class="chip-val mono" id="valMaster">JETSON ORIN [0x00]</span>
+      </div>
 
-          <div class="human-kpi-box">
-            <span class="kpi-label">Trễ Dừng E-Stop</span>
-            <span class="kpi-num color-green" id="humanEstopLat">0.12 ms</span>
-            <span class="kpi-hint">Dừng ngay lập tức</span>
-          </div>
+      <div class="status-chip" id="chipFrames" title="Frame Throughput Counter">
+        <span class="chip-label">RX/TX:</span>
+        <span class="chip-val mono" id="valFrames">0 / 0</span>
+      </div>
 
-          <div class="human-kpi-box">
-            <span class="kpi-label">Số Gói Nhận Thành Công</span>
-            <span class="kpi-num" id="humanDelivered">100%</span>
-            <span class="kpi-hint">0 gói bị rơi rớt</span>
-          </div>
-        </div>
-
-        <!-- HỘP GIẢI THÍCH BẰNG LỜI: HỆ THỐNG ĐANG LÀM GÌ? -->
-        <div class="live-story-box" id="liveStoryBox">
-          <div class="story-header">
-            <span>💬 ĐIỀU GÌ ĐANG DIỄN RA TRÊN ROBOT?</span>
-            <span style="font-size: 0.75rem; color: var(--neon-cyan);">Cập nhật liên tục</span>
-          </div>
-          <div class="story-content" id="storyContent">
-            1. Máy tính Jetson đang phát lệnh vị trí và độ cứng trở kháng (MIT mode) xuống các khớp.<br>
-            2. Cả 8 khớp chấp hành đang đo đạc góc thực tế và dòng điện $I_q$, đóng gói gửi ngược lên Jetson.<br>
-            3. Đèn nhịp tim (Heartbeat 50Hz) đang chớp xanh: Toàn bộ các khớp đều đang sống và khỏe mạnh.
-          </div>
-        </div>
-
-        <!-- MÁY HIỆN SÓNG DÒNG CHẢY GÓI TIN VẬT LÝ -->
-        <div>
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <b style="font-size: 0.85rem; color: var(--text-main);">📡 Dòng Chảy Gói Tin Trên Dây Cáp Vật Lý:</b>
-            <span style="font-size: 0.75rem; color: var(--text-muted);" id="lblProtocolMode">CAN-FD (1M / 5M BRS)</span>
-          </div>
-          <canvas id="waterfallCanvas" width="700" height="110" style="width: 100%; height: 110px; background: #050811; border-radius: 8px; border: 1px solid rgba(0,240,255,0.2);"></canvas>
-          <div class="legend-row" style="margin-top: 6px;">
-            <div class="legend-item"><span class="legend-dot dot-estop"></span> E-Stop (0x001)</div>
-            <div class="legend-item"><span class="legend-dot dot-hb"></span> Nhịp tim (0x01x)</div>
-            <div class="legend-item"><span class="legend-dot dot-cmd"></span> Lệnh góc (0x10x)</div>
-            <div class="legend-item"><span class="legend-dot dot-fb"></span> Trả về dòng/áp (0x20x)</div>
-            <div class="legend-item"><span class="legend-dot dot-err"></span> Lỗi / Bơm nhiễu</div>
-          </div>
-        </div>
-
+      <div class="status-chip" id="chipSafety" title="System Safety State">
+        <span class="pulse-dot online" id="dotSafety"></span>
+        <span class="chip-val mono" id="valSafety">PASSIVITY PRESERVED</span>
       </div>
     </div>
 
-    <!-- BẢNG NHẬT KÝ SỰ KIỆN TRỰC QUAN -->
-    <div class="glass-panel" style="padding: 16px;">
-      <div class="section-header" style="padding: 0 0 12px 0;">
-        <div class="section-title">
-          <span>📜 Nhật Ký Hoạt Động & Biến Cố An Toàn Của Robot</span>
-        </div>
-        <span style="font-size: 0.78rem; color: var(--text-dim);">Ghi nhận từng microsecond khi xảy ra đứt cáp, dừng khẩn cấp hoặc nghẽn mạng</span>
-      </div>
-      <div class="terminal-card" id="eventLogContainer" style="height: 120px;">
-        <!-- Tự động thêm log -->
-      </div>
-    </div>
+    <!-- Right Actions -->
+    <div class="header-actions">
+      <button type="button" id="btnBusModeSingle" class="btn-scada" onclick="setBusTopology('single')">
+        BUS: SINGLE (can0)
+      </button>
+      <button type="button" id="btnBusModeDual" class="btn-scada active" onclick="setBusTopology('dual')">
+        BUS: DUAL (can0+can1)
+      </button>
 
+      <button type="button" id="btnEStop" class="btn-estop-hard" onclick="triggerEStop()">
+        ESTOP TRIGGER
+      </button>
+      <button type="button" id="btnResetEStop" class="btn-scada" onclick="resetEStop()">
+        RESET FAULT
+      </button>
+    </div>
+  </header>
+
+  <!-- 2. SCADA Substrip: Test Scenario Selector -->
+  <div class="scada-substrip">
+    <div class="substrip-label">TEST SCENARIOS:</div>
+    <div class="substrip-buttons">
+      <button type="button" class="btn-scenario-strip active" onclick="applyScenario('dual_arm_nominal')">
+        SCEN_01: DUAL_ARM_500HZ (OPTIMAL can0+can1)
+      </button>
+      <button type="button" class="btn-scenario-strip" onclick="applyScenario('single_arm_nominal')">
+        SCEN_02: SINGLE_ARM_500HZ (8 NODES can0)
+      </button>
+      <button type="button" class="btn-scenario-strip" onclick="applyScenario('single_bus_overload')">
+        SCEN_03: BUS_OVERLOAD_STORM (16 NODES SQUEEZED)
+      </button>
+      <button type="button" class="btn-scenario-strip" onclick="applyScenario('estop_preempt')">
+        SCEN_04: HARDWARE_ESTOP_PREEMPT (ID 0x001)
+      </button>
+      <button type="button" class="btn-scenario-strip" onclick="applyScenario('disconnect_j4')">
+        SCEN_05: WIRE_DISCONNECT_J4 (WATCHDOG TRIP)
+      </button>
+      <button type="button" class="btn-scenario-strip" onclick="applyScenario('emi_noise_burst')">
+        SCEN_06: EMI_NOISE_BURST (CRC ERROR RETRIES)
+      </button>
+    </div>
   </div>
 
-  <!-- Javascript Logic -->
+  <!-- 3. Main SCADA Grid -->
+  <main class="main-scada-grid">
+
+    <!-- KPI Metric Cards Row -->
+    <section class="metric-row">
+      <!-- Metric 1: Bus Load can0 -->
+      <div class="metric-cell" id="cardLoadCan0">
+        <div class="metric-cell-lbl">
+          <span>BUS LOAD: can0 (RIGHT)</span>
+          <span id="txtLoadStatusCan0" class="tag-ok">NOMINAL</span>
+        </div>
+        <div class="metric-cell-val mono" id="valLoadCan0">43.7%</div>
+        <div class="seg-track">
+          <div class="seg-fill" id="barFillCan0" style="width: 43.7%;"></div>
+        </div>
+        <div class="metric-sub" id="subLoadCan0">Peak: 46.2% | Rate: 500 Hz</div>
+      </div>
+
+      <!-- Metric 2: Bus Load can1 -->
+      <div class="metric-cell" id="cardLoadCan1">
+        <div class="metric-cell-lbl">
+          <span>BUS LOAD: can1 (LEFT)</span>
+          <span id="txtLoadStatusCan1" class="tag-ok">NOMINAL</span>
+        </div>
+        <div class="metric-cell-val mono" id="valLoadCan1">43.7%</div>
+        <div class="seg-track">
+          <div class="seg-fill" id="barFillCan1" style="width: 43.7%;"></div>
+        </div>
+        <div class="metric-sub" id="subLoadCan1">Peak: 46.2% | Rate: 500 Hz</div>
+      </div>
+
+      <!-- Metric 3: WCRT Latency -->
+      <div class="metric-cell">
+        <div class="metric-cell-lbl">
+          <span>WCRT LATENCY (MAX)</span>
+          <span class="tag-ok">BOUNDED</span>
+        </div>
+        <div class="metric-cell-val mono" id="valWcrtLatency">0.39 ms</div>
+        <div class="metric-sub" id="subEstopLatency">E-Stop Response: 0.12 ms (Arbitration Win)</div>
+      </div>
+
+      <!-- Metric 4: Packet Integrity -->
+      <div class="metric-cell">
+        <div class="metric-cell-lbl">
+          <span>PACKET INTEGRITY</span>
+          <span class="tag-ok" id="tagIntegrity">100.0%</span>
+        </div>
+        <div class="metric-cell-val mono" id="valDeliveryRate">100.0%</div>
+        <div class="metric-sub" id="subPacketLoss">Loss Rate: 0.00% | CRC Retries: 0</div>
+      </div>
+
+      <!-- Metric 5: Fail-Safe Watchdog -->
+      <div class="metric-cell">
+        <div class="metric-cell-lbl">
+          <span>WATCHDOG SUPERVISOR</span>
+          <span class="tag-ok" id="tagWatchdog">ACTIVE</span>
+        </div>
+        <div class="metric-cell-val mono" id="valWatchdogState">ARMED (100ms)</div>
+        <div class="metric-sub" id="subWatchdogTrips">Tripped Nodes: 0 | Auto-Hold Passive</div>
+      </div>
+    </section>
+
+    <!-- Technical Analysis Note Bar -->
+    <div class="scada-panel" style="padding: 8px 12px; background: #0c0c0c;">
+      <div style="display: flex; justify-content: space-between; align-items: center; font-family: var(--font-mono); font-size: 11px;">
+        <span style="color: var(--primary-main); font-weight: 700;">CURRENT SIMULATION CONTEXT:</span>
+        <span style="color: var(--text-secondary);" id="txtScenarioDescription">
+          Dual-Arm Nominal Operation (16 Nodes, 500 Hz Sync, Dual Bus can0 + can1, 0% Packet Loss).
+        </span>
+      </div>
+    </div>
+
+    <!-- Dual-Arm Side-by-Side Tables -->
+    <div class="dual-arm-split">
+      
+      <!-- LEFT COLUMN: CAN0 RIGHT ARM (NODES 1..8) -->
+      <div class="scada-panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span>CAN0: RIGHT ARM JOINTS</span>
+            <span class="panel-title-badge">NODES 0x01 - 0x08</span>
+          </div>
+          <span class="tag-ok mono" id="tagCan0Status">BUS ONLINE</span>
+        </div>
+        <div class="scada-table-wrap">
+          <table class="scada-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>JOINT</th>
+                <th>ACTUAL</th>
+                <th>TARGET</th>
+                <th>VEL (rad/s)</th>
+                <th>TORQUE</th>
+                <th>TEMP</th>
+                <th>RTT</th>
+                <th>STATE</th>
+                <th>ACTION</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyRightArm">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN: CAN1 LEFT ARM (NODES 9..16) -->
+      <div class="scada-panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span>CAN1: LEFT ARM JOINTS</span>
+            <span class="panel-title-badge">NODES 0x09 - 0x10</span>
+          </div>
+          <span class="tag-ok mono" id="tagCan1Status">BUS ONLINE</span>
+        </div>
+        <div class="scada-table-wrap">
+          <table class="scada-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>JOINT</th>
+                <th>ACTUAL</th>
+                <th>TARGET</th>
+                <th>VEL (rad/s)</th>
+                <th>TORQUE</th>
+                <th>TEMP</th>
+                <th>RTT</th>
+                <th>STATE</th>
+                <th>ACTION</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyLeftArm">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Oscillogram & Audit Trail Row -->
+    <div class="bottom-tools-row">
+      
+      <!-- Real-Time Packet Waterfall Canvas -->
+      <div class="scada-panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span>ISO 11898-1 REAL-TIME BUS OSCILLOGRAM (FRAME WATERFALL)</span>
+          </div>
+          <span class="mono" style="font-size: 10px; color: var(--text-muted);" id="txtWaterfallSpeed">TIME-BASE: 100 µs/div</span>
+        </div>
+        <canvas id="waterfallCanvas" width="900" height="90"></canvas>
+        <div class="waterfall-legend">
+          <div class="w-item">
+            <span class="w-color" style="background: #ef4444;"></span>
+            <span>ID 0x001 (ESTOP)</span>
+          </div>
+          <div class="w-item">
+            <span class="w-color" style="background: #f59e0b;"></span>
+            <span>ID 0x01X (HEARTBEAT)</span>
+          </div>
+          <div class="w-item">
+            <span class="w-color" style="background: #3b82f6;"></span>
+            <span>ID 0x10X (MOTION_CMD)</span>
+          </div>
+          <div class="w-item">
+            <span class="w-color" style="background: #10b981;"></span>
+            <span>ID 0x20X (TELEMETRY)</span>
+          </div>
+          <div class="w-item">
+            <span class="w-color" style="background: #f97316;"></span>
+            <span>ID 0x7XX (ERROR/BURST)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- SCADA Event Audit Trail -->
+      <div class="scada-panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span>SCADA EVENT AUDIT TRAIL</span>
+          </div>
+          <span class="mono" style="font-size: 10px; color: var(--text-muted);">MICROSECOND LOG</span>
+        </div>
+        <div class="scada-log-box" id="scadaAuditLog">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- JS Logic -->
   <script src="js/app.js"></script>
 </body>
 </html>
