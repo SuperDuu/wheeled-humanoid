@@ -178,7 +178,7 @@ class CANSimulator:
         self.recent_events.append({
             "timestamp": round(self.sim_time_us / 1e6, 4),
             "type": "ESTOP_TRIGGERED",
-            "message": f"🚨 {reason} (Source: Node {source_id})"
+            "message": f"[ESTOP] {reason} (Source: Node {source_id})"
         })
 
     def reset_estop(self):
@@ -190,7 +190,7 @@ class CANSimulator:
         self.recent_events.append({
             "timestamp": round(self.sim_time_us / 1e6, 4),
             "type": "ESTOP_RESET",
-            "message": "✅ E-Stop released. System in STANDBY."
+            "message": "[RESET] E-Stop released. System in STANDBY."
         })
 
     def disconnect_node(self, node_id: int):
@@ -202,7 +202,7 @@ class CANSimulator:
             self.recent_events.append({
                 "timestamp": round(self.sim_time_us / 1e6, 4),
                 "type": "NODE_LOST",
-                "message": f"❌ Node {node_id} ({node.name}) disconnected!"
+                "message": f"[DISCONNECT] Node {node_id} ({node.name}) offline"
             })
 
     def reconnect_node(self, node_id: int):
@@ -215,7 +215,7 @@ class CANSimulator:
             self.recent_events.append({
                 "timestamp": round(self.sim_time_us / 1e6, 4),
                 "type": "NODE_ONLINE",
-                "message": f"🟢 Node {node_id} ({node.name}) reconnected."
+                "message": f"[LINK] Node {node_id} ({node.name}) online"
             })
 
     def step(self, delta_us: float):
@@ -388,7 +388,7 @@ class CANSimulator:
                     self.recent_events.append({
                         "timestamp": round(self.sim_time_us / 1e6, 4),
                         "type": "NODE_BUS_OFF",
-                        "message": f"⚠️ Node {sender.node_id} entered BUS-OFF state (TEC={sender.tec})"
+                        "message": f"[BUS_OFF] Node {sender.node_id} entered BUS-OFF state (TEC={sender.tec})"
                     })
             
             # Requeue if retries remain (< 8 retries)
@@ -416,7 +416,7 @@ class CANSimulator:
             self.recent_events.append({
                 "timestamp": round(self.sim_time_us / 1e6, 4),
                 "type": "ESTOP_DELIVERED",
-                "message": f"🛑 E-Stop delivered to ALL nodes! Latency: {e2e_latency:.1f} µs"
+                "message": f"[ESTOP] Preempt frame delivered to ALL nodes! Latency: {e2e_latency:.1f} µs"
             })
             
         elif frame.category == PacketCategory.HEARTBEAT:
@@ -481,7 +481,7 @@ class CANSimulator:
                     self.recent_events.append({
                         "timestamp": round(now_s, 4),
                         "type": "WATCHDOG_TRIP",
-                        "message": f"⚠️ WATCHDOG TRIP on Node {node_id} ({node.time_since_heartbeat_ms:.1f}ms without HB)! Entering FAILSAFE_HOLD."
+                        "message": f"[WATCHDOG] Trip on Node {node_id} ({node.time_since_heartbeat_ms:.1f}ms without HB)! State: FAILSAFE_HOLD"
                     })
             elif node.time_since_heartbeat_ms > 50.0:
                 if node.state == NodeState.RUNNING:
