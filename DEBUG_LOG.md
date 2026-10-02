@@ -2059,3 +2059,38 @@ Bằng chứng từ BOM và ThreePhaseBridgeandPower.kicad_sch:
    - Build toolchain: `arm-none-eabi-gcc 13.3.rel1` (-O2, Cortex-M4, Hard-float FPU).
    - Kết quả: **0 errors, 0 warnings**.
    - Output artifact: `firmware/joint_driver/joint-driver-8115-v2/Debug/joint-driver-8115-v2.elf` (Text: 90036 bytes, Data: 936 bytes, BSS: 12896 bytes).
+
+---
+
+## Phiên 2026-10-02 — Đồng Bộ Hóa Toàn Diện: Commit Firmware V2, Đẩy Remote, và Hợp Nhất Nhánh Cơ Khí `origin/tuan`
+
+### 1. Bối cảnh & Yêu Cầu
+- Người vận hành yêu cầu: "commit cac thay doi, sau do push, sau do merge cac cai o nhanh khac vao".
+- Trạng thái ban đầu:
+  - Cập nhật tài liệu và firmware V2 (`joint-driver-8115-v2`) chưa được commit trên nhánh `main`.
+  - Submodule phần cứng điện tử `hardware/electronics` có commit mới chưa đẩy.
+  - Nhánh `origin/tuan` chứa các bản vẽ cơ khí 3D mới nhất (hộp số Cycloid CNC, cụm motor GB6010, các file STEP/SLDASM/SLDPRT).
+
+### 2. Các Bước Triển Khai & Kết Quả
+1. **Phần cứng Điện tử (`hardware/electronics`):**
+   - Đã commit cập nhật BOM tương tác và project file (`update driver bom`).
+   - Đã push thành công lên repository riêng: `https://github.com/SuperDuu/wheeled-humanoid-electronics.git` (commit `a2c1454`).
+2. **Commit Nhánh `main` theo Chuẩn Quy tắc Đơn file (Single-file Commit):**
+   - `e1398c1`: `update electronics submodule` (cập nhật con trỏ submodule).
+   - `6b2add2`: `update debug log` (đồng bộ nhật ký kỹ thuật).
+   - `ad026f8`: `add v2 bsp` (các thư viện HAL, CMSIS, USB, cấu hình CubeMX).
+   - `d330697`: `add hardware spi` (`drv8353.c`, `drv8353.h` giao tiếp SPI phần cứng).
+   - `22539ff`: `update can watchdog` (`comm_can.c`, `comm_can.h` bổ sung watchdog 100ms & mở rộng 60Nm).
+   - `eb3ea0d`: `tune 36v limits` (`vesc_conf.c`, `vesc_conf.h` chuẩn hóa 36V & 340 RPM).
+   - `a9bab0c`: `add v2 firmware` (toàn bộ mã nguồn Core firmware V2).
+   - Push thành công lên `origin/main`.
+3. **Xử Lý Xung Đột & Hợp Nhất (Merge) Nhánh `origin/tuan`:**
+   - Xung đột duy nhất: Nhánh cũ `origin/tuan` lưu `hardware/electronics` dạng thư mục thường (trước khi tách submodule), trong khi `main` quản lý dạng submodule `160000`.
+   - Giải pháp: Giữ nguyên con trỏ submodule `hardware/electronics` của `main` (tránh ghi đè repo con), đồng thời tiếp nhận toàn bộ dữ liệu cơ khí mới từ nhánh của Tuấn:
+     - `hardware/mechanical/BLDC/Cycloid_CNC/` (Cycloid CNC hoàn chỉnh, các file STEP, SLDASM, SLDPRT, video chuyển động).
+     - `hardware/mechanical/BLDC/GB6010-3D-Model-(with-encoder-cover).STEP` & `hardware/mechanical/BLDC/GB6010-GearBox.SLDASM`.
+     - Cập nhật đĩa đệm `Cycloid V2` và trục `Cycloid_V3`.
+   - Tạo commit merge: `1f8dea6` (`merge tuan branch`).
+   - Cập nhật con trỏ local `tuan` đồng bộ hoàn toàn với `origin/tuan` (`99e1e89`).
+   - Push thành công commit merge lên `origin/main`. Working tree hoàn toàn sạch sẽ (clean).
+
