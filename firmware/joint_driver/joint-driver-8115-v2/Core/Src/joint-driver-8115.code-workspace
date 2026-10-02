@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		},
+		{
+			"path": "../../../../../hardware/electronics/driver-bldc-foc"
+		}
+	],
+	"settings": {}
+}

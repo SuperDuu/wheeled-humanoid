@@ -1,0 +1,971 @@
+/**
+  ******************************************************************************
+  * @file    comm_telemetry.c
+  * @brief   High-speed Real-Time Telemetry & Command Protocol implementation
+  *          Supports both Native USB CDC (Virtual COM Port) and USART1 UART.
+  ******************************************************************************
+  */
+
+#include "comm_telemetry.h"
+#include "main.h"
+#include "vesc_utils.h"
+#include "foc_math.h"
+#include "usb_device.h"
+#include "usbd_cdc_if.h"
+#if USE_AS5600_OUTPUT_ENCODER
+#include "as5600.h"
+#endif
+#include "encoder_cal_store.h"
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <ctype.h>
+
+/* USB Device Handle */
+extern USBD_HandleTypeDef hUsbDeviceFS;
+extern volatile int8_t g_encoder_calibration_result;
+
+/* Global references */
+static uint32_t s_last_telemetry_tx_ms = 0;
+#define RX_COMMAND_MAX_LEN 64U
+#define RX_COMMAND_QUEUE_DEPTH 4U
+
+static char s_rx_cmd_buffer[RX_COMMAND_MAX_LEN];
+static uint8_t s_rx_cmd_idx = 0;
+static char s_rx_command_queue[RX_COMMAND_QUEUE_DEPTH][RX_COMMAND_MAX_LEN];
+static volatile uint8_t s_rx_queue_head = 0;
+static volatile uint8_t s_rx_queue_tail = 0;
+
+/* Open-Loop Test Run Control Globals */
+volatile uint8_t run_open_loop = 0;
+volatile float open_loop_target_rpm = 100.0f;
+volatile float open_loop_current_rpm = 0.0f;
+volatile float open_loop_angle = 0.0f;
+volatile float open_loop_voltage = 9.0f; // 9.0V (~2.3A) - High torque for 1:17 Cycloid gearbox load
+
+/* Checksum calculation */
+static uint16_t CalculateChecksum(const uint8_t *data, uint16_t len)
+{
+    uint16_t sum = 0;
+    for (uint16_t i = 0; i < len; i++) {
+        sum += data[i];
+    }
+    return sum;
+}
+
+static int ParseFloatArgs(const char *text, float *values, int max_values)
+{
+    int count = 0;
+    while (text != NULL && count < max_values) {
+        while (isspace((unsigned char)*text)) text++;
+        if (*text == '\0') break;
+
+        char *end = NULL;
+        float value = strtof(text, &end);
+        if (end == text) break;
+
+        values[count++] = value;
+        text = end;
+    }
+    return count;
+}
+
+/**
+  * @brief  Initialize telemetry communication (Native USB CDC)
+  */
+void Comm_Telemetry_Init(void)
+{
+    s_last_telemetry_tx_ms = HAL_GetTick();
+
+#if USE_AS5600_OUTPUT_ENCODER
+    /* Initialize secondary AS5600 output link encoder on I2C3 */
+    extern I2C_HandleTypeDef hi2c3;
+    AS5600_Init(&g_as5600, &hi2c3);
+#endif
+
+    /* USB is initialized before the 1.2 s ADC-offset wait. The RX state is
+     * already zeroed by BSS startup; resetting it here would discard a valid
+     * command sent by the host immediately after USB enumeration. */
+}
+
+/**
+  * @brief  Transmit high-speed binary telemetry frame over Native USB CDC
+  */
+bool Comm_Telemetry_Send(FOC_Controller_t *foc)
+{
+    if (foc == NULL) return false;
+
+    motor_all_state_t *motor = &foc->motor;
+    motor_state_t *state_m = &motor->m_motor_state;
+    mc_configuration *conf = motor->m_conf;
+
+    /* CRITICAL: packet PHẢI là static vì CDC_Transmit_FS chỉ lưu CON TRỎ.
+     * Packet 78 bytes > 64 bytes (USB FS max packet) → cần 2 USB transactions.
+     * Transaction thứ 2 (14 bytes cuối) xảy ra trong USB IRQ SAU KHI hàm return.
+     * Nếu packet trên stack → pointer trỏ vào rác → 14 bytes cuối corrupt → checksum fail 95%. */
+    static telemetry_packet_t packet;
+    memset(&packet, 0, sizeof(packet));
+
+    packet.magic1 = TELEMETRY_MAGIC_BYTE1;
+    packet.magic2 = TELEMETRY_MAGIC_BYTE2;
+    packet.packet_type = TELEMETRY_PACKET_TYPE;
+    packet.payload_len = (uint8_t)(sizeof(telemetry_packet_t) - 4); // Exclude header (4 bytes)
+    packet.timestamp_ms = HAL_GetTick();
+
+    // 1. Calculate 3-Phase Currents (Amperes)
+    // i_alpha = Ia, i_beta = (Ia + 2*Ib)/sqrt(3)
+    // Therefore: Ia = i_alpha, Ib = (sqrt(3)*i_beta - i_alpha)/2, Ic = -Ia - Ib
+    float ia = state_m->i_alpha;
+    float ib = ((float)SQRT3_BY_2 * state_m->i_beta) - (0.5f * ia);
+    float ic = -ia - ib;
+
+    packet.i_a = ia;
+    packet.i_b = ib;
+    packet.i_c = ic;
+
+    // 2. FOC Vector Currents (Filtered DC for smooth telemetry display)
+    packet.i_d = state_m->id_filter;
+    packet.i_q = state_m->iq_filter;
+    packet.i_q_target = state_m->iq_target;
+
+    // 3. 3-Phase PWM Duty Cycles
+    packet.duty_a = foc->duty_a;
+    packet.duty_b = foc->duty_b;
+    packet.duty_c = foc->duty_c;
+
+    // 4. Angles
+    packet.phase_elec = state_m->phase;
+    packet.mech_angle = foc->encoder.angle_singleturn;
+    packet.joint_angle = motor->m_joint_angle;
+
+    // 5. Speeds (Mechanical RPM)
+    float pole_pairs = (conf != NULL && conf->foc_motor_pole_pairs > 0) ? (float)conf->foc_motor_pole_pairs : 21.0f;
+    float mech_rpm = (motor->m_state == MC_STATE_RUNNING && motor->m_control_mode == CONTROL_MODE_SPEED)
+                     ? (motor->m_speed_d_filter / pole_pairs)
+                     : foc->encoder.velocity_rpm;
+    if (motor->m_state != MC_STATE_RUNNING) {
+        mech_rpm = 0.0f;
+    }
+    packet.speed_rpm = mech_rpm;
+    packet.speed_target_rpm = (run_open_loop == 1) ? open_loop_target_rpm : (motor->m_speed_command_rpm / pole_pairs);
+
+    // 6. System Status
+    extern volatile ADC_Readings_t g_adc_readings;
+    packet.v_bus = (g_adc_readings.vbus > 5.0f) ? g_adc_readings.vbus : ((state_m->v_bus > 5.0f) ? state_m->v_bus : 24.0f);
+    packet.temp_fet = 25.0f;
+    packet.control_mode = (uint8_t)motor->m_control_mode;
+    packet.motor_state = (uint8_t)motor->m_state;
+    packet.fault_code = (uint8_t)foc->fault;
+    packet.encoder_dir = (int8_t)conf->encoder_direction;
+
+    // FOC Diagnostic Fields
+    packet.vd = state_m->vd;
+    packet.vq = state_m->vq;
+    packet.zero_elec_angle = foc->zero_electric_angle;
+    /* Restore proper id_target telemetry for current loop diagnostics.
+     * Observer-encoder error is still computed internally in the slow loop. */
+    packet.id_target = state_m->id_target;
+    packet.encoder_lut_enabled = foc->encoder.use_lut ? 1U : 0U;
+    packet.calibration_result = g_encoder_calibration_result;
+
+    // Calculate Checksum over payload (excluding magic & checksum itself)
+    uint8_t *raw_buf = (uint8_t*)&packet;
+    packet.checksum = CalculateChecksum(&raw_buf[4], sizeof(telemetry_packet_t) - 6);
+
+    // Transmit via Native USB CDC (Virtual COM Port /dev/ttyACM*)
+    if (hUsbDeviceFS.dev_state == USBD_STATE_CONFIGURED && hUsbDeviceFS.pClassData != NULL) {
+        USBD_CDC_HandleTypeDef *hcdc = (USBD_CDC_HandleTypeDef*)hUsbDeviceFS.pClassData;
+        static uint32_t s_tx_busy_start_ms = 0;
+        if (hcdc->TxState == 0) {
+            s_tx_busy_start_ms = 0;
+            CDC_Transmit_FS((uint8_t*)&packet, sizeof(packet));
+            return true;
+        } else {
+            /* USB CDC Tx Busy Watchdog: If stuck for > 30ms, force unstick endpoint */
+            uint32_t now_ms = HAL_GetTick();
+            if (s_tx_busy_start_ms == 0) {
+                s_tx_busy_start_ms = now_ms;
+            } else if (now_ms - s_tx_busy_start_ms > 30) {
+                hcdc->TxState = 0; // Unstick USB CDC endpoint
+                s_tx_busy_start_ms = 0;
+            }
+        }
+    }
+    return false;
+}
+
+/**
+  * @brief  Parse incoming commands from desktop app / terminal
+  * Commands:
+  *   MODE <0..4>    (0:Off, 1:Current, 2:Brake, 3:Speed, 4:Pos)
+  *   SPEED <rpm>    (e.g., SPEED 200)
+  *   IQ <amps>      (e.g., IQ 1.5)
+  *   POS <rad>      (e.g., POS 1.57)
+  *   STOP           (Emergency stop)
+  *   ALIGN          (Run encoder alignment)
+  */
+extern volatile int run_foc_mode;
+extern volatile float speed_target_dbg;
+extern volatile float iq_target_dbg;
+extern volatile float pos_target_dbg;
+
+static void StartClosedLoopSpeed(FOC_Controller_t *foc, float mech_rpm)
+{
+    motor_all_state_t *motor = &foc->motor;
+    float pole_pairs = (motor->m_conf != NULL &&
+                        motor->m_conf->foc_motor_pole_pairs > 0U)
+                           ? (float)motor->m_conf->foc_motor_pole_pairs
+                           : 21.0f;
+
+    run_open_loop = 0;
+    open_loop_target_rpm = 0.0f;
+    open_loop_current_rpm = 0.0f;
+    speed_target_dbg = mech_rpm;
+    motor->m_speed_command_rpm = mech_rpm * pole_pairs;
+
+    if (motor->m_control_mode != CONTROL_MODE_SPEED || motor->m_state != MC_STATE_RUNNING) {
+        float erpm_now = RADPS2RPM_f(motor->m_speed_est_fast);
+        motor->m_speed_pid_set_rpm = erpm_now;
+        motor->m_speed_d_filter = erpm_now;
+        motor->m_speed_d_filter_proc = erpm_now;
+        motor->m_speed_i_term = 0.0f;
+        motor->m_speed_prev_error = 0.0f;
+        motor->m_iq_set = 0.0f;
+        motor->m_motor_state.vd_int = 0.0f;
+        motor->m_motor_state.vq_int = 0.0f;
+        motor->m_motor_state.vd = 0.0f;
+        motor->m_motor_state.vq = 0.0f;
+        motor->m_openloop_spinup_active = false;
+        motor->m_openloop_spinup_time = 0.0f;
+        motor->m_i_fw_set = 0.0f;
+        motor->m_control_mode = CONTROL_MODE_SPEED;
+        motor->m_state = MC_STATE_RUNNING;
+        run_foc_mode = 3;
+        foc->fault = MC_FAULT_NONE;
+        TIM1_EnsureMoeEnabled();
+    }
+}
+
+static void ProcessCommand(FOC_Controller_t *foc, char *cmd)
+{
+    if (foc == NULL || cmd == NULL) return;
+    motor_all_state_t *motor = &foc->motor;
+
+    // Skip leading whitespace and non-printable control characters
+    while (*cmd && ((unsigned char)*cmd <= ' ' || (unsigned char)*cmd > 126)) {
+        cmd++;
+    }
+    if (*cmd == '\0') return;
+
+    // Strip trailing newline / carriage return / spaces / control chars
+    char *p = cmd + strlen(cmd) - 1;
+    while (p >= cmd && ((unsigned char)*p <= ' ' || (unsigned char)*p > 126)) {
+        *p = '\0';
+        p--;
+    }
+
+    if (strncmp(cmd, "STOP", 4) == 0 || strcmp(cmd, "OFF") == 0) {
+        extern volatile int run_alignment;
+        extern volatile int run_calibration;
+        motor->m_state = MC_STATE_OFF;
+        motor->m_iq_set = 0.0f;
+        motor->m_i_fw_set = 0.0f;
+        motor->m_speed_command_rpm = 0.0f;
+        motor->m_speed_pid_set_rpm = 0.0f;
+        motor->m_speed_i_term = 0.0f;
+        motor->m_pos_i_term = 0.0f;
+        motor->m_mit_p_des = 0.0f;
+        motor->m_mit_v_des = 0.0f;
+        motor->m_mit_kp = 0.0f;
+        motor->m_mit_kd = 0.0f;
+        motor->m_mit_t_ff = 0.0f;
+        motor->m_openloop_spinup_active = false;
+        motor->m_openloop_spinup_time = 0.0f;
+        motor->m_motor_state.duty_now = 0.0f;
+        motor->m_motor_state.vd = 0.0f;
+        motor->m_motor_state.vq = 0.0f;
+        motor->m_motor_state.vd_int = 0.0f;
+        motor->m_motor_state.vq_int = 0.0f;
+        foc->fault = MC_FAULT_NONE;
+        speed_target_dbg = 0.0f;
+        iq_target_dbg = 0.0f;
+        run_foc_mode = 0;
+        run_open_loop = 0;
+        open_loop_target_rpm = 0.0f;
+        open_loop_current_rpm = 0.0f;
+        run_alignment = 0;
+        run_calibration = 0;
+    }
+    else if (strncmp(cmd, "ALIGN_INFO", 10) == 0 || strncmp(cmd, "ALIGNDBG", 8) == 0) {
+        extern volatile Align_Debug_t g_dbg_align;
+        static char resp_msg[256];
+        float z = g_dbg_align.zero_electric_angle;
+        int z_i = (int)fabsf(z);
+        int z_f = (int)((fabsf(z) - (float)z_i) * 10000.0f + 0.5f);
+        float c = g_dbg_align.coarse_electric_angle;
+        int c_i = (int)fabsf(c);
+        int c_f = (int)((fabsf(c) - (float)c_i) * 10000.0f + 0.5f);
+        float p = g_dbg_align.phase_correction;
+        int p_i = (int)fabsf(p);
+        int p_f = (int)((fabsf(p) - (float)p_i) * 10000.0f + 0.5f);
+        float conc = g_dbg_align.concentration;
+        int conc_i = (int)fabsf(conc);
+        int conc_f = (int)((fabsf(conc) - (float)conc_i) * 1000.0f + 0.5f);
+        snprintf(resp_msg, sizeof(resp_msg),
+                 "ALIGN_DBG: aligned=%d zero=%s%d.%04d coarse=%s%d.%04d corr=%s%d.%04d conc=%s%d.%03d\r\nSCORES: neg90=%d zero=%d pos90=%d final=%d\r\n",
+                 g_dbg_align.aligned,
+                 (z < 0.0f) ? "-" : "", z_i, z_f,
+                 (c < 0.0f) ? "-" : "", c_i, c_f,
+                 (p < 0.0f) ? "-" : "", p_i, p_f,
+                 (conc < 0.0f) ? "-" : "", conc_i, conc_f,
+                 (int)g_dbg_align.torque_score_neg90,
+                 (int)g_dbg_align.torque_score_zero,
+                 (int)g_dbg_align.torque_score_pos90,
+                 (int)g_dbg_align.torque_score_final);
+        CDC_Transmit_FS((uint8_t*)resp_msg, strlen(resp_msg));
+    }
+    else if (strcmp(cmd, "ALIGN") == 0 || strncmp(cmd, "ALIGN ", 6) == 0) {
+        extern volatile int run_alignment;
+        motor->m_state = MC_STATE_OFF;
+        motor->m_iq_set = 0.0f;
+        foc->fault = MC_FAULT_NONE;
+        foc->encoder.consecutive_errors = 0;
+        AS5048A_ClearError(&foc->encoder);
+        run_alignment = 1;
+        run_open_loop = 0;
+        run_foc_mode = 0;
+    }
+    else if (strncmp(cmd, "CALIB", 5) == 0 || strncmp(cmd, "CALIBRATE", 9) == 0) {
+        extern volatile int run_calibration;
+        motor->m_state = MC_STATE_OFF;
+        motor->m_iq_set = 0.0f;
+        run_calibration = 1;
+        run_open_loop = 0;
+        run_foc_mode = 0;
+    }
+    else if (strncmp(cmd, "OPENLOOP", 8) == 0 || strncmp(cmd, "TEST", 4) == 0 || strncmp(cmd, "RUN", 3) == 0) {
+        float rpm = 100.0f;
+        float v_custom = 0.0f;
+        const char *arg = (strncmp(cmd, "OPENLOOP", 8) == 0) ? &cmd[8] :
+                          (strncmp(cmd, "TEST", 4) == 0) ? &cmd[4] : &cmd[3];
+        while (*arg == ' ') arg++;
+        if (*arg != '\0') {
+            float values[2] = {rpm, v_custom};
+            int n = ParseFloatArgs(arg, values, 2);
+            if (n >= 1) rpm = values[0];
+            if (n >= 2) v_custom = values[1];
+            if (n >= 2 && v_custom > 0.5f) {
+                open_loop_voltage = v_custom;
+            }
+        }
+        open_loop_target_rpm = rpm;
+        open_loop_current_rpm = 0.0f;
+        run_open_loop = 1;
+        run_foc_mode = 0;
+        motor->m_speed_command_rpm = rpm * (float)foc->conf.foc_motor_pole_pairs;
+        /* OPENLOOP is a voltage-vector diagnostic. Leaving SPEED selected
+         * made telemetry report the stale speed-loop filter instead of the
+         * encoder measurement. */
+        motor->m_control_mode = CONTROL_MODE_DUTY;
+        motor->m_state = MC_STATE_RUNNING;
+        foc->fault = MC_FAULT_NONE;
+        TIM1_EnsureMoeEnabled();
+    }
+    else if (strncmp(cmd, "LOCK_ANGLE ", 11) == 0 || strncmp(cmd, "LOCK ", 5) == 0) {
+        float angle = 0.0f;
+        float volt = 4.0f;
+        const char *arg = (strncmp(cmd, "LOCK_ANGLE ", 11) == 0) ? &cmd[11] : &cmd[5];
+        float values[2] = {angle, volt};
+        int n = ParseFloatArgs(arg, values, 2);
+        if (n >= 1) angle = values[0];
+        if (n >= 2) volt = values[1];
+        open_loop_angle = angle;
+        open_loop_voltage = (volt > 0.5f) ? volt : 4.0f;
+        open_loop_current_rpm = 0.0f;
+        open_loop_target_rpm = 0.0f;
+        run_open_loop = 1;
+        motor->m_state = MC_STATE_RUNNING;
+        foc->fault = MC_FAULT_NONE;
+        TIM1_EnsureMoeEnabled();
+    }
+    else if (strncmp(cmd, "V_OPEN ", 7) == 0 || strncmp(cmd, "VOPEN ", 6) == 0) {
+        float v = atof((strncmp(cmd, "V_OPEN ", 7) == 0) ? &cmd[7] : &cmd[6]);
+        if (v >= 1.0f && v <= 20.0f) {
+            open_loop_voltage = v;
+        }
+    }
+    else if (strncmp(cmd, "MODE ", 5) == 0) {
+        int m = atoi(&cmd[5]);
+        run_open_loop = 0;
+        foc->fault = MC_FAULT_NONE;
+        if (m == 0) {
+            motor->m_state = MC_STATE_OFF;
+            motor->m_iq_set = 0.0f;
+            motor->m_speed_command_rpm = 0.0f;
+            motor->m_speed_pid_set_rpm = 0.0f;
+            motor->m_speed_i_term = 0.0f;
+            motor->m_openloop_spinup_active = false;
+            motor->m_openloop_spinup_time = 0.0f;
+            motor->m_motor_state.duty_now = 0.0f;
+            speed_target_dbg = 0.0f;
+            iq_target_dbg = 0.0f;
+            run_foc_mode = 0;
+        } else if (m >= 1 && m <= 5) {
+            motor->m_state = MC_STATE_RUNNING;
+            TIM1_EnsureMoeEnabled();
+            if (m == 1) { motor->m_control_mode = CONTROL_MODE_CURRENT; run_foc_mode = 1; }
+            else if (m == 2) { motor->m_control_mode = CONTROL_MODE_CURRENT_BRAKE; run_foc_mode = 1; }
+            else if (m == 3) { motor->m_control_mode = CONTROL_MODE_SPEED; run_foc_mode = 3; }
+            else if (m == 4) { motor->m_control_mode = CONTROL_MODE_POS; run_foc_mode = 2; }
+            else if (m == 5) { motor->m_control_mode = CONTROL_MODE_DUTY; run_foc_mode = 4; }
+        }
+    }
+    else if (strncmp(cmd, "CLOSELOOP", 9) == 0 || strncmp(cmd, "CLOSE_LOOP", 10) == 0 || strcmp(cmd, "START") == 0) {
+        float rpm = 100.0f;
+        if (strncmp(cmd, "CLOSELOOP ", 10) == 0) rpm = atof(&cmd[10]);
+        else if (strncmp(cmd, "CLOSE_LOOP ", 11) == 0) rpm = atof(&cmd[11]);
+        StartClosedLoopSpeed(foc, rpm);
+    }
+    else if (strncmp(cmd, "SPEED ", 6) == 0) {
+        float mech_rpm = atof(&cmd[6]);
+        StartClosedLoopSpeed(foc, mech_rpm);
+    }
+    else if (strncmp(cmd, "IQ ", 3) == 0 || strncmp(cmd, "CURRENT ", 8) == 0) {
+        float iq = (strncmp(cmd, "IQ ", 3) == 0) ? atof(&cmd[3]) : atof(&cmd[8]);
+        if (motor->m_conf != NULL) utils_truncate_number_abs(&iq, motor->m_conf->l_current_max);
+        iq_target_dbg = iq;
+        motor->m_iq_set = iq;
+        motor->m_motor_state.vq_int = motor->m_motor_state.vq;
+        motor->m_motor_state.vd_int = motor->m_motor_state.vd;
+        motor->m_control_mode = CONTROL_MODE_CURRENT;
+        motor->m_state = MC_STATE_RUNNING;
+        run_foc_mode = 1;
+        foc->fault = MC_FAULT_NONE;
+        TIM1_EnsureMoeEnabled();
+    }
+    else if (strncmp(cmd, "TORQUE ", 7) == 0 || strncmp(cmd, "FORCE ", 6) == 0) {
+        float tau = atof((strncmp(cmd, "TORQUE ", 7) == 0) ? &cmd[7] : &cmd[6]);
+        motor->m_mit_p_des = motor->m_joint_angle;
+        motor->m_mit_v_des = 0.0f;
+        motor->m_mit_kp = 0.0f;
+        motor->m_mit_kd = 0.0f;
+        motor->m_mit_t_ff = tau;
+        motor->m_control_mode = CONTROL_MODE_MIT;
+        motor->m_state = MC_STATE_RUNNING;
+        run_foc_mode = 5;
+        foc->fault = MC_FAULT_NONE;
+        TIM1_EnsureMoeEnabled();
+        foc_run_mit_control(motor);
+    }
+    else if (strncmp(cmd, "IMP ", 4) == 0 || strncmp(cmd, "MIT ", 4) == 0) {
+        // MIT <p_des_deg> [v_des_rpm] [kp_Nm_rad] [kd_Nm_rad_s] [t_ff_Nm]
+        float p_des_deg = 0.0f, v_des_rpm = 0.0f, kp = 5.0f, kd = 0.10f, t_ff = 0.0f;
+        int parsed = sscanf((strncmp(cmd, "MIT ", 4) == 0) ? &cmd[4] : &cmd[4], "%f %f %f %f %f",
+                            &p_des_deg, &v_des_rpm, &kp, &kd, &t_ff);
+        if (parsed >= 1) motor->m_mit_p_des = DEG2RAD_f(p_des_deg);
+        if (parsed >= 2) motor->m_mit_v_des = RPM2RADPS_f(v_des_rpm);
+        if (parsed >= 3) motor->m_mit_kp = kp;
+        if (parsed >= 4) motor->m_mit_kd = kd;
+        if (parsed >= 5) motor->m_mit_t_ff = t_ff;
+        motor->m_control_mode = CONTROL_MODE_MIT;
+        motor->m_state = MC_STATE_RUNNING;
+        run_foc_mode = 5;
+        foc->fault = MC_FAULT_NONE;
+        TIM1_EnsureMoeEnabled();
+        foc_run_mit_control(motor);
+    }
+    else if (strncmp(cmd, "VQ ", 3) == 0 || strncmp(cmd, "VOLT ", 5) == 0) {
+        float vq = atof((strncmp(cmd, "VQ ", 3) == 0) ? &cmd[3] : &cmd[5]);
+        extern volatile ADC_Readings_t g_adc_readings;
+        float vbus = (g_adc_readings.vbus > 5.0f) ? g_adc_readings.vbus : 24.0f;
+        motor->m_motor_state.duty_now = vq / vbus;
+        motor->m_control_mode = CONTROL_MODE_DUTY;
+        motor->m_state = MC_STATE_RUNNING;
+        run_foc_mode = 4;
+        foc->fault = MC_FAULT_NONE;
+        TIM1_EnsureMoeEnabled();
+    }
+    else if (strncmp(cmd, "SETHOME", 7) == 0 || strncmp(cmd, "SET_HOME", 8) == 0 || strncmp(cmd, "ZERO", 4) == 0) {
+        // CĂN CHỈNH VỊ TRÍ HIỆN TẠI LÀM HOME (0.0 ĐỘ)
+        foc_set_home_position(motor);
+        pos_target_dbg = 0.0f;
+    }
+    else if (strcmp(cmd, "RESETERR") == 0 || strcmp(cmd, "RESET_ERR") == 0 || strcmp(cmd, "CLEAR_ERR") == 0 || strcmp(cmd, "RESET_PID") == 0 || strcmp(cmd, "CLEAR") == 0) {
+        // RESET TOÀN BỘ SAI SỐ VÀ TÍCH PHÂN PID VỀ 0
+        motor->m_speed_i_term = 0.0f;
+        motor->m_speed_prev_error = 0.0f;
+        motor->m_speed_d_filter = 0.0f;
+        motor->m_speed_d_filter_proc = 0.0f;
+        motor->m_pos_i_term = 0.0f;
+        motor->m_pos_prev_error = 0.0f;
+        motor->m_pos_d_filter = 0.0f;
+        motor->m_motor_state.vd_int = 0.0f;
+        motor->m_motor_state.vq_int = 0.0f;
+        motor->m_motor_state.vd = 0.0f;
+        motor->m_motor_state.vq = 0.0f;
+        motor->m_iq_set = 0.0f;
+        foc->fault = MC_FAULT_NONE;
+        if (motor->m_control_mode == CONTROL_MODE_POS) {
+            motor->m_pos_pid_set = motor->m_joint_angle;
+            motor->m_traj_active = false;
+            pos_target_dbg = motor->m_joint_angle;
+        }
+    }
+    else if (strncmp(cmd, "GOHOME", 6) == 0 || strncmp(cmd, "HOME", 4) == 0) {
+        // QUAY VỀ VỊ TRÍ HOME (0.0 ĐỘ)
+        float duration_s = 1.0f;
+        if (strncmp(cmd, "GOHOME ", 7) == 0) duration_s = atof(&cmd[7]);
+        foc_start_trajectory(motor, 0.0f, duration_s, 3.0f);
+        pos_target_dbg = 0.0f;
+        run_foc_mode = 2;
+        foc->fault = MC_FAULT_NONE;
+        TIM1_EnsureMoeEnabled();
+    }
+    else if (strncmp(cmd, "MOVE ", 5) == 0 || (isdigit((unsigned char)cmd[0]) || (cmd[0] == '-' && isdigit((unsigned char)cmd[1])))) {
+        // KHUNG TRUYỀN TOÀN DIỆN CHO CÁNH TAY ROBOT:
+        // Cú pháp 1: MOVE <Góc_Target_Độ> <Thời_Gian_s> [Lực_Ghim_A_hoặc_Nm] (Vd: MOVE 90 5 3.0)
+        // Cú pháp 2: <Góc_Target_Độ> <Thời_Gian_s> [Lực_Ghim_A_hoặc_Nm]     (Vd: 90 5 150 hoặc 90 5 3.0)
+        const char *p = (strncmp(cmd, "MOVE ", 5) == 0) ? &cmd[5] : cmd;
+        float target_deg = 0.0f;
+        float duration_s = 1.0f;       // Mặc định 1.0 giây
+        float hold_limit = 3.0f;       // Mặc định 3.0A
+        float values[3] = {target_deg, duration_s, hold_limit};
+        int count = ParseFloatArgs(p, values, 3);
+        if (count >= 1) target_deg = values[0];
+        if (count >= 2) duration_s = values[1];
+        if (count >= 3) hold_limit = values[2];
+
+        if (count >= 1) {
+            // Nếu người dùng nhập lực dạng Nm lớn (> 15Nm) -> quy đổi sang dòng Ampe (I = Tau / (Kt * Gear))
+            float current_a = hold_limit;
+            if (hold_limit > 15.0f) {
+                // 150 Nm tại đầu ra hộp số 1:17 -> Mô-men động cơ = 150 / 17 = 8.8 Nm -> Dòng điện = 8.8 / 0.67 = 13.1A (kẹp an toàn 5.0A)
+                current_a = (hold_limit / 17.0f) / 0.67f;
+                if (current_a > 6.0f) current_a = 6.0f; // Kẹp dòng an toàn 6A
+            }
+            if (duration_s < 0.05f) duration_s = 0.05f;
+
+            float target_rad = DEG2RAD_f(target_deg);
+            foc_start_trajectory(motor, target_rad, duration_s, current_a);
+            pos_target_dbg = target_rad;
+            run_foc_mode = 2;
+            foc->fault = MC_FAULT_NONE;
+            TIM1_EnsureMoeEnabled();
+        }
+    }
+    else if (strncmp(cmd, "REL ", 4) == 0 || strncmp(cmd, "STEP ", 5) == 0) {
+        // QUAY TƯƠNG ĐỐI (VD: REL 30 quay tới thêm 30 độ, REL -30 quay lùi 30 độ)
+        float rel_deg = atof((strncmp(cmd, "REL ", 4) == 0) ? &cmd[4] : &cmd[5]);
+        float target_rad = motor->m_joint_angle + DEG2RAD_f(rel_deg);
+        foc_start_trajectory(motor, target_rad, 1.2f, 4.0f);
+        pos_target_dbg = target_rad;
+        run_foc_mode = 2;
+        run_open_loop = 0;
+        foc->fault = MC_FAULT_NONE;
+        TIM1_EnsureMoeEnabled();
+    }
+    else if (strncmp(cmd, "POS ", 4) == 0 || strncmp(cmd, "ANGLE ", 6) == 0) {
+        float pos_deg = atof((strncmp(cmd, "POS ", 4) == 0) ? &cmd[4] : &cmd[6]);
+        float pos_rad = DEG2RAD_f(pos_deg);
+        foc_start_trajectory(motor, pos_rad, 0.0f, 4.0f); // 0.0s = Tốc độ tối đa tức thì
+        pos_target_dbg = pos_rad;
+        run_foc_mode = 2;
+        run_open_loop = 0;
+        foc->fault = MC_FAULT_NONE;
+        TIM1_EnsureMoeEnabled();
+    }
+    else if (strncmp(cmd, "SLOT ", 5) == 0) {
+        // 12 VỊ TRÍ GHIM KHỚP TAY ROBOT (1 đến 12 cách nhau 30 độ)
+        int slot = atoi(&cmd[5]);
+        if (slot >= 1 && slot <= 12) {
+            float slot_angles_deg[12] = {0.0f, 30.0f, 60.0f, 90.0f, 120.0f, 150.0f, 180.0f, -150.0f, -120.0f, -90.0f, -60.0f, -30.0f};
+            float target_rad = DEG2RAD_f(slot_angles_deg[slot - 1]);
+            foc_start_trajectory(motor, target_rad, 0.0f, 4.0f); // Tốc độ tối đa tức thì
+            pos_target_dbg = target_rad;
+            run_foc_mode = 2;
+            foc->fault = MC_FAULT_NONE;
+            TIM1_EnsureMoeEnabled();
+        }
+    }
+    else if (strcmp(cmd, "HOLD") == 0 || strcmp(cmd, "LOCK") == 0) {
+        // GHIM GÓC TỨC THÌ TẠI VỊ TRÍ HIỆN TẠI
+        float current_angle = motor->m_joint_angle;
+        motor->m_traj_active = false;
+        pos_target_dbg = current_angle;
+        motor->m_pos_pid_set = current_angle;
+        motor->m_control_mode = CONTROL_MODE_POS;
+        motor->m_state = MC_STATE_RUNNING;
+        run_foc_mode = 2;
+        foc->fault = MC_FAULT_NONE;
+        TIM1_EnsureMoeEnabled();
+    }
+    else if (strcmp(cmd, "FREE") == 0 || strcmp(cmd, "RELEASE") == 0) {
+        // NHẢ LỰC ĐỂ XOAY TAY TỰ DO
+        motor->m_state = MC_STATE_OFF;
+        run_foc_mode = 0;
+        motor->m_iq_set = 0.0f;
+    }
+    else if (strcmp(cmd, "RESET") == 0 || strcmp(cmd, "REBOOT") == 0) {
+        // RESET VI ĐIỀU KHIỂN & DRIVER
+        motor->m_state = MC_STATE_OFF;
+        run_foc_mode = 0;
+        motor->m_iq_set = 0.0f;
+        foc->fault = MC_FAULT_NONE;
+        NVIC_SystemReset();
+    }
+    else if (strcmp(cmd, "CLEAR") == 0 || strcmp(cmd, "CLEAR_FAULT") == 0) {
+        foc->fault = MC_FAULT_NONE;
+        motor->m_state = MC_STATE_OFF;
+        run_foc_mode = 0;
+        TIM1_EnsureMoeEnabled();
+    }
+    else if (strncmp(cmd, "GEAR", 4) == 0 || strncmp(cmd, "BARE", 4) == 0) {
+        // CẤU HÌNH TỶ SỐ TRUYỀN: GEAR 1.0 (Motor trần) hoặc GEAR 17.0 (Hộp số Cycloid)
+        if (strncmp(cmd, "GEAR ", 5) == 0) {
+            float g = atof(&cmd[5]);
+            if (g >= 0.5f && g <= 100.0f) {
+                foc->conf.gear_ratio = g;
+                if (motor->m_conf != NULL) motor->m_conf->gear_ratio = g;
+                if (g <= 1.05f) {
+                    open_loop_voltage = 2.5f; // Điện áp thấp an toàn cho motor trần
+                    foc->conf.foc_motor_flux_linkage = 0.0280f;
+                    if (motor->m_conf != NULL) motor->m_conf->foc_motor_flux_linkage = 0.0280f;
+                    foc->conf.foc_current_kp = 0.25f;
+                    foc->conf.foc_current_ki = 4500.0f;
+                    if (motor->m_conf != NULL) {
+                        motor->m_conf->foc_current_kp = 0.25f;
+                        motor->m_conf->foc_current_ki = 4500.0f;
+                    }
+                } else {
+                    open_loop_voltage = 9.0f; // Điện áp thắng ma sát hộp số cycloid
+                    foc->conf.foc_motor_flux_linkage = 0.0300f;
+                    if (motor->m_conf != NULL) motor->m_conf->foc_motor_flux_linkage = 0.0300f;
+                    foc->conf.foc_current_kp = 0.80f;
+                    foc->conf.foc_current_ki = 18100.0f;
+                    if (motor->m_conf != NULL) {
+                        motor->m_conf->foc_current_kp = 0.80f;
+                        motor->m_conf->foc_current_ki = 18100.0f;
+                    }
+                }
+            }
+        } else if (strcmp(cmd, "BARE") == 0) {
+            foc->conf.gear_ratio = 1.0f;
+            if (motor->m_conf != NULL) motor->m_conf->gear_ratio = 1.0f;
+            foc->conf.encoder_direction = 1;
+            if (motor->m_conf != NULL) motor->m_conf->encoder_direction = 1;
+            foc->conf.foc_motor_flux_linkage = 0.0280f;
+            if (motor->m_conf != NULL) motor->m_conf->foc_motor_flux_linkage = 0.0280f;
+            foc->conf.foc_current_kp = 0.25f;
+            foc->conf.foc_current_ki = 4500.0f;
+            if (motor->m_conf != NULL) {
+                motor->m_conf->foc_current_kp = 0.25f;
+                motor->m_conf->foc_current_ki = 4500.0f;
+            }
+            open_loop_voltage = 2.5f;
+        }
+        float cur_g = (motor->m_conf != NULL) ? motor->m_conf->gear_ratio : 17.0f;
+        int g_int = (int)cur_g;
+        int g_dec = (int)(fabsf(cur_g - (float)g_int) * 100.0f + 0.5f);
+        int v_int = (int)open_loop_voltage;
+        int v_dec = (int)(fabsf(open_loop_voltage - (float)v_int) * 10.0f + 0.5f);
+        static char msg[96];
+        snprintf(msg, sizeof(msg), "GEAR: Ratio=%d.%02d, OpenLoopVolt=%d.%01dV (%s)\r\n",
+                 g_int, g_dec, v_int, v_dec, (cur_g <= 1.05f) ? "BARE MOTOR" : "GEARED");
+        CDC_Transmit_FS((uint8_t*)msg, strlen(msg));
+    }
+    else if (strncmp(cmd, "ANTICOG", 7) == 0) {
+        // BÙ MÔ-MEN GỢN (6TH/12TH BEMF HARMONIC CURRENT INJECTION)
+        // Cú pháp: ANTICOG ON [amp_A] [phase_deg] hoặc ANTICOG OFF
+        if (strncmp(cmd, "ANTICOG ON", 10) == 0 || strncmp(cmd, "ANTICOG 1", 9) == 0) {
+            foc->anticog_enabled = true;
+            float a6 = 0.10f;
+            float p6 = 0.0f;
+            int n = sscanf(&cmd[9], "%*s %f %f", &a6, &p6);
+            if (n >= 1) foc->anticog_amp_6th = a6;
+            else if (foc->anticog_amp_6th <= 0.001f) foc->anticog_amp_6th = 0.10f;
+            if (n >= 2) foc->anticog_phase_6th = DEG2RAD_f(p6);
+        } else if (strncmp(cmd, "ANTICOG OFF", 11) == 0 || strncmp(cmd, "ANTICOG 0", 9) == 0) {
+            foc->anticog_enabled = false;
+        }
+        float a6 = foc->anticog_amp_6th;
+        int a_int = (int)a6;
+        int a_dec = (int)(fabsf(a6 - (float)a_int) * 1000.0f + 0.5f);
+        float p6_deg = RAD2DEG_f(foc->anticog_phase_6th);
+        int p_int = (int)p6_deg;
+        int p_dec = (int)(fabsf(p6_deg - (float)p_int) * 10.0f + 0.5f);
+        static char msg[96];
+        snprintf(msg, sizeof(msg), "ANTICOG: %s, Amp6=%d.%03dA, Phase6=%d.%01d deg\r\n",
+                 foc->anticog_enabled ? "ENABLED" : "DISABLED",
+                 a_int, a_dec, p_int, p_dec);
+        CDC_Transmit_FS((uint8_t*)msg, strlen(msg));
+    }
+    else if (strncmp(cmd, "ENC2", 4) == 0 || strncmp(cmd, "DUALENC", 7) == 0) {
+#if USE_AS5600_OUTPUT_ENCODER
+        // ĐỌC CẢM BIẾN ĐẦU RA AS5600 QUA I2C3 VÀ FUSION VỚI AS5048A
+        AS5600_ReadAngle(&g_as5600);
+        float gear = (motor->m_conf != NULL) ? motor->m_conf->gear_ratio : 17.0f;
+        float fused = DualEncoder_Fuse(g_as5600.angle_rad, foc->encoder.angle_singleturn, gear);
+        int l_int = (int)g_as5600.angle_deg;
+        int l_dec = (int)(fabsf(g_as5600.angle_deg - (float)l_int) * 100.0f + 0.5f);
+        float r_deg = RAD2DEG_f(foc->encoder.angle_singleturn);
+        int r_int = (int)r_deg;
+        int r_dec = (int)(fabsf(r_deg - (float)r_int) * 100.0f + 0.5f);
+        float f_deg = RAD2DEG_f(fused);
+        int f_int = (int)f_deg;
+        int f_dec = (int)(fabsf(f_deg - (float)f_int) * 100.0f + 0.5f);
+        static char resp_msg[128];
+        snprintf(resp_msg, sizeof(resp_msg), "ENC2 (AS5600 I2C3): Conn=%d, Raw=%u, Link=%d.%02d deg, Rotor=%d.%02d deg, Fused=%d.%02d deg\r\n",
+                 g_as5600.connected ? 1 : 0, (unsigned int)g_as5600.raw_12bit, l_int, l_dec, r_int, r_dec, f_int, f_dec);
+        CDC_Transmit_FS((uint8_t*)resp_msg, strlen(resp_msg));
+#else
+        static char resp_msg[96];
+        float r_deg = RAD2DEG_f(foc->encoder.angle_singleturn);
+        int r_int = (int)r_deg;
+        int r_dec = (int)(fabsf(r_deg - (float)r_int) * 100.0f + 0.5f);
+        snprintf(resp_msg, sizeof(resp_msg), "ENC2: DISABLED (USE_AS5600_OUTPUT_ENCODER=0 in main.h | Rotor=%d.%02d deg)\r\n", r_int, r_dec);
+        CDC_Transmit_FS((uint8_t*)resp_msg, strlen(resp_msg));
+#endif
+    }
+    else if (strncmp(cmd, "DIR ", 4) == 0) {
+        int dir = atoi(&cmd[4]);
+        if (dir == 1 || dir == -1) {
+            foc->conf.encoder_direction = dir;
+            if (motor->m_conf != NULL) motor->m_conf->encoder_direction = dir;
+        }
+    }
+    else if (strncmp(cmd, "SWAPBC ", 7) == 0 || strncmp(cmd, "SWAP ", 5) == 0) {
+        int swap = atoi((strncmp(cmd, "SWAPBC ", 7) == 0) ? &cmd[7] : &cmd[5]);
+        foc->phase_swap_bc = (swap != 0);
+    }
+    else if (strncmp(cmd, "OFFSET ", 7) == 0) {
+        float off = atof(&cmd[7]);
+        foc->zero_electric_angle = off;
+        foc->aligned = true;
+        extern volatile Align_Debug_t g_dbg_align;
+        g_dbg_align.aligned = 1;
+        g_dbg_align.zero_electric_angle = off;
+        EncoderCalStore_SaveAlignment(off, foc->conf.encoder_direction);
+        int off_neg = (off < 0.0f);
+        float off_abs = fabsf(off);
+        int off_i = (int)off_abs;
+        int off_f = (int)((off_abs - (float)off_i) * 10000.0f + 0.5f);
+        float deg = off * 180.0f / (float)M_PI;
+        int deg_neg = (deg < 0.0f);
+        float deg_abs = fabsf(deg);
+        int deg_i = (int)deg_abs;
+        int deg_f = (int)((deg_abs - (float)deg_i) * 100.0f + 0.5f);
+        static char resp_msg[64];
+        snprintf(resp_msg, sizeof(resp_msg), "OFFSET: %s%d.%04d rad (%s%d.%02d deg) SAVED TO FLASH\r\n",
+                 off_neg ? "-" : "", off_i, off_f,
+                 deg_neg ? "-" : "", deg_i, deg_f);
+        CDC_Transmit_FS((uint8_t*)resp_msg, strlen(resp_msg));
+    }
+    else if (strncmp(cmd, "SET_CURRENT_PID ", 16) == 0 || strncmp(cmd, "CPID ", 5) == 0) {
+        float kp = 0.25f, ki = 4500.0f;
+        const char *arg = (strncmp(cmd, "SET_CURRENT_PID ", 16) == 0) ? &cmd[16] : &cmd[5];
+        float values[2] = {kp, ki};
+        int count = ParseFloatArgs(arg, values, 2);
+        if (count >= 2) {
+            kp = values[0];
+            ki = values[1];
+            foc->conf.foc_current_kp = kp;
+            foc->conf.foc_current_ki = ki;
+            if (motor->m_conf != NULL) {
+                motor->m_conf->foc_current_kp = kp;
+                motor->m_conf->foc_current_ki = ki;
+            }
+        }
+    }
+    else if (strncmp(cmd, "SET_SPEED_PID ", 14) == 0 || strncmp(cmd, "SPID ", 5) == 0) {
+        float kp = 0.0015f, ki = 0.0010f, ramp = 3000.0f;
+        const char *arg = (strncmp(cmd, "SET_SPEED_PID ", 14) == 0) ? &cmd[14] : &cmd[5];
+        float values[3] = {kp, ki, ramp};
+        int count = ParseFloatArgs(arg, values, 3);
+        if (count >= 2) {
+            kp = values[0];
+            ki = values[1];
+            if (count >= 3) ramp = values[2];
+            foc->conf.s_pid_kp = kp;
+            foc->conf.s_pid_ki = ki;
+            if (ramp > 0.0f) foc->conf.s_pid_ramp_erpms_s = ramp;
+            if (motor->m_conf != NULL) {
+                motor->m_conf->s_pid_kp = kp;
+                motor->m_conf->s_pid_ki = ki;
+                if (ramp > 0.0f) motor->m_conf->s_pid_ramp_erpms_s = ramp;
+            }
+        }
+    }
+    else if (strncmp(cmd, "SET_SPEED_FILTER ", 17) == 0 || strncmp(cmd, "SFILT ", 6) == 0) {
+        float value = atof((strncmp(cmd, "SET_SPEED_FILTER ", 17) == 0) ? &cmd[17] : &cmd[6]);
+        if (value >= 0.01f && value <= 1.0f) {
+            foc->conf.s_pid_kd_filter = value;
+            if (motor->m_conf != NULL) motor->m_conf->s_pid_kd_filter = value;
+        }
+    }
+    else if (strncmp(cmd, "SET_POS_PID ", 12) == 0 || strncmp(cmd, "PPID ", 5) == 0) {
+        float kp = 20.0f, kd = 0.10f;
+        const char *arg = (strncmp(cmd, "SET_POS_PID ", 12) == 0) ? &cmd[12] : &cmd[5];
+        float values[2] = {kp, kd};
+        if (ParseFloatArgs(arg, values, 2) >= 2) {
+            kp = values[0];
+            kd = values[1];
+            foc->conf.p_pid_kp = kp;
+            foc->conf.p_pid_kd = kd;
+            if (motor->m_conf != NULL) {
+                motor->m_conf->p_pid_kp = kp;
+                motor->m_conf->p_pid_kd = kd;
+            }
+        }
+    }
+    else if (strncmp(cmd, "KP_S ", 5) == 0 || strncmp(cmd, "SET_SKP ", 8) == 0) {
+        float val = atof((strncmp(cmd, "KP_S ", 5) == 0) ? &cmd[5] : &cmd[8]);
+        foc->conf.s_pid_kp = val;
+        if (motor->m_conf != NULL) motor->m_conf->s_pid_kp = val;
+    }
+    else if (strncmp(cmd, "KI_S ", 5) == 0 || strncmp(cmd, "SET_SKI ", 8) == 0) {
+        float val = atof((strncmp(cmd, "KI_S ", 5) == 0) ? &cmd[5] : &cmd[8]);
+        foc->conf.s_pid_ki = val;
+        if (motor->m_conf != NULL) motor->m_conf->s_pid_ki = val;
+    }
+    else if (strncmp(cmd, "FLUX ", 5) == 0 || strncmp(cmd, "LAMBDA ", 7) == 0) {
+        float val = atof((strncmp(cmd, "FLUX ", 5) == 0) ? &cmd[5] : &cmd[7]);
+        if (val > 0.001f && val < 0.1f) {
+            foc->conf.foc_motor_flux_linkage = val;
+            if (motor->m_conf != NULL) motor->m_conf->foc_motor_flux_linkage = val;
+        }
+    }
+    else if (strncmp(cmd, "KD_S ", 5) == 0 || strncmp(cmd, "SET_SKD ", 8) == 0) {
+        float val = atof((strncmp(cmd, "KD_S ", 5) == 0) ? &cmd[5] : &cmd[8]);
+        foc->conf.s_pid_kd = val;
+        if (motor->m_conf != NULL) motor->m_conf->s_pid_kd = val;
+    }
+    else if (strncmp(cmd, "KP_P ", 5) == 0 || strncmp(cmd, "SET_PKP ", 8) == 0) {
+        float val = atof((strncmp(cmd, "KP_P ", 5) == 0) ? &cmd[5] : &cmd[8]);
+        foc->conf.p_pid_kp = val;
+        if (motor->m_conf != NULL) motor->m_conf->p_pid_kp = val;
+    }
+    else if (strncmp(cmd, "KI_P ", 5) == 0 || strncmp(cmd, "SET_PKI ", 8) == 0) {
+        float val = atof((strncmp(cmd, "KI_P ", 5) == 0) ? &cmd[5] : &cmd[8]);
+        foc->conf.p_pid_ki = val;
+        if (motor->m_conf != NULL) motor->m_conf->p_pid_ki = val;
+    }
+    else if (strncmp(cmd, "KD_P ", 5) == 0 || strncmp(cmd, "SET_PKD ", 8) == 0) {
+        float val = atof((strncmp(cmd, "KD_P ", 5) == 0) ? &cmd[5] : &cmd[8]);
+        foc->conf.p_pid_kd = val;
+        if (motor->m_conf != NULL) motor->m_conf->p_pid_kd = val;
+    }
+    else if (strncmp(cmd, "DIR ", 4) == 0) {
+        int d = atoi(&cmd[4]);
+        if (d == 1 || d == -1) {
+            foc->conf.encoder_direction = d;
+            if (motor->m_conf != NULL) motor->m_conf->encoder_direction = d;
+        }
+    }
+    else if (strncmp(cmd, "SWAP ", 5) == 0) {
+        int s = atoi(&cmd[5]);
+        foc->phase_swap_bc = (s != 0);
+    }
+    else if (strncmp(cmd, "OFFSET ", 7) == 0) {
+        float off = atof(&cmd[7]);
+        foc->zero_electric_angle = off;
+        foc->aligned = true;
+    }
+    else if (strncmp(cmd, "DUTY ", 5) == 0) {
+        float d = atof(&cmd[5]);
+        if (d > 0.05f && d <= 0.95f) {
+            foc->conf.l_max_duty = d;
+            if (motor->m_conf != NULL) motor->m_conf->l_max_duty = d;
+        }
+    }
+    else if (strncmp(cmd, "RAMP ", 5) == 0 || strncmp(cmd, "SET_RAMP ", 9) == 0) {
+        float r = atof((strncmp(cmd, "RAMP ", 5) == 0) ? &cmd[5] : &cmd[9]);
+        if (r >= 0.0f) {
+            foc->conf.s_pid_ramp_erpms_s = r;
+            if (motor->m_conf != NULL) motor->m_conf->s_pid_ramp_erpms_s = r;
+        }
+    }
+    else if (strncmp(cmd, "LUT ", 4) == 0) {
+        int idx = 0;
+        int val = 0;
+        if (sscanf(&cmd[4], "%d %d", &idx, &val) >= 2) {
+            if (idx >= 0 && idx < AS5048A_LUT_SIZE && val >= -128 && val <= 128) {
+                foc->encoder.offset_lut[idx] = (int16_t)val;
+            }
+        }
+    }
+    else if (strncmp(cmd, "USE_LUT ", 8) == 0 || strncmp(cmd, "ENABLE_LUT ", 11) == 0) {
+        int en = atoi((strncmp(cmd, "USE_LUT ", 8) == 0) ? &cmd[8] : &cmd[11]);
+        foc->encoder.use_lut = (en != 0);
+    }
+    else if (strcmp(cmd, "CLEAR_LUT") == 0) {
+        foc->encoder.use_lut = 0;
+        for (int i = 0; i < AS5048A_LUT_SIZE; i++) {
+            foc->encoder.offset_lut[i] = 0;
+        }
+    }
+    else if (strncmp(cmd, "TEST_VQ ", 8) == 0 || strncmp(cmd, "STATIC_TEST ", 12) == 0) {
+        float val = atof((strncmp(cmd, "TEST_VQ ", 8) == 0) ? &cmd[8] : &cmd[12]);
+        motor->m_control_mode = CONTROL_MODE_DUTY;
+        motor->m_motor_state.duty_now = val / motor->m_motor_state.v_bus;
+        motor->m_state = MC_STATE_RUNNING;
+    }
+}
+
+/**
+  * @brief  Periodic process function called from main while(1) loop
+  */
+void Comm_Telemetry_Process(FOC_Controller_t *foc)
+{
+    if (foc == NULL) return;
+
+    while (s_rx_queue_tail != s_rx_queue_head) {
+        uint8_t tail = s_rx_queue_tail;
+        ProcessCommand(foc, s_rx_command_queue[tail]);
+        s_rx_queue_tail = (uint8_t)((tail + 1U) % RX_COMMAND_QUEUE_DEPTH);
+    }
+
+    // Transmit telemetry at 100Hz (every 10ms)
+    uint32_t now = HAL_GetTick();
+    if (now - s_last_telemetry_tx_ms >= 10) {
+        if (Comm_Telemetry_Send(foc)) {
+            s_last_telemetry_tx_ms = now;
+        }
+    }
+}
+
+/**
+  * @brief  Single-byte reception handler
+  */
+void Comm_Telemetry_RxByte(uint8_t rx_byte)
+{
+    if (rx_byte == '\n' || rx_byte == '\r') {
+        if (s_rx_cmd_idx > 0) {
+            s_rx_cmd_buffer[s_rx_cmd_idx] = '\0';
+            uint8_t next_head = (uint8_t)((s_rx_queue_head + 1U) % RX_COMMAND_QUEUE_DEPTH);
+            if (next_head != s_rx_queue_tail) {
+                memcpy(s_rx_command_queue[s_rx_queue_head], s_rx_cmd_buffer,
+                       (size_t)s_rx_cmd_idx + 1U);
+                s_rx_queue_head = next_head;
+            }
+            s_rx_cmd_idx = 0;
+        }
+    } else {
+        if (s_rx_cmd_idx == 0 && (rx_byte <= ' ' || rx_byte > 126)) {
+            return;
+        }
+        if (s_rx_cmd_idx < sizeof(s_rx_cmd_buffer) - 1) {
+            s_rx_cmd_buffer[s_rx_cmd_idx++] = (char)rx_byte;
+        }
+    }
+}
+
+/**
+  * @brief  Buffer reception handler (called from USB CDC RX callback)
+  */
+void Comm_Telemetry_RxBuffer(const uint8_t *buf, uint32_t len)
+{
+    if (buf == NULL || len == 0) return;
+    for (uint32_t i = 0; i < len; i++) {
+        Comm_Telemetry_RxByte(buf[i]);
+    }
+}
