@@ -1961,3 +1961,101 @@ Kết quả đo đạc thực nghiệm từ engine mô phỏng trên các kịch
   - Tải bus can0 và can1 phân bổ chính xác (43.7% mỗi bên ở 500 Hz).
   - Thao tác E-Stop phản hồi tức thì trong $101.7\ \mu\text{s}$, đưa toàn bộ 16 khớp về trạng thái an toàn.
 
+
+---
+
+## Phiên 2026-09-21 — Phân tích Cháy DRV8353 VBUS khi cấp 36V
+
+### Triệu chứng
+- Cấp 24V: hoạt động bình thường
+- Cấp 36V nguồn to: chân VBUS của DRV8353RSRGZT bị cháy
+
+### Root Cause (Xác nhận từ schematic + BOM)
+
+**Nguyên nhân gốc: Tụ decoupling trên net `PWR_VBUS` được chọn loại 25V rated, cấp 36V → tụ breakdown → spike → phá DRV8353**
+
+Bằng chứng từ BOM và ThreePhaseBridgeandPower.kicad_sch:
+- Tất cả tụ ceramic trên VBUS: `10uF, 25V X5R, 0805`
+- 36V > 25V rated → điện môi ceramic X5R bị breakdown điện trường
+- Tụ short-circuit → spike dòng/áp → cháy chân VBUS DRV8353
+- Không có TVS diode bảo vệ trên VBUS
+
+### Giả thuyết phản chứng đã loại trừ
+- **Không phải do MOSFET BSC040N10NS5 (100V Vds)** → MOSFETs không vấn đề ở 36V
+- **Không phải do DRV8353 voltage limit** → VM abs max = 80V, hoàn toàn chịu được 36V
+- **Nguyên nhân duy nhất phù hợp:** Tụ 25V trên VBUS bị nổ khi cấp 36V
+
+### Fix cần thực hiện trên schematic (rev tiếp theo)
+1. Thay toàn bộ tụ net `PWR_VBUS` từ 25V → 50V hoặc 63V (cùng capacitance, cùng footprint 0805/1210)
+2. Thêm TVS diode SMBJ36A (1500W) song song với VBUS
+3. Cân nhắc thêm polyfuse đầu vào VBUS
+
+### Fix tạm cho board hiện tại
+1. Thay DRV8353 mới
+2. Thay tụ 25V trên VBUS bằng tụ 50V
+3. Test lại với bench PSU current-limited trước khi full load
+
+---
+
+## Phiên 2026-09-21 — Đánh Giá & Phân Tích Chuẩn Mực Điều Khiển Góc Khớp Robot (Actuator Joint Control Audit)
+
+### Bối cảnh & Yêu cầu
+- Đánh giá mã nguồn firmware hiện tại (`joint-driver-8115`) xem đã đạt chuẩn mực điều khiển góc khớp robot (robot arm / humanoid actuator) chưa, trong điều kiện phần cứng hiện tại chỉ có encoder rotor AS5048A (14-bit SPI), chưa lắp encoder ngõ ra hộp số Cycloid 1:17.
+
+### Kết quả Phân tích Độc lập & Toàn diện
+1. **Tầng FOC dòng điện (Current Loop 10kHz/20kHz):** ĐÃ ĐẠT CHUẨN MỰC
+   - Triệt tiêu cực - zero chuẩn vật lý ($K_i/K_p = R/L = 22,630\text{ rad/s}$), giải ghép chéo trục $d$-$q$, chống bão hòa tích phân trên đường tròn vector (`limit_norm`), bù góc 1.5 DT.
+2. **Tầng Điều khiển Trở kháng Khớp (MIT Mode):** KHÁ TỐT, CÒN 2 HẠN CHẾ
+   - Đã chuẩn hóa mô hình trở kháng $\tau = K_p (q_d - q) + K_d (\dot{q}_d - \dot{q}) + \tau_{ff}$.
+   - Hạn chế 1: `MIT_T_MAX` bị hardcode $\pm 18\text{ Nm}$ trong `comm_can.h`, thấp hơn năng lực thực tế của động cơ 8115 qua hộp số 1:17 ($> 50\text{ Nm}$).
+   - Hạn chế 2: Ước lượng vận tốc qua cửa sổ trượt 20 mẫu (1.9ms) + LPF 160Hz gây trễ pha $\approx 2.0\text{ ms}$, vi phạm tính thụ động khi tăng $K_d$ cao, gây rung rền (buzzing).
+3. **Tầng Điều khiển Vị trí (Position Loop & Trajectory):** CHƯA ĐẠT CHUẨN
+   - Lỗi nghiêm trọng (Critical Bug): `motor_set_position()` nhận lệnh vị trí qua CAN (`CAN_PACKET_SET_POS`) gán thẳng giá trị mà KHÔNG kích hoạt bộ sinh quỹ đạo Minimum-Jerk (`m_traj_active = false`). Tạo ra bước nhảy bậc thang (Step jump) gây va đập mô-men và quá dòng.
+   - Thiếu gia tốc bù trước $J \ddot{q}_{des}$.
+4. **Vấn đề Xác định Góc Khớp Tuyệt Đối (The Homing Problem khi chưa có encoder ngoài):**
+   - Đang mặc định góc bật nguồn làm `0.0 rad`. Sau khi mất nguồn hoặc reboot, góc khớp bị trôi (Zero Drift).
+   - Tỉ số truyền 1:17 tạo ra 17 vị trí rotor ứng với 1 vị trí khớp. Bắt buộc cần cơ chế Mechanical Stall Homing hoặc lưu vị trí đa vòng.
+5. **Kiến trúc Dual-Encoder Vernier Fusion:**
+   - Thuật toán `DualEncoder_Fuse` trong `as5600.c` đã giải tích chuẩn toán học (cho phép sai số encoder ngoài tới $\pm 10.58^\circ$).
+   - Tuy nhiên chưa được nối vào luồng FOC chính (`USE_AS5600_OUTPUT_ENCODER = 0`).
+
+---
+
+## Phiên 2026-09-21 (Tiếp Tục) — Khởi Tạo Bản Firmware V2 Cho Board Mới & Tối Ưu Hệ Thống Cho 36V / 340 RPM
+
+### Bối cảnh & Yêu Cầu Từ Người Vận Hành (Du):
+1. Board phần cứng V1 gặp sự cố cháy nổ do tụ 25V không chịu được điện áp nguồn 36V (36.7V).
+2. Chưa lắp encoder ngõ ra AS5600 -> Tiếp tục vận hành encoder rotor AS5048A 14-bit SPI độc lập (`USE_AS5600_OUTPUT_ENCODER = 0`).
+3. Khởi tạo một phiên bản firmware độc lập `joint-driver-8115-v2` kế thừa từ `joint-driver-8115`.
+4. Trên Board V2, layout phần cứng đã sửa thứ tự chân SPI cho DRV8353 -> Thay thế hoàn toàn Bit-Bang SoftSPI bằng **Hardware SPI1 chuẩn tốc độ cao**.
+5. Hiệu chỉnh toàn bộ hệ thống FOC chạy chuẩn ở điện áp danh định **36V** theo đúng datasheet GB8115-4 và ổn định tuyệt đối ở vận tốc **340 RPM** (7140 ERPM).
+
+### Các Thay Đổi Chi Tiết Được Triển Khai Trên `joint-driver-8115-v2`:
+
+1. **Chuyển Đổi Driver DRV8353 Sang Hardware SPI1 Chuẩn (`drv8353.c`):**
+   - Board V2 pin mapping: `PA5` = SPI1_SCK, `PA6` = SPI1_MISO (DRV SDO), `PB5` = SPI1_MOSI (DRV SDI), `PC6` = CS, `PC8` = EN.
+   - Xóa bỏ toàn bộ hàm `DRV8353_SoftSPI_Transfer` bit-bang tốn CPU và GPIO reconfiguration overhead.
+   - Xây dựng hàm `DRV8353_FastSpiTransfer16()` truy cập trực tiếp thanh ghi ngoại vi `SPI1->DR`, `SPI1->SR` (Mode 1, CPOL=0, CPHA=1, 16-bit). Thời gian giao tiếp rút ngắn từ $\sim 80\,\mu\text{s}$ xuống $< 2\,\mu\text{s}$.
+
+2. **Cập Nhật Tham Số Điện Áp Danh Định 36V & Giới Hạn Bảo Vệ (`vesc_conf.c`, `main.c`, `foc_control.c`):**
+   - Bus voltage fallback mặc định cập nhật từ 24.0V -> **36.0V**.
+   - Điện áp bảo vệ: `l_voltage_min = 20.0f` (UVP cho hệ 36V), `l_voltage_max = 45.0f` (OVP ngưỡng an toàn thấp hơn điện áp đánh thủng tụ 50V).
+   - Tối ưu hóa điều chế: `l_max_duty` tăng từ 0.92 -> 0.95 (tăng biên độ tuyến tính lên $19.74\text{V}$, độ rộng xung kéo low-side $2.5\,\mu\text{s}$ đủ cho ADC Shunt sampling).
+
+3. **Tối Ưu Hóa Vòng Vận Tốc Ổn Định Tại 340 RPM (`vesc_conf.c`, `foc_math.c`):**
+   - Vận tốc góc danh định: $340\text{ RPM} \times 21 = 7140\text{ ERPM}$ ($119.0\text{ Hz}$ điện, $\omega_e = 747.7\text{ rad/s}$).
+   - Điện áp BEMF đỉnh tại 340 RPM: $E_q = \omega_e \cdot \lambda = 747.7 \times 0.0300 = 22.43\text{ V}$.
+   - Tại $V_{bus} = 36\text{ V}$, biên độ SVPWM tuyến tính tối đa là $V_{max,lin} = 36 / \sqrt{3} = 20.78\text{ V}$. Với hệ số Overmodulation $1.08$, trần điện áp đạt $22.45\text{ V}$.
+   - Cấu hình Field Weakening tự động (`foc_fw_current_max = 1.50A`, kích hoạt tại duty $88\%$) cung cấp biên dự trữ điện áp vượt qua 340 RPM mượt mà kể cả khi có tải cản.
+   - Tăng tốc êm: `s_pid_ramp_erpms_s = 4200.0f` (đạt 340 RPM trong ~1.7s không gây giật quán tính).
+   - Giới hạn ngắt an toàn vận tốc: `l_max_erpm = 8500.0f` (~405 RPM cơ học).
+
+4. **Khắc Phục Các Lỗ Hổng Tầng Điều Khiển Khớp Robot (`comm_can.h`, `comm_can.c`):**
+   - Mở rộng tầm đo mô-men khớp MIT Mode: `MIT_T_MIN = -60.0f`, `MIT_T_MAX = +60.0f` (khớp với công suất GB8115 qua hộp số 1:17).
+   - Tích hợp **CAN Watchdog Failsafe** (100ms): Nếu mất gói CAN quá 100ms trong trạng thái `RUNNING`, motor tự động ngắt về `MC_STATE_OFF` để chống trôi tự do mất an toàn.
+   - Sửa lỗi Step Jump trên `CAN_PACKET_SET_POS`: Nhận lệnh vị trí sẽ kích hoạt bộ sinh quỹ đạo S-curve tối ưu giật `foc_start_trajectory()` thay vì gán gián đoạn.
+
+5. **Kết Quả Biên Dịch & Xác Nhận:**
+   - Build toolchain: `arm-none-eabi-gcc 13.3.rel1` (-O2, Cortex-M4, Hard-float FPU).
+   - Kết quả: **0 errors, 0 warnings**.
+   - Output artifact: `firmware/joint_driver/joint-driver-8115-v2/Debug/joint-driver-8115-v2.elf` (Text: 90036 bytes, Data: 936 bytes, BSS: 12896 bytes).
